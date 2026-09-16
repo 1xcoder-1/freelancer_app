@@ -1,0 +1,18 @@
+{
+  "name": "freelance-book-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"API,WEB\" -c \"yellow,cyan\" \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:web": "pnpm --filter web dev",
+    "dev:desktop": "pnpm --filter desktop dev",
+    "dev:mobile": "pnpm --filter mobile start",
+    "dev:api": "apps\\api\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --app-dir apps/api",
+    "build:web": "pnpm --filter web build",
+    "build:desktop": "pnpm --filter desktop build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "wait-on": "^8.0.3"
+  }
+}

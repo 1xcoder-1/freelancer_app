@@ -1,0 +1,717 @@
+Freelance Book — Final Product & Technology
+Blueprint
+■ Web + Windows Desktop + Android | Free-first production architecture
+
+1. Product Vision
+Freelance Book is a complete operating system for freelancers. It combines project management, client CRM, tasks, time
+tracking, invoices, finance, contracts, files, communication, daily planning, analytics and AI in one product.
+Lead
+↓
+Proposal
+↓
+Contract
+↓
+Project
+↓
+Tasks
+↓
+Time Tracking
+↓
+Delivery / Approval
+↓
+Invoice
+↓
+Payment
+↓
+Profit Analytics
+
+2. Platforms
+• Web: Next.js + TypeScript
+• Windows Desktop: Electron using the shared React/Next.js UI
+• Android: React Native + Expo
+• Core: One account and one backend shared by all platforms
+
+3. Final Technology Stack
+Frontend
+• Next.js + TypeScript
+• Tailwind CSS + shadcn/ui
+• Framer Motion
+• TanStack Query
+• Zustand
+• React Hook Form + Zod
+• Recharts
+• TipTap
+
+Desktop
+• Electron
+• Electron Builder for Windows .exe installer
+
+• Desktop notifications, tray app and quick capture
+
+Android
+• React Native + Expo
+• Expo Router
+• Expo Notifications
+• Firebase Cloud Messaging where required
+
+Backend
+• Python + FastAPI
+• Pydantic for validation
+• SQLAlchemy 2 for database access
+• Alembic for database migrations
+• WebSockets for realtime features
+
+Database and infrastructure
+• PostgreSQL as the main database
+• Neon PostgreSQL for hosted database
+• Upstash Redis for cache, rate limiting and temporary/queue workloads
+• Cloudflare R2 for files and large objects
+• Clerk for authentication
+• Brevo for transactional email
+• Inngest for reliable background workflows
+• Sentry for monitoring
+• Gemini/OpenAI for AI features
+
+4. Important Architecture Decision: Supabase
+■ Supabase Decision
+Supabase is removed from the core architecture by default. The app will use Clerk for authentication, Neon for PostgreSQL,
+R2 for file storage, Upstash for Redis and FastAPI for the backend.
+If a specific realtime feature becomes easier or more reliable with Supabase Realtime, Supabase can be added later as a
+dedicated realtime service. It should not become a second primary database.
+Default:
+Clerk → Authentication
+Neon → PostgreSQL
+FastAPI → Backend
+SQLAlchemy → DB access
+Upstash Redis → Cache / rate limits / temporary data
+R2 → Files
+WebSockets → Realtime
+Brevo → Email
+Inngest → Background workflows
+
+5. What Each Technology Does
+Technology
+
+Simple meaning
+
+Freelance Book use
+
+Clerk
+
+Authentication service
+
+Login, signup, sessions, password/security flows
+
+FastAPI
+
+Python backend
+
+Business logic, APIs, permissions, AI orchestration
+
+PostgreSQL
+
+Main relational database
+
+Users, clients, projects, tasks, invoices, payments, etc.
+
+Neon
+
+Hosted PostgreSQL
+
+Runs the main PostgreSQL database online
+
+SQLAlchemy
+
+Python database toolkit/ORM
+
+FastAPI ↔ PostgreSQL communication
+
+Alembic
+
+Database migration tool
+
+Create and apply schema changes safely
+
+Upstash Redis
+
+Fast temporary data store
+
+Cache, rate limiting, temporary state and optional queues
+
+Cloudflare R2
+
+Object/file storage
+
+PDFs, images, ZIPs, client assets and project files
+
+WebSockets
+
+Live connection
+
+Live comments, activity, notifications and presence
+
+Supabase Realtime
+
+Optional realtime service
+
+Only if a future realtime feature benefits from it
+
+Brevo
+
+Transactional email provider
+
+Invoices, invitations, verification and notifications
+
+Inngest
+
+Background workflow platform
+
+Reminders, scheduled jobs and reliable event workflows
+
+FCM
+
+Push notification service
+
+Android notifications
+
+Gemini/OpenAI
+
+AI model providers
+
+Book AI assistant
+
+Sentry
+
+Error monitoring
+
+Production error and performance monitoring
+
+6. Authentication — Clerk
+Clerk should handle identity instead of building login/security from scratch.
+• Signup
+• Login
+• Logout
+• Sessions
+• Password reset
+• Email verification
+• Social login if needed
+• User profile
+• Organizations/workspaces can be mapped to the app's workspace model
+Frontend → Clerk login
+↓
+Clerk session/token
+↓
+FastAPI verifies identity
+↓
+FastAPI applies workspace/role permissions
+↓
+PostgreSQL
+
+7. Realtime Architecture
+Use FastAPI WebSockets for the first realtime implementation. This avoids adding another service unnecessarily.
+• Live comments
+
+• Project activity
+• Task changes
+• Notifications
+• Online/presence indicators
+• Client approval updates
+If realtime requirements grow significantly, Supabase Realtime can be introduced for selected channels. Do not maintain two
+realtime systems for the same event unless there is a clear reason.
+
+8. Main Features
+Dashboard
+• Revenue
+• Active projects
+• Tasks
+• Tracked hours
+• Outstanding invoices
+• Today's focus
+• Deadlines
+• Recent activity
+
+Client Management
+• Client profile
+• Contacts
+• Projects
+• Invoices
+• Payments
+• Contracts
+• Files
+• Notes
+• Messages
+• Activity
+• Client health
+
+Projects
+• Kanban
+• List
+• Calendar
+• Timeline
+• Table
+• Milestones
+• Files
+• Comments
+• Time
+• Expenses
+
+• Client portal
+
+Comments and Activity
+• GitHub-style timeline
+• @mentions
+• Replies
+• Attachments
+• Reactions
+• Resolve comments
+• Notifications
+
+Daily Workspace
+• Daily goals
+• Daily notes
+• Focus timer
+• Daily summary
+• Hours worked
+• Revenue generated
+
+Time Tracking
+• Start/stop timer
+• Project/task association
+• Billable/non-billable
+• Hourly rate
+• Effective hourly rate
+
+Finance
+• Revenue
+• Expenses
+• Profit
+• Invoices
+• Payments
+• Outstanding balances
+• Reports
+• Project profitability
+
+Contracts
+• Scope
+• Payment terms
+• Deadlines
+• Revision limits
+• Agreement storage
+
+CRM
+• Leads
+
+• Proposal pipeline
+• Follow-ups
+• Won/lost leads
+• Convert lead to client
+
+Client Portal
+• Project progress
+• Files
+• Messages
+• Approvals
+• Invoices
+• Payments
+• Milestones
+
+Files
+• Designs
+• Documents
+• Contracts
+• Client assets
+• Deliverables
+
+Notifications
+• In-app
+• Email
+• Android push
+• Desktop notifications
+
+Analytics
+• Monthly revenue
+• Billable hours
+• Average project value
+• Best client
+• Most profitable service
+• Growth
+
+9. AI — Book AI
+• Create project plans
+• Summarize client history
+• Suggest today's priorities
+• Generate task lists
+• Write professional client replies
+• Create invoice descriptions
+• Summarize comments
+• Analyze revenue and project profitability
+
+• Detect project risk
+• Search the freelancer knowledge base
+
+10. Windows Desktop Unique Features
+• Global quick capture
+• Always-available timer
+• System tray app
+• Desktop notifications
+• Optional auto-start
+• Quick task/note/expense/client entry
+Ctrl + Shift + F
+↓
+Quick Add
+Task
+Note
+Time
+Expense
+Client
+
+11. Android Focus
+• Dashboard
+• Projects
+• Tasks
+• Clients
+• Messages/comments
+• Time tracking
+• Notifications
+• Invoices
+• Daily workspace
+
+12. Core Database Models
+User
+Workspace
+Membership
+Client
+ClientContact
+Lead
+Proposal
+Contract
+Project
+ProjectMember
+Milestone
+Task
+TaskComment
+TaskAttachment
+TimeEntry
+Invoice
+InvoiceItem
+Payment
+Expense
+DailyLog
+DailyGoal
+Notification
+File
+Folder
+Activity
+Comment
+Subscription
+Integration
+
+13. Recommended Repository
+freelance-book/
+■■■ apps/
+■
+■■■ web/
+■
+■■■ desktop/
+■
+■■■ mobile/
+■
+■■■ api/
+■■■ packages/
+■
+■■■ types/
+■
+■■■ config/
+■
+■■■ ui/
+■■■ infra/
+■■■ docs/
+■■■ package.json
+■■■ pnpm-workspace.yaml
+■■■ .env.example
+■■■ .gitignore
+
+14. Windows Setup Commands
+# Check tools
+git --version
+node --version
+npm --version
+python --version
+py --version
+# Install pnpm
+npm install -g pnpm
+# Create project
+mkdir freelance-book
+cd freelance-book
+git init
+pnpm init
+mkdir apps
+mkdir packages
+mkdir docs
+mkdir infra
+# Web
+pnpm create next-app@latest apps/web
+
+# Web packages
+cd apps/web
+pnpm add @tanstack/react-query zustand zod react-hook-form @hookform/resolvers framer-motion recharts @tiptap/react @t
+pnpm dlx shadcn@latest init
+cd ../..
+# Mobile
+cd apps
+npx create-expo-app@latest mobile
+cd mobile
+npx expo install expo-router expo-notifications expo-device expo-constants
+pnpm add @tanstack/react-query zustand zod
+cd ../..
+# Python API
+cd apps
+mkdir api
+cd api
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install fastapi "uvicorn[standard]" pydantic pydantic-settings sqlalchemy alembic asyncpg "psycopg[binary]" httpx
+pip install pytest pytest-asyncio ruff
+pip freeze > requirements.txt
+cd ../..
+
+15. PowerShell Virtual Environment Fix
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\apps\api\.venv\Scripts\Activate.ps1
+
+16. FastAPI Commands
+cd apps/api
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+# API docs:
+# http://127.0.0.1:8000/docs
+
+17. Alembic Commands
+cd apps/api
+alembic init alembic
+# After configuring SQLAlchemy metadata:
+alembic revision --autogenerate -m "initial schema"
+alembic upgrade head
+# Future change:
+alembic revision --autogenerate -m "add projects"
+alembic upgrade head
+
+18. Development Commands
+# Web
+pnpm --dir apps/web dev
+# Android
+pnpm --dir apps/mobile start
+# or
+cd apps/mobile
+npx expo start --android
+# API
+cd apps/api
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+
+19. Electron Setup
+• Create apps/desktop with Electron main/preload files.
+• Load the web UI through a controlled BrowserWindow.
+• Use preload APIs and keep nodeIntegration disabled for untrusted content.
+• Use electron-builder to produce the Windows installer.
+pnpm add -D electron electron-builder concurrently wait-on
+# Later, after package scripts are configured:
+pnpm exec electron-builder --win
+
+20. Environment Variables
+# apps/api/.env
+APP_ENV=development
+APP_NAME=Freelance Book
+DATABASE_URL=
+CLERK_SECRET_KEY=
+CLERK_PUBLISHABLE_KEY=
+REDIS_URL=
+BREVO_API_KEY=
+BREVO_SENDER_EMAIL=
+BREVO_SENDER_NAME=Freelance Book
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ENDPOINT=
+INNGEST_EVENT_KEY=
+INNGEST_SIGNING_KEY=
+GEMINI_API_KEY=
+OPENAI_API_KEY=
+SENTRY_DSN=
+# Only if selected for a specific realtime/auth/storage feature:
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+Never commit real .env files or secret keys.
+
+21. Git Setup
+git add .
+git commit -m "chore: initialize freelance book"
+# After creating the GitHub repository:
+git remote add origin YOUR_GITHUB_REPOSITORY
+git branch -M main
+git push -u origin main
+
+22. Development Phases
+Phase 1 — Foundation
+• Clerk authentication
+• Workspace
+• Dashboard shell
+• FastAPI
+• Neon PostgreSQL
+• SQLAlchemy
+• Basic permissions
+
+Phase 2 — Core
+• Clients
+• Projects
+• Tasks
+• Comments
+• Activity
+• Files
+
+Phase 3 — Finance
+• Time tracking
+• Expenses
+• Invoices
+• Payments
+• Reports
+• Profitability
+
+Phase 4 — CRM
+• Leads
+• Proposals
+• Contracts
+• Follow-ups
+• Client portal
+
+Phase 5 — Realtime
+• WebSockets
+• Live comments
+• Live activity
+• Notifications
+• Presence
+
+Phase 6 — Daily
+• Daily goals
+• Focus timer
+• Daily notes
+• Daily summary
+
+Phase 7 — AI
+• Book AI
+• Project planning
+• Client summaries
+• Financial insights
+• Risk detection
+
+Phase 8 — Android
+• Core mobile experience
+
+• Push notifications
+• Mobile time tracking
+
+Phase 9 — Windows
+• Quick capture
+• Desktop timer
+• Tray
+• Desktop notifications
+• Installer
+
+23. Free-First Strategy
+■ Infrastructure Allocation Strategy
+Do not add every service immediately. Start with the smallest reliable architecture and add infrastructure only when a feature
+needs it.
+START:
+Next.js
+FastAPI
+Clerk
+Neon PostgreSQL
+SQLAlchemy
+Brevo
+R2
+ADD WHEN NEEDED:
+Upstash Redis
+Inngest
+Firebase FCM
+Sentry
+Supabase Realtime for selected realtime needs
+Avoid:
+Neon + Supabase as two primary databases
+Two realtime systems for the same events
+Redis for permanent application data
+
+24. Security
+• Verify Clerk identity on the backend.
+• Apply workspace and role permissions in FastAPI.
+• Never trust frontend permissions.
+• Validate input with Pydantic.
+• Rate-limit sensitive APIs.
+• Use secure file authorization and signed URLs.
+• Keep AI/API/storage secrets server-side.
+• Back up PostgreSQL.
+• Add audit logs for sensitive operations.
+• Add 2FA and stronger security controls before large-scale production.
+
+25. Final Architecture Summary
+FREELANCE BOOK
+|
++--------------------+--------------------+
+|
+|
+|
+WEB
+WINDOWS
+ANDROID
+Next.js
+Electron
+React Native
+|
+|
+|
++--------------------+--------------------+
+|
+FastAPI
+|
++----------+-----------+-----------+-----------+
+|
+|
+|
+|
+Clerk
+Neon
+Upstash
+R2
+Auth
+PostgreSQL
+Redis
+Files
+|
+SQLAlchemy
+|
++----------------+----------------+
+|
+|
+|
+Brevo
+Inngest
+AI APIs
+Email
+Workflows
+Gemini/OpenAI
+|
+WebSockets
+Realtime
+|
+Optional Supabase Realtime
+only if a specific realtime need
+justifies adding it
+
+This architecture keeps PostgreSQL as the single source of truth, Clerk as the authentication system, FastAPI as the main
+backend, R2 for large files, Redis for fast temporary workloads, Brevo for email, and WebSockets for realtime. Supabase is
+intentionally optional rather than a second core backend.
+
+

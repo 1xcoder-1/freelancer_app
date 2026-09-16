@@ -1,0 +1,30 @@
+{
+  "name": "desktop",
+  "version": "1.0.0",
+  "description": "Freelance Book Desktop App",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc && electron-builder --win",
+    "compile": "tsc",
+    "start": "tsc && electron .",
+    "dev": "concurrently \"wait-on http://localhost:3000\" \"tsc\" \"electron .\""
+  },
+  "build": {
+    "appId": "com.freelancebook.desktop",
+    "productName": "Freelance Book",
+    "files": [
+      "dist/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "concurrently": "^9.2.4",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.8.2",
+    "wait-on": "^8.0.5"
+  }
+}

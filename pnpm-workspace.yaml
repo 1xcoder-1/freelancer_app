@@ -1,0 +1,7 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+allowBuilds:
+  '@clerk/shared': false
+  electron-winstaller: false
+  unrs-resolver: false

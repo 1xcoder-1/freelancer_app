@@ -9,7 +9,8 @@
     "dev:mobile": "pnpm --filter mobile start",
     "dev:api": "apps\\api\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --app-dir apps/api",
     "build:web": "pnpm --filter web build",
-    "build:desktop": "pnpm --filter desktop build"
+    "build:desktop": "pnpm --filter desktop build",
+    "graphify": "graphify . --code-only && graphify cluster-only ."
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

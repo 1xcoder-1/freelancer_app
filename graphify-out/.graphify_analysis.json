@@ -1,0 +1,472 @@
+{
+  "communities": {
+    "0": [
+      "apps_web_package",
+      "apps_web_package_json_ref_react",
+      "apps_web_package_json_ref_zod",
+      "apps_web_package_name",
+      "apps_web_package_packagemanager",
+      "apps_web_package_private",
+      "apps_web_package_scripts",
+      "apps_web_package_scripts_build",
+      "apps_web_package_scripts_dev",
+      "apps_web_package_scripts_lint",
+      "apps_web_package_scripts_start",
+      "apps_web_package_version",
+      "ref_clerk_nextjs",
+      "ref_clsx",
+      "ref_eslint",
+      "ref_eslint_config_next",
+      "ref_framer_motion",
+      "ref_hookform_resolvers",
+      "ref_lucide_react",
+      "ref_react_dom",
+      "ref_react_hook_form",
+      "ref_recharts",
+      "ref_tailwind_merge",
+      "ref_tailwindcss",
+      "ref_tailwindcss_postcss",
+      "ref_tiptap_pm",
+      "ref_tiptap_react",
+      "ref_tiptap_starter_kit",
+      "ref_types_react_dom"
+    ],
+    "1": [
+      "apps_mobile_app_app",
+      "apps_mobile_app_healthstatus",
+      "apps_mobile_app_styles",
+      "apps_mobile_app_tsx_apps_mobile_app",
+      "apps_mobile_package",
+      "apps_mobile_package_devdependencies",
+      "apps_mobile_package_devdependencies_babel_core",
+      "apps_mobile_package_devdependencies_types_react",
+      "apps_mobile_package_devdependencies_types_react_native",
+      "apps_mobile_package_devdependencies_typescript",
+      "apps_mobile_package_json_ref_react",
+      "apps_mobile_package_json_ref_zod",
+      "apps_mobile_package_main",
+      "apps_mobile_package_name",
+      "apps_mobile_package_private",
+      "apps_mobile_package_version",
+      "apps_web_package_json_ref_tanstack_react_query",
+      "apps_web_package_json_ref_types_react",
+      "apps_web_package_json_ref_zustand",
+      "ref_babel_core",
+      "ref_expo",
+      "ref_expo_constants",
+      "ref_expo_device",
+      "ref_expo_notifications",
+      "ref_expo_router",
+      "ref_expo_status_bar",
+      "ref_react_native",
+      "ref_types_react_native"
+    ],
+    "2": [
+      "apps_desktop_package",
+      "apps_desktop_package_description",
+      "apps_desktop_package_main",
+      "apps_desktop_package_name",
+      "apps_desktop_package_scripts",
+      "apps_desktop_package_scripts_build",
+      "apps_desktop_package_scripts_compile",
+      "apps_desktop_package_scripts_dev",
+      "apps_desktop_package_scripts_start",
+      "apps_desktop_package_version",
+      "apps_desktop_src_main",
+      "apps_desktop_src_main_createwindow",
+      "apps_desktop_src_preload",
+      "apps_web_package_json_ref_types_node",
+      "apps_web_package_json_ref_typescript",
+      "package",
+      "package_devdependencies",
+      "package_devdependencies_concurrently",
+      "package_devdependencies_wait_on",
+      "package_json_ref_concurrently",
+      "package_json_ref_wait_on",
+      "package_name",
+      "package_private",
+      "package_version",
+      "ref_electron",
+      "ref_electron_builder"
+    ],
+    "3": [
+      "apps_web_package_dependencies",
+      "apps_web_package_dependencies_axios",
+      "apps_web_package_dependencies_clerk_nextjs",
+      "apps_web_package_dependencies_clsx",
+      "apps_web_package_dependencies_framer_motion",
+      "apps_web_package_dependencies_hookform_resolvers",
+      "apps_web_package_dependencies_lucide_react",
+      "apps_web_package_dependencies_next",
+      "apps_web_package_dependencies_react",
+      "apps_web_package_dependencies_react_dom",
+      "apps_web_package_dependencies_react_hook_form",
+      "apps_web_package_dependencies_recharts",
+      "apps_web_package_dependencies_tailwind_merge",
+      "apps_web_package_dependencies_tanstack_react_query",
+      "apps_web_package_dependencies_tiptap_pm",
+      "apps_web_package_dependencies_tiptap_react",
+      "apps_web_package_dependencies_tiptap_starter_kit",
+      "apps_web_package_dependencies_zod",
+      "apps_web_package_dependencies_zustand"
+    ],
+    "4": [
+      "apps_web_tsconfig",
+      "apps_web_tsconfig_compileroptions",
+      "apps_web_tsconfig_compileroptions_allowjs",
+      "apps_web_tsconfig_compileroptions_esmoduleinterop",
+      "apps_web_tsconfig_compileroptions_incremental",
+      "apps_web_tsconfig_compileroptions_isolatedmodules",
+      "apps_web_tsconfig_compileroptions_jsx",
+      "apps_web_tsconfig_compileroptions_lib",
+      "apps_web_tsconfig_compileroptions_module",
+      "apps_web_tsconfig_compileroptions_moduleresolution",
+      "apps_web_tsconfig_compileroptions_noemit",
+      "apps_web_tsconfig_compileroptions_paths",
+      "apps_web_tsconfig_compileroptions_plugins",
+      "apps_web_tsconfig_compileroptions_resolvejsonmodule",
+      "apps_web_tsconfig_compileroptions_skiplibcheck",
+      "apps_web_tsconfig_compileroptions_strict",
+      "apps_web_tsconfig_compileroptions_target",
+      "apps_web_tsconfig_exclude",
+      "apps_web_tsconfig_include"
+    ],
+    "5": [
+      "apps_mobile_app_adaptiveicon_backgroundcolor",
+      "apps_mobile_app_adaptiveicon_backgroundimage",
+      "apps_mobile_app_adaptiveicon_foregroundimage",
+      "apps_mobile_app_adaptiveicon_monochromeimage",
+      "apps_mobile_app_android_adaptiveicon",
+      "apps_mobile_app_expo",
+      "apps_mobile_app_expo_android",
+      "apps_mobile_app_expo_icon",
+      "apps_mobile_app_expo_ios",
+      "apps_mobile_app_expo_name",
+      "apps_mobile_app_expo_orientation",
+      "apps_mobile_app_expo_slug",
+      "apps_mobile_app_expo_userinterfacestyle",
+      "apps_mobile_app_expo_version",
+      "apps_mobile_app_expo_web",
+      "apps_mobile_app_ios_supportstablet",
+      "apps_mobile_app_json_apps_mobile_app",
+      "apps_mobile_app_web_favicon"
+    ],
+    "6": [
+      "apps_mobile_tsconfig",
+      "apps_mobile_tsconfig_compileroptions",
+      "apps_mobile_tsconfig_compileroptions_allowsyntheticdefaultimports",
+      "apps_mobile_tsconfig_compileroptions_esmoduleinterop",
+      "apps_mobile_tsconfig_compileroptions_jsx",
+      "apps_mobile_tsconfig_compileroptions_lib",
+      "apps_mobile_tsconfig_compileroptions_module",
+      "apps_mobile_tsconfig_compileroptions_moduleresolution",
+      "apps_mobile_tsconfig_compileroptions_noemit",
+      "apps_mobile_tsconfig_compileroptions_skiplibcheck",
+      "apps_mobile_tsconfig_compileroptions_strict",
+      "apps_mobile_tsconfig_compileroptions_target",
+      "apps_mobile_tsconfig_exclude"
+    ],
+    "7": [
+      "apps_desktop_tsconfig",
+      "apps_desktop_tsconfig_compileroptions",
+      "apps_desktop_tsconfig_compileroptions_esmoduleinterop",
+      "apps_desktop_tsconfig_compileroptions_forceconsistentcasinginfilenames",
+      "apps_desktop_tsconfig_compileroptions_module",
+      "apps_desktop_tsconfig_compileroptions_moduleresolution",
+      "apps_desktop_tsconfig_compileroptions_outdir",
+      "apps_desktop_tsconfig_compileroptions_rootdir",
+      "apps_desktop_tsconfig_compileroptions_skiplibcheck",
+      "apps_desktop_tsconfig_compileroptions_strict",
+      "apps_desktop_tsconfig_compileroptions_target",
+      "apps_desktop_tsconfig_include"
+    ],
+    "8": [
+      "apps_mobile_package_dependencies",
+      "apps_mobile_package_dependencies_expo",
+      "apps_mobile_package_dependencies_expo_constants",
+      "apps_mobile_package_dependencies_expo_device",
+      "apps_mobile_package_dependencies_expo_notifications",
+      "apps_mobile_package_dependencies_expo_router",
+      "apps_mobile_package_dependencies_expo_status_bar",
+      "apps_mobile_package_dependencies_react",
+      "apps_mobile_package_dependencies_react_native",
+      "apps_mobile_package_dependencies_tanstack_react_query",
+      "apps_mobile_package_dependencies_zod",
+      "apps_mobile_package_dependencies_zustand"
+    ],
+    "9": [
+      "apps_web_src_app_page",
+      "apps_web_src_app_page_home",
+      "apps_web_src_components_backendstatus",
+      "apps_web_src_components_backendstatus_backendstatus",
+      "apps_web_src_lib_api",
+      "apps_web_src_lib_api_apiclient",
+      "apps_web_src_lib_api_checkbackendhealth",
+      "apps_web_src_lib_api_getsystemstatus",
+      "apps_web_src_lib_api_healthcheckresponse",
+      "apps_web_src_lib_api_systemstatusresponse",
+      "ref_axios"
+    ],
+    "10": [
+      "apps_web_package_devdependencies",
+      "apps_web_package_devdependencies_eslint",
+      "apps_web_package_devdependencies_eslint_config_next",
+      "apps_web_package_devdependencies_tailwindcss",
+      "apps_web_package_devdependencies_tailwindcss_postcss",
+      "apps_web_package_devdependencies_types_node",
+      "apps_web_package_devdependencies_types_react",
+      "apps_web_package_devdependencies_types_react_dom",
+      "apps_web_package_devdependencies_typescript"
+    ],
+    "11": [
+      "packages_types_tsconfig",
+      "packages_types_tsconfig_compileroptions",
+      "packages_types_tsconfig_compileroptions_declaration",
+      "packages_types_tsconfig_compileroptions_module",
+      "packages_types_tsconfig_compileroptions_moduleresolution",
+      "packages_types_tsconfig_compileroptions_skiplibcheck",
+      "packages_types_tsconfig_compileroptions_strict",
+      "packages_types_tsconfig_compileroptions_target",
+      "packages_types_tsconfig_include"
+    ],
+    "12": [
+      "apps_web_next_config",
+      "apps_web_next_config_nextconfig",
+      "apps_web_src_app_layout",
+      "apps_web_src_app_layout_geistmono",
+      "apps_web_src_app_layout_geistsans",
+      "apps_web_src_app_layout_metadata",
+      "apps_web_src_app_layout_rootlayout",
+      "ref_next"
+    ],
+    "13": [
+      "package_scripts",
+      "package_scripts_build_desktop",
+      "package_scripts_build_web",
+      "package_scripts_dev",
+      "package_scripts_dev_api",
+      "package_scripts_dev_desktop",
+      "package_scripts_dev_mobile",
+      "package_scripts_dev_web"
+    ],
+    "14": [
+      "apps_api_app_api_v1_endpoints_health",
+      "apps_api_app_api_v1_endpoints_health_health_check",
+      "apps_api_app_api_v1_endpoints_health_py_get",
+      "apps_api_app_api_v1_endpoints_status",
+      "apps_api_app_api_v1_endpoints_status_py_get",
+      "apps_api_app_api_v1_endpoints_status_system_status",
+      "apps_api_app_api_v1_router"
+    ],
+    "15": [
+      "apps_desktop_package_devdependencies",
+      "apps_desktop_package_devdependencies_concurrently",
+      "apps_desktop_package_devdependencies_electron",
+      "apps_desktop_package_devdependencies_electron_builder",
+      "apps_desktop_package_devdependencies_types_node",
+      "apps_desktop_package_devdependencies_typescript",
+      "apps_desktop_package_devdependencies_wait_on"
+    ],
+    "16": [
+      "packages_types_src_index",
+      "packages_types_src_index_client",
+      "packages_types_src_index_invoice",
+      "packages_types_src_index_project",
+      "packages_types_src_index_task",
+      "packages_types_src_index_user",
+      "packages_types_src_index_workspace"
+    ],
+    "17": [
+      "apps_desktop_package_build",
+      "apps_desktop_package_build_appid",
+      "apps_desktop_package_build_files",
+      "apps_desktop_package_build_productname",
+      "apps_desktop_package_build_win",
+      "apps_desktop_package_win_target"
+    ],
+    "18": [
+      "packages_types_package",
+      "packages_types_package_main",
+      "packages_types_package_name",
+      "packages_types_package_private",
+      "packages_types_package_types",
+      "packages_types_package_version"
+    ],
+    "19": [
+      "apps_mobile_package_scripts",
+      "apps_mobile_package_scripts_android",
+      "apps_mobile_package_scripts_ios",
+      "apps_mobile_package_scripts_start",
+      "apps_mobile_package_scripts_web"
+    ],
+    "20": [
+      "apps_api_app_core_database",
+      "apps_api_app_core_database_base",
+      "apps_api_app_core_database_get_db",
+      "declarativebase"
+    ],
+    "21": [
+      "apps_api_app_core_config",
+      "apps_api_app_core_config_settings",
+      "basesettings"
+    ],
+    "22": [
+      "apps_api_app_main",
+      "apps_api_app_main_py_get",
+      "apps_api_app_main_root"
+    ],
+    "23": [
+      "apps_api_app_init",
+      "apps_api_app_init_rationale_1"
+    ],
+    "24": [
+      "apps_web_eslint_config",
+      "apps_web_eslint_config_eslintconfig"
+    ],
+    "25": [
+      "apps_web_postcss_config",
+      "apps_web_postcss_config_config"
+    ]
+  },
+  "cohesion": {
+    "0": 0.06896551724137931,
+    "1": 0.07407407407407407,
+    "2": 0.08,
+    "3": 0.10526315789473684,
+    "4": 0.10526315789473684,
+    "5": 0.1111111111111111,
+    "6": 0.15384615384615385,
+    "7": 0.16666666666666666,
+    "8": 0.16666666666666666,
+    "9": 0.3090909090909091,
+    "10": 0.2222222222222222,
+    "11": 0.2222222222222222,
+    "12": 0.25,
+    "13": 0.25,
+    "14": 0.2857142857142857,
+    "15": 0.2857142857142857,
+    "16": 0.2857142857142857,
+    "17": 0.3333333333333333,
+    "18": 0.3333333333333333,
+    "19": 0.4,
+    "20": 0.5,
+    "21": 0.6666666666666666,
+    "22": 0.6666666666666666,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 1.0
+  },
+  "gods": [
+    {
+      "id": "apps_web_tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 16
+    },
+    {
+      "id": "apps_mobile_tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 11
+    },
+    {
+      "id": "apps_mobile_app_expo",
+      "label": "expo",
+      "degree": 10
+    },
+    {
+      "id": "apps_desktop_tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 10
+    },
+    {
+      "id": "package_scripts",
+      "label": "scripts",
+      "degree": 8
+    },
+    {
+      "id": "packages_types_tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 7
+    },
+    {
+      "id": "apps_web_package_scripts",
+      "label": "scripts",
+      "degree": 5
+    },
+    {
+      "id": "apps_desktop_package_build",
+      "label": "build",
+      "degree": 5
+    },
+    {
+      "id": "apps_mobile_package_scripts",
+      "label": "scripts",
+      "degree": 5
+    },
+    {
+      "id": "apps_desktop_package_scripts",
+      "label": "scripts",
+      "degree": 5
+    }
+  ],
+  "surprises": [
+    {
+      "source": "BackendStatus()",
+      "target": "checkBackendHealth()",
+      "source_files": [
+        "apps/web/src/components/BackendStatus.tsx",
+        "apps/web/src/lib/api.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "BackendStatus()",
+      "target": "getSystemStatus()",
+      "source_files": [
+        "apps/web/src/components/BackendStatus.tsx",
+        "apps/web/src/lib/api.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `typescript` connect `desktop/package.json` to `web/package.json`, `mobile/package.json`?",
+      "why": "High betweenness centrality (0.120) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `dependencies` connect `dependencies` to `web/package.json`?",
+      "why": "High betweenness centrality (0.076) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `dependencies` connect `dependencies` to `mobile/package.json`?",
+      "why": "High betweenness centrality (0.047) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `HealthStatus`, `Client`, `Invoice` to the rest of the system?",
+      "why": "193 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `web/package.json` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.06896551724137931 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `mobile/package.json` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.07407407407407407 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `desktop/package.json` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.08 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

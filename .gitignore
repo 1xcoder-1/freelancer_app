@@ -9,3 +9,6 @@ build/
 .env.local
 .expo/
 *.log
+*.db
+*.sqlite*
+.turbo/

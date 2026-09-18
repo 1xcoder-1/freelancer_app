@@ -1,8 +1,4 @@
-# Master Application Quality Checklist
-
-This checklist defines mandatory UI/UX features, SEO essentials, and technical performance requirements for the Freelancer Book application.
-
----
+# **Website Checklist – UI, SEO & Performance Notes**
 
 ### 1. UI / UX Features
 
@@ -26,6 +22,7 @@ This checklist defines mandatory UI/UX features, SEO essentials, and technical p
 - **UTM tracking** — Capture UTM parameters and store them (for analytics).
 - **Copy-to-clipboard** — One-click copy for codes, links, referral codes.
 - **Last updated dates** — Show “Last updated: DD MMM YYYY” on content pages.
+- **Optimistic UI** — Don’t block the entire interface while waiting for backend. Update the UI immediately and reconcile later (or show subtle loading only on the affected part).
 
 ---
 
@@ -73,5 +70,61 @@ This checklist defines mandatory UI/UX features, SEO essentials, and technical p
 - ✅ **Minify JS & CSS** — Production builds only.
 - ✅ **Lazy loading** — Images, components, routes.
 - ✅ **Defer non-critical scripts** — Analytics, chat widgets, etc.
-- 开启 **Unused dependencies** — Audit and remove (bundle size killers).
+- ❌ **Unused dependencies** — Audit and remove (bundle size killers).
 - ✅ **Database connection pooling** — Essential for production.
+
+**Extra performance lessons (from real cases):**
+
+- **Server rebuilding HTML per visitor** — Without caching, the server does the same full render work for every visitor even if the page hasn’t changed. Solution: Add proper page/fragment caching so subsequent visitors get the already-rendered result (can cut rebuilds dramatically, e.g. 4 visitors → 1 render).
+- **Single dependency bottleneck** — One slow external call or internal step can eat 80–90% of total latency. Solution: Measure round-trip time of each step, isolate the slowest dependency, and optimize/cache/parallelize it first.
+- **DB writes one row at a time** — Writing 1,000 rows individually = 1,000 round trips. At scale this feels like molasses. Solution: Batch inserts/updates (e.g. 1,000 rows in a few round trips).
+- **Uncompressed JSON** — Sending large uncompressed responses wastes bandwidth and slows users. Solution: Enable Gzip/Brotli compression (often one config change) — e.g. 247 KB → 31 KB.
+- **UI blocked on backend response** — Every action freezes the screen until the server replies. Solution: Use optimistic UI + non-blocking patterns so the interface stays responsive.
+
+---
+
+### 4. Security & Reliability
+
+- ✅ **Force HTTPS** — Redirect all HTTP traffic to HTTPS. Enable HSTS.
+- ✅ **Password is hashed** — Never store plain text. Use strong hashing (bcrypt, Argon2, etc.).
+- ✅ **Bot protection on forms** — CAPTCHA, honeypot fields, or rate limiting on login/signup/contact forms.
+- ✅ **Login session expires** — Sessions should have a reasonable timeout and force re-login after inactivity.
+- ✅ **CSRF protection** — Protect all state-changing requests (forms, APIs) with CSRF tokens.
+- ✅ **Password reset link expires** — Reset links must expire after a short time (e.g. 15–60 minutes).
+- ✅ **Key-limited database** — Restrict database access with proper roles/permissions. Never use root/admin for the app.
+- ✅ **Logs do not print credentials or keys** — Never log passwords, API keys, tokens, or secrets.
+- ✅ **Billing alerts** — Set up alerts for unexpected spending (cloud bills, payment failures, etc.).
+- ✅ **Automated Backup** — Regular automated backups of database + critical files. Test restore process.
+
+### 5. Third-Party Dependency Resilience
+
+- ✅ **Audit all external services** — Payments, APIs, maps, email/SMS, storage, AI, auth providers, analytics, etc.
+- ✅ **Handle complete unavailability** — App should not crash when a third-party is down.
+- ✅ **Handle timeouts** — Set proper timeouts so requests don’t hang forever.
+- ✅ **Handle 4xx / 5xx errors** — Catch and show user-friendly messages instead of breaking.
+- ✅ **Handle rate limits** — Detect rate-limiting and back off gracefully.
+- ✅ **Handle malformed data** — Validate responses so unexpected formats don’t crash the app.
+- ✅ **Handle temporary unreachability** — Retry with exponential backoff when possible.
+- ✅ **Handle slow / partial failures** — Don’t let one slow service block the whole experience.
+- ✅ **Handle missing env variables** — Fail safely and log clearly when config is missing.
+- ✅ **No unhandled exceptions** — External failures should never bring down the app.
+- ✅ **UI never stuck forever** — Always show error state or fallback instead of infinite loading.
+- ✅ **Requests don’t block the entire app** — Keep other features working when one dependency fails.
+- ✅ **Add timeout handling** — Every external call needs a timeout.
+- ✅ **Add retry + backoff** — Retry transient failures intelligently.
+- ✅ **Add graceful fallbacks** — Show cached data, default values, or degraded mode when possible.
+- ✅ **Support offline / degraded mode** — App should still be usable when possible.
+- ✅ **Prevent duplicate actions after retry** — Avoid double charges, double emails, etc.
+- ✅ **Show clear error messages** — Users should understand what went wrong.
+- ✅ **Stop failure cascading** — One service down should not break unrelated features.
+- ✅ **Never expose internal errors** — Hide stack traces and sensitive details from users.
+- ✅ **Add health checks** — Know the status of critical dependencies.
+- ✅ **Recover cleanly** — When the service comes back, the app should resume normally.
+
+### 6. Frontend Performance & UX Polish
+
+- ✅ **Eliminate unnecessary re-renders** — Only update the parts that actually changed. Avoid re-rendering the whole screen on every small update.
+- ✅ **Prefetch data based on user intent** — Load data in the background when you can predict what the user will need next (e.g. next page or likely action).
+- ✅ **Standardize typography** — Use a consistent font weight and size system across the whole app. No random guessing of weights.
+- ✅ **Remove performance-killing animations** — Heavy or poorly optimized animations can delay the largest image from painting. Keep animations light so content appears fast.
+- ✅ **Fix mobile horizontal scrolls** — Make sure content fits the screen width. Users should never have to scroll sideways to see everything.

@@ -10,10 +10,15 @@
     "dev:api": "apps\\api\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --app-dir apps/api",
     "build:web": "pnpm --filter web build",
     "build:desktop": "pnpm --filter desktop build",
-    "graphify": "graphify . --code-only && graphify cluster-only ."
+    "graphify": "graphify . --code-only"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "wait-on": "^8.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared"
+    ]
   }
 }

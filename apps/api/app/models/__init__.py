@@ -3,6 +3,10 @@ from app.models.workspace import User, Workspace, Membership
 from app.models.client import Client, ClientContact
 from app.models.project import Project, Milestone, Task, TaskComment
 from app.models.finance import TimeEntry, Invoice, InvoiceItem, Expense
+from app.models.contract import Contract
+from app.models.proposal import Proposal
+from app.models.intake import IntakeForm, IntakeSubmission
+from app.models.booking import BookingConsultation, BookingAppointment
 
 __all__ = [
     "Base",
@@ -20,4 +24,11 @@ __all__ = [
     "Invoice",
     "InvoiceItem",
     "Expense",
+    "Contract",
+    "Proposal",
+    "IntakeForm",
+    "IntakeSubmission",
+    "BookingConsultation",
+    "BookingAppointment",
 ]
+

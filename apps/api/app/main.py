@@ -1,8 +1,7 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import init_db
@@ -19,39 +18,43 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    openapi_url="/api/v1/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    openapi_url="/openapi.json" if settings.DEBUG else None,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url=None,
     lifespan=lifespan
 )
 
 # Gzip Payload Compression (Checklist: Performance)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-# Security Headers Middleware (Checklist: Security & Reliability)
+# Security Headers & Exception Sanitization Middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     try:
         response: Response = await call_next(request)
-    except Exception:
-        # Prevent failure cascading & never expose raw internal stack traces
+    except Exception as exc:
+        import traceback
+        print(f"Unhandled Exception in request {request.url}: {exc}")
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
-            content={"detail": "An unexpected server error occurred. Our engineers have been alerted."}
+            content={"detail": "A secure internal server error occurred. Request has been logged."}
         )
 
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     return response
 
-# Set up CORS middleware
+# Set up CORS middleware (Strict origin filtering)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -60,8 +63,8 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to Freelance Book API",
-        "docs": "/docs",
+        "status": "online",
+        "service": settings.APP_NAME,
         "health": "/api/v1/health"
     }
 

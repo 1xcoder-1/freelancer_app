@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion, useScroll, useSpring } from "framer-motion";
 
 export function ScrollProgress() {
+  const pathname = usePathname();
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 30,
     restDelta: 0.001,
   });
+
+  // Only render the scroll progress bar on the public landing page ("/")
+  if (pathname !== "/") {
+    return null;
+  }
 
   return (
     <motion.div

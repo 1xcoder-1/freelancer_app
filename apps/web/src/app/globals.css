@@ -49,6 +49,17 @@ body {
   background: #334155;
 }
 
+/* Shimmer Animation for Skeleton Components */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
 /* Meteor Animation */
 @keyframes meteor {
   0% {

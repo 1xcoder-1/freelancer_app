@@ -3,9 +3,13 @@ from app.core.config import settings
 from app.models.base import Base
 import app.models  # noqa: F401 - Register all models in Base.metadata
 
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 # SQLAlchemy 2 Async Engine
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    db_url,
     echo=settings.DEBUG,
     future=True
 )

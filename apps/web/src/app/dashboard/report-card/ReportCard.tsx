@@ -117,7 +117,7 @@ export function ReportCard({ profile }: ReportCardProps) {
     return () => clearInterval(interval);
   }, [shareConfig.is_shared, shareConfig.expires_at]);
 
-  const originUrl = typeof window !== "undefined" ? window.location.origin : "https://freelancer-book.vercel.app";
+  const originUrl = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || "https://freelance-book.app");
   const shareUrl = shareConfig.share_token
     ? `${originUrl}/u/${profile.username || "1xcoder"}?token=${shareConfig.share_token}`
     : `${originUrl}/u/${profile.username || "1xcoder"}`;

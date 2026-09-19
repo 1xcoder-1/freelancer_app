@@ -4,21 +4,15 @@ import { useEffect, useState, use } from "react";
 import {
   FolderKanban,
   CheckCircle2,
-  Clock,
   ShieldCheck,
   AlertCircle,
   Building2,
-  Lock,
-  ExternalLink,
   Sparkles,
   Layers,
-  FileSignature,
   FileCheck,
   Send,
   MessageSquare,
   Check,
-  Download,
-  Calendar,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,8 +42,9 @@ export default function ClientPortalPage({ params }: PageProps) {
         setLoading(true);
         const data = await getPublicProjectPortal(token);
         setPortal(data);
-      } catch (err: any) {
-        setError(err?.response?.data?.detail || "Project portal link is invalid or expired.");
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { detail?: string } } };
+        setError(axiosErr?.response?.data?.detail || "Project portal link is invalid or expired.");
       } finally {
         setLoading(false);
       }
@@ -64,8 +59,9 @@ export default function ClientPortalPage({ params }: PageProps) {
       setPortal(updated);
       setJustApprovedId(milestoneId);
       setTimeout(() => setJustApprovedId(null), 3000);
-    } catch (err: any) {
-      alert(err?.response?.data?.detail || "Failed to approve deliverable.");
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      alert(axiosErr?.response?.data?.detail || "Failed to approve deliverable.");
     } finally {
       setApprovingId(null);
     }

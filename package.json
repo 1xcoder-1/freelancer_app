@@ -18,7 +18,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@clerk/shared"
+      "@clerk/shared",
+      "@sentry/cli"
     ]
   }
 }

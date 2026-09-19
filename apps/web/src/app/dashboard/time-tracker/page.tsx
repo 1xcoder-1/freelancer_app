@@ -40,9 +40,9 @@ export default function TimeTrackerPage() {
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const [entriesRes, projRes] = await Promise.all([
         getTimeEntries(token).catch(() => []),
@@ -51,7 +51,7 @@ export default function TimeTrackerPage() {
       setEntries(entriesRes);
       setProjects(projRes);
       if (projRes.length > 0) {
-        setSelectedProjectId(projRes[0].id);
+        setSelectedProjectId((prev) => prev || projRes[0].id);
       }
     } catch (err) {
       console.error("Error loading time entries:", err);
@@ -61,7 +61,7 @@ export default function TimeTrackerPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, []);
 
   const handleStopAndSave = async () => {
@@ -119,7 +119,7 @@ export default function TimeTrackerPage() {
           </p>
         </div>
 
-        <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="border-white/10 text-slate-300">
+        <Button variant="outline" size="sm" onClick={() => loadData(true)} disabled={loading} className="border-white/10 text-slate-300">
           <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </Button>

@@ -33,9 +33,9 @@ export default function ClientsPage() {
   const [website, setWebsite] = useState("");
   const [notes, setNotes] = useState("");
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const res = await getClients(token);
       setClients(res);
@@ -47,7 +47,7 @@ export default function ClientsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, []);
 
   const handleCreateClient = async (e: React.FormEvent) => {
@@ -103,7 +103,7 @@ export default function ClientsPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="border-white/10 text-slate-300">
+          <Button variant="outline" size="sm" onClick={() => loadData(true)} disabled={loading} className="border-white/10 text-slate-300">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>

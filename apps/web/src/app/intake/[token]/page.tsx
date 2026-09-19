@@ -7,13 +7,10 @@ import {
   CheckCircle2,
   Send,
   AlertCircle,
-  Sparkles,
-  ArrowRight,
   ShieldCheck,
-  Building
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPublicIntakeForm, submitPublicIntakeForm, PublicIntakeForm } from "@/lib/api";
 
@@ -28,7 +25,7 @@ export default function PublicIntakePage() {
   // Submission inputs
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -38,8 +35,9 @@ export default function PublicIntakePage() {
       try {
         const data = await getPublicIntakeForm(token);
         setForm(data);
-      } catch (err: any) {
-        setError(err.message || "Unable to load intake questionnaire.");
+      } catch (err: unknown) {
+        const message = (err as Error)?.message || "Unable to load intake questionnaire.";
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -47,7 +45,7 @@ export default function PublicIntakePage() {
     fetchForm();
   }, [token]);
 
-  const handleAnswerChange = (label: string, value: any) => {
+  const handleAnswerChange = (label: string, value: unknown) => {
     setAnswers((prev) => ({
       ...prev,
       [label]: value,
@@ -66,8 +64,9 @@ export default function PublicIntakePage() {
         answers: answers,
       });
       setSubmitted(true);
-    } catch (err: any) {
-      setError(err.message || "Failed to submit questionnaire.");
+    } catch (err: unknown) {
+      const message = (err as Error)?.message || "Failed to submit questionnaire.";
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -185,7 +184,7 @@ export default function PublicIntakePage() {
 
               {/* Dynamic Questions */}
               <div className="space-y-5">
-                {questionsList.map((q: any, idx: number) => {
+                {questionsList.map((q: { id?: string; label?: string; type?: string; required?: boolean }, idx: number) => {
                   const label = q.label || `Question ${idx + 1}`;
                   const isRequired = q.required;
 
@@ -200,7 +199,7 @@ export default function PublicIntakePage() {
                           rows={3}
                           required={isRequired}
                           placeholder="Type your response here..."
-                          value={answers[label] || ""}
+                          value={(answers[label] as string) || ""}
                           onChange={(e) => handleAnswerChange(label, e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                         />
@@ -209,7 +208,7 @@ export default function PublicIntakePage() {
                           type="number"
                           required={isRequired}
                           placeholder="0"
-                          value={answers[label] || ""}
+                          value={(answers[label] as string | number) ?? ""}
                           onChange={(e) => handleAnswerChange(label, e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                         />
@@ -218,7 +217,7 @@ export default function PublicIntakePage() {
                           type="text"
                           required={isRequired}
                           placeholder="Type your answer..."
-                          value={answers[label] || ""}
+                          value={(answers[label] as string) || ""}
                           onChange={(e) => handleAnswerChange(label, e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                         />

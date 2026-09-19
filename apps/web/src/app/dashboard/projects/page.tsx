@@ -137,9 +137,9 @@ export default function ProjectsPage() {
   const [contractContent, setContractContent] = useState(CONTRACT_TEMPLATES[0].content);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const [projRes, clientRes, contractRes] = await Promise.all([
         getProjects(token).catch(() => []),
@@ -160,7 +160,7 @@ export default function ProjectsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -275,7 +275,7 @@ export default function ProjectsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             disabled={loading}
             className="border-white/10 text-slate-300"
           >

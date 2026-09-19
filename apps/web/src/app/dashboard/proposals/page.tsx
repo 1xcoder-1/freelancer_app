@@ -43,9 +43,9 @@ export default function ProposalsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const [propsRes, clientsRes] = await Promise.all([
         getProposals(token).catch(() => []),
@@ -61,7 +61,7 @@ export default function ProposalsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, []);
 
   const handleGenerateAI = async () => {
@@ -144,7 +144,7 @@ export default function ProposalsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             disabled={loading}
             className="border-white/10 text-slate-300 hover:text-white"
           >

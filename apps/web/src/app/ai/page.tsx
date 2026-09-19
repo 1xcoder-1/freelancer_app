@@ -2,27 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import {
   Sparkles,
   Bot,
   Zap,
-  CheckCircle2,
   ArrowRight,
   ShieldCheck,
-  Send,
-  FileText,
-  DollarSign,
-  Users,
   MessageSquare,
-  Cpu,
 } from "lucide-react";
 import { SparklesCore } from "@/components/ui/aceternity/sparkles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 
 export default function BookAIPage() {
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);

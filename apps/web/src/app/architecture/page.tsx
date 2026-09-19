@@ -8,22 +8,16 @@ import {
   Server,
   Database,
   Key,
-  Shield,
   Zap,
-  Cpu,
-  ArrowRight,
   CheckCircle2,
-  Lock,
   Layers,
-  Sparkles,
   Terminal,
-  Code2,
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/aceternity/spotlight";
 import { Meteors } from "@/components/ui/aceternity/meteors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 
 export default function ArchitecturePage() {
   const tiers = [

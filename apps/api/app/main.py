@@ -6,6 +6,15 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.v1.router import api_router
+import sentry_sdk
+
+# Initialize Sentry Error & Performance Observability
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=1.0,
+        send_default_pii=False,
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,6 +45,8 @@ async def add_security_headers(request: Request, call_next):
         import traceback
         print(f"Unhandled Exception in request {request.url}: {exc}")
         traceback.print_exc()
+        if settings.SENTRY_DSN:
+            sentry_sdk.capture_exception(exc)
         return JSONResponse(
             status_code=500,
             content={"detail": "A secure internal server error occurred. Request has been logged."}

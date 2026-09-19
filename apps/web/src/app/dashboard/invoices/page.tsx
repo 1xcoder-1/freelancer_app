@@ -35,9 +35,9 @@ export default function InvoicesPage() {
   const [itemQty, setItemQty] = useState(1);
   const [itemRate, setItemRate] = useState(1200);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const [invRes, clientRes] = await Promise.all([
         getInvoices(token).catch(() => []),
@@ -46,7 +46,7 @@ export default function InvoicesPage() {
       setInvoices(invRes);
       setClients(clientRes);
       if (clientRes.length > 0) {
-        setClientId(clientRes[0].id);
+        setClientId((prev) => prev || clientRes[0].id);
       }
     } catch (err) {
       console.error("Failed to load invoices:", err);
@@ -56,7 +56,7 @@ export default function InvoicesPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, []);
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
@@ -113,7 +113,7 @@ export default function InvoicesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="border-white/10 text-slate-300">
+          <Button variant="outline" size="sm" onClick={() => loadData(true)} disabled={loading} className="border-white/10 text-slate-300">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>

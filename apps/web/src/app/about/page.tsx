@@ -5,25 +5,18 @@ import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import {
-  Heart,
   Sparkles,
-  ShieldCheck,
   Zap,
-  Users,
-  Compass,
-  Code2,
   Lock,
   ArrowRight,
   Target,
-  CheckCircle2,
   Globe,
-  Award,
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/aceternity/spotlight";
 import { Meteors } from "@/components/ui/aceternity/meteors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 
 export default function AboutPage() {
   const values = [

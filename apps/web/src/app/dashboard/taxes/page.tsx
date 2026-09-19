@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { Calculator, Plus, Trash2, Receipt, Upload, RefreshCw, DollarSign, Camera } from "lucide-react";
+import { Calculator, Plus, Trash2, Receipt, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getExpenses, createExpense, deleteExpense, getUploadSignature, type Expense } from "@/lib/api";
+import { getExpenses, createExpense, deleteExpense, type Expense } from "@/lib/api";
 
 export default function TaxesPage() {
   const { getToken } = useAuth();
@@ -18,9 +18,9 @@ export default function TaxesPage() {
   const [amount, setAmount] = useState(49);
   const [description, setDescription] = useState("");
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const res = await getExpenses(token);
       setExpenses(res);
@@ -32,7 +32,7 @@ export default function TaxesPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
   }, []);
 
   const totalDeductions = expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
@@ -81,7 +81,7 @@ export default function TaxesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="border-white/10 text-slate-300">
+          <Button variant="outline" size="sm" onClick={() => loadData(true)} disabled={loading} className="border-white/10 text-slate-300">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>

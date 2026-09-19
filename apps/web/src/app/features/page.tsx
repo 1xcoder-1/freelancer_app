@@ -16,20 +16,11 @@ import {
   FolderLock,
   ArrowRight,
   CheckCircle2,
-  Filter,
-  BarChart3,
-  Calendar,
-  Layers,
-  Shield,
-  Zap,
-  Check,
-  TrendingUp,
-  CreditCard,
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/aceternity/spotlight";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 
 export default function FeaturesPage() {
   const [activeCategory, setActiveCategory] = useState<string>("all");

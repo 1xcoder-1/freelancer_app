@@ -6,6 +6,7 @@ import { BackToTop } from "@/components/ui/BackToTop";
 import { CookieBanner } from "@/components/ui/CookieBanner";
 import { FloatingContact } from "@/components/ui/FloatingContact";
 import { UtmTracker } from "@/components/providers/UtmTracker";
+import { SentryProvider } from "@/components/providers/SentryProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -97,33 +98,35 @@ export default function RootLayout({
           />
         </head>
         <body className="min-h-full flex flex-col bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-slate-950 font-sans">
-          {/* Skip to Content Accessibility Link (Checklist Item) */}
-          <a
-            href="#main-content"
-            className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 z-[200] px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-2xl focus:outline-none"
-          >
-            Skip to main content
-          </a>
+          <SentryProvider>
+            {/* Skip to Content Accessibility Link (Checklist Item) */}
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 z-[200] px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-2xl focus:outline-none"
+            >
+              Skip to main content
+            </a>
 
-          {/* UTM Tracking Capture */}
-          <UtmTracker />
+            {/* UTM Tracking Capture */}
+            <UtmTracker />
 
-          {/* Top Scroll Progress Bar */}
-          <ScrollProgress />
+            {/* Top Scroll Progress Bar */}
+            <ScrollProgress />
 
-          {/* Main Application Page Content */}
-          <div id="main-content" className="flex-1 flex flex-col">
-            {children}
-          </div>
+            {/* Main Application Page Content */}
+            <div id="main-content" className="flex-1 flex flex-col">
+              {children}
+            </div>
 
-          {/* Back to Top Smooth Button */}
-          <BackToTop />
+            {/* Back to Top Smooth Button */}
+            <BackToTop />
 
-          {/* Floating Support Modal Trigger */}
-          <FloatingContact />
+            {/* Floating Support Modal Trigger */}
+            <FloatingContact />
 
-          {/* GDPR Cookie Consent Banner */}
-          <CookieBanner />
+            {/* GDPR Cookie Consent Banner */}
+            <CookieBanner />
+          </SentryProvider>
         </body>
       </html>
     </ClerkProvider>

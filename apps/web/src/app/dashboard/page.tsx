@@ -49,9 +49,9 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [isTimerRunning]);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh?: unknown) => {
     try {
-      setLoading(true);
+      if (isManualRefresh === true) setLoading(true);
       const token = (await getToken()) || undefined;
       const [statsRes, overviewRes] = await Promise.all([
         getDashboardStats(token).catch(() => null),
@@ -68,7 +68,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (isLoaded) {
-      loadData();
+      loadData(false);
     }
   }, [isLoaded]);
 
@@ -101,7 +101,7 @@ export default function DashboardPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             disabled={loading}
             className="border-white/10 text-slate-300 hover:text-white"
           >

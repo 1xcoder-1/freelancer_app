@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 
 export const Meteors = ({
@@ -9,21 +9,18 @@ export const Meteors = ({
   number?: number;
   className?: string;
 }) => {
-  const [meteors, setMeteors] = useState<Array<{
-    top: string;
-    left: string;
-    animationDelay: string;
-    animationDuration: string;
-  }>>([]);
-
-  useEffect(() => {
-    const meteorArray = new Array(number).fill(true).map(() => ({
-      top: "0px",
-      left: Math.floor(Math.random() * 800 - 400) + "px",
-      animationDelay: Math.random() * 0.6 + 0.2 + "s",
-      animationDuration: Math.floor(Math.random() * 8 + 2) + "s",
-    }));
-    setMeteors(meteorArray);
+  const meteors = React.useMemo(() => {
+    return Array.from({ length: number }, (_, idx) => {
+      const seed = ((idx * 47) % 800) - 400;
+      const delay = (((idx * 19) % 60) / 100 + 0.2).toFixed(2);
+      const duration = (idx * 23) % 8 + 2;
+      return {
+        top: "0px",
+        left: `${seed}px`,
+        animationDelay: `${delay}s`,
+        animationDuration: `${duration}s`,
+      };
+    });
   }, [number]);
 
   return (

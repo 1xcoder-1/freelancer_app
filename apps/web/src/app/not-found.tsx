@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { Sparkles, ArrowLeft, Home, Layers, DollarSign, Heart } from "lucide-react";
+import { Sparkles, Home, Layers, DollarSign, Heart } from "lucide-react";
 
 export default function NotFound() {
   return (

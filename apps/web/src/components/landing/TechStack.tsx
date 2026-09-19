@@ -5,7 +5,7 @@ import { Cpu, Database, Key, Server, Zap, Shield, ArrowUpRight } from "lucide-re
 import { BackgroundGradient } from "@/components/ui/aceternity/background-gradient";
 import { Meteors } from "@/components/ui/aceternity/meteors";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import Link from "next/link";
 
 export function TechStack() {

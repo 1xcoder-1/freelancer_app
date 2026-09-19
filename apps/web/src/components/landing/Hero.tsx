@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Play, ArrowRight, Clock, CheckCircle2, ShieldCheck, Zap, Laptop, Layers } from "lucide-react";
+import { Play, ArrowRight, Clock } from "lucide-react";
 import { Spotlight } from "@/components/ui/aceternity/spotlight";
 import { SparklesCore } from "@/components/ui/aceternity/sparkles";
 import { Button } from "@/components/ui/button";
@@ -170,7 +170,7 @@ export function Hero() {
                       <Clock className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-sm font-semibold text-white">Today's Focus Task</div>
+                      <div className="text-sm font-semibold text-white">Today&apos;s Focus Task</div>
                       <div className="text-xs text-slate-400">Fintech Dashboard Refactor • Acme Corp Client</div>
                     </div>
                   </div>

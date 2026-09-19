@@ -21,7 +21,6 @@ import {
 
 import { CommandMenu } from "@/components/ui/CommandMenu";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

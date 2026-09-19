@@ -1,5 +1,8 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+allowBuilds:
+  '@sentry/cli': true
 onlyBuiltDependencies:
   - '@clerk/shared'
+  - '@sentry/cli'

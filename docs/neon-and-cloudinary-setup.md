@@ -44,7 +44,7 @@ In **Freelance Book**, we use **Neon** and **Cloudinary** together for two disti
 ### Step 1: Your Neon Connection String
 Your Neon connection string is configured in [`apps/api/.env`](file:///c:/Users/coder/Desktop/freelancer%20book/apps/api/.env):
 ```env
-DATABASE_URL=postgresql+asyncpg://neondb_owner:npg_YUXGMd5ghv1H@ep-patient-star-b4tnogzf-pooler.c-6.us-east-2.aws.neon.tech/neondb?ssl=require
+DATABASE_URL=
 ```
 
 ### Step 2: Automatic Initialization

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { getPublicPortfolio, PortfolioProfile as IPortfolioProfile } from "@/lib/api";
 import { ReportCard } from "@/app/dashboard/report-card/ReportCard";
@@ -22,43 +22,61 @@ export default function PublicProfilePage() {
   const [shareStatus, setShareStatus] = useState<"valid" | "revoked" | "expired">("valid");
 
   // Secure Server-Side Profile & Share Status Fetching
-  const loadData = useCallback(async (isBackgroundCheck = false) => {
-    try {
-      if (!isBackgroundCheck) {
-        setLoading(true);
-        setError(null);
-      }
-      const data = await getPublicPortfolio(username, shareToken);
-      setProfile(data);
-      setShareStatus("valid");
-    } catch (err: any) {
-      const statusCode = err?.response?.status;
-      if (statusCode === 410) {
-        setShareStatus("expired");
-      } else if (statusCode === 403) {
-        setShareStatus("revoked");
-      } else {
-        if (!isBackgroundCheck) {
-          setError(err?.response?.data?.detail || "The requested freelancer developer profile does not exist or is unavailable.");
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchInitial() {
+      try {
+        const data = await getPublicPortfolio(username, shareToken);
+        if (isMounted) {
+          setProfile(data);
+          setShareStatus("valid");
+        }
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const axiosErr = err as { response?: { status?: number; data?: { detail?: string } } };
+        const statusCode = axiosErr?.response?.status;
+        if (statusCode === 410) {
+          setShareStatus("expired");
+        } else if (statusCode === 403) {
+          setShareStatus("revoked");
+        } else {
+          setError(axiosErr?.response?.data?.detail || "The requested freelancer developer profile does not exist or is unavailable.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
         }
       }
-    } finally {
-      if (!isBackgroundCheck) {
-        setLoading(false);
-      }
     }
-  }, [username, shareToken]);
 
-  useEffect(() => {
-    loadData(false);
+    fetchInitial();
 
     // Secure server-side status poll every 4 seconds to detect real-time revocation/expiration without any local storage
-    const interval = setInterval(() => {
-      loadData(true);
+    const interval = setInterval(async () => {
+      try {
+        const data = await getPublicPortfolio(username, shareToken);
+        if (isMounted) {
+          setProfile(data);
+          setShareStatus("valid");
+        }
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const axiosErr = err as { response?: { status?: number } };
+        const statusCode = axiosErr?.response?.status;
+        if (statusCode === 410) {
+          setShareStatus("expired");
+        } else if (statusCode === 403) {
+          setShareStatus("revoked");
+        }
+      }
     }, 4000);
 
-    return () => clearInterval(interval);
-  }, [loadData]);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [username, shareToken]);
 
   if (loading) {
     return (

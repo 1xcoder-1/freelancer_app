@@ -1,10 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Users, Kanban, Clock, FileText, Command, Smartphone, Sparkles, FolderLock, ArrowUpRight } from "lucide-react";
+import { Users, Kanban, Clock, FileText, Command, Sparkles, ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BentoGrid, BentoGridItem } from "@/components/ui/aceternity/bento-grid";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import Link from "next/link";
 
 export function FeatureGrid() {
@@ -88,7 +87,7 @@ export function FeatureGrid() {
       badgeVariant: "indigo" as const,
       header: (
         <div className="flex flex-1 w-full h-full min-h-[6rem] rounded-xl bg-gradient-to-br from-purple-500/10 via-indigo-950/40 to-slate-950 border border-indigo-500/30 p-3 flex flex-col justify-center gap-1.5">
-          <div className="text-xs text-indigo-300 font-medium">✨ "Summarize Q3 Acme deliverables"</div>
+          <div className="text-xs text-indigo-300 font-medium">✨ &quot;Summarize Q3 Acme deliverables&quot;</div>
           <div className="text-[10px] text-slate-400 bg-slate-900/90 rounded p-1.5 border border-slate-800">
             Generated 3 milestones with 12 subtasks...
           </div>

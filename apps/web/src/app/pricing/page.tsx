@@ -7,19 +7,14 @@ import { Footer } from "@/components/landing/Footer";
 import {
   Check,
   Sparkles,
-  Zap,
   ArrowRight,
-  ShieldCheck,
   HelpCircle,
-  Clock,
-  Layers,
-  Users,
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/aceternity/spotlight";
 import { BackgroundGradient } from "@/components/ui/aceternity/background-gradient";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 
 export default function PricingPage() {
   const plans = [

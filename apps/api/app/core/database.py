@@ -3,9 +3,26 @@ from app.core.config import settings
 from app.models.base import Base
 import app.models  # noqa: F401 - Register all models in Base.metadata
 
+import re
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
 db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Ensure query parameters are compatible with asyncpg driver
+if "postgresql+asyncpg://" in db_url and "?" in db_url:
+    parsed = urlparse(db_url)
+    query_params = parse_qs(parsed.query)
+    # Remove unsupported channel_binding parameter for asyncpg
+    query_params.pop("channel_binding", None)
+    # Ensure ssl=require is used
+    if "sslmode" in query_params:
+        ssl_val = query_params.pop("sslmode")
+        if "ssl" not in query_params:
+            query_params["ssl"] = ssl_val
+    new_query = urlencode(query_params, doseq=True)
+    db_url = urlunparse(parsed._replace(query=new_query))
 
 # SQLAlchemy 2 Async Engine
 engine = create_async_engine(

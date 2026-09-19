@@ -7,8 +7,21 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: 15000,
 });
+
+// Response interceptor for unified error formatting and resilience
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const customMessage =
+      error?.response?.data?.detail ||
+      error?.response?.data?.message ||
+      error?.message ||
+      'An unexpected network error occurred. Please try again.';
+    return Promise.reject(new Error(customMessage));
+  }
+);
 
 // Helper to attach authorization header
 const authHeaders = (token?: string) => (token ? { headers: { Authorization: `Bearer ${token}` } } : {});
@@ -559,7 +572,7 @@ export interface IntakeSubmission {
   form_id: string;
   client_name?: string;
   client_email?: string;
-  answers: Record<string, any>;
+  answers: Record<string, unknown>;
   created_at: string;
 }
 
@@ -584,7 +597,7 @@ export const getPublicIntakeForm = async (token: string): Promise<PublicIntakeFo
 
 export const submitPublicIntakeForm = async (
   token: string,
-  payload: { client_name?: string; client_email?: string; answers: Record<string, any> }
+  payload: { client_name?: string; client_email?: string; answers: Record<string, unknown> }
 ): Promise<IntakeSubmission> => {
   const response = await apiClient.post<IntakeSubmission>(`/intake/public/${token}/submit`, payload);
   return response.data;
@@ -594,6 +607,8 @@ export const getFormSubmissions = async (formId: string, token?: string): Promis
   const response = await apiClient.get<IntakeSubmission[]>(`/intake/${formId}/submissions`, authHeaders(token));
   return response.data;
 };
+
+export const getIntakeSubmissions = getFormSubmissions;
 
 // ------------------------------------------------------------------------------
 // Booking & Consultation Calendar
@@ -668,7 +683,6 @@ export const schedulePublicAppointment = async (
   return response.data;
 };
 
-export const getIntakeSubmissions = getFormSubmissions;
 export const schedulePublicBooking = schedulePublicAppointment;
 
 // ------------------------------------------------------------------------------

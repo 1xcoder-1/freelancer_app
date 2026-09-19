@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useUser, UserButton } from "@clerk/nextjs";
-import { motion, AnimatePresence } from "framer-motion";
+import { useUser } from "@clerk/nextjs";
+import { motion } from "framer-motion";
 import {
   Home,
   Receipt,
@@ -15,15 +15,10 @@ import {
   ClipboardList,
   Calendar,
   Calculator,
-  Briefcase,
   IdCard,
   Settings,
   ChevronLeft,
   ChevronRight,
-  Flame,
-  Award,
-  CreditCard,
-  FileCheck2
 } from "lucide-react";
 
 interface NavItem {

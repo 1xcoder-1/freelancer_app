@@ -12,8 +12,6 @@ import {
   PenTool,
   Lock,
   Building2,
-  Calendar,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,8 +53,9 @@ export default function SignContractPage({ params }: PageProps) {
         if (data.recipient_name) setSignerName(data.recipient_name);
         if (data.recipient_email) setSignerEmail(data.recipient_email);
         if (data.status === "signed") setSignedSuccess(true);
-      } catch (err: any) {
-        setError(err?.response?.data?.detail || "Invalid or expired contract link.");
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { detail?: string } } };
+        setError(axiosErr?.response?.data?.detail || "Invalid or expired contract link.");
       } finally {
         setLoading(false);
       }
@@ -153,8 +152,9 @@ export default function SignContractPage({ params }: PageProps) {
       });
       setContract(updated);
       setSignedSuccess(true);
-    } catch (err: any) {
-      alert(err?.response?.data?.detail || "Failed to submit signature.");
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      alert(axiosErr?.response?.data?.detail || "Failed to submit signature.");
     } finally {
       setSubmitting(false);
     }

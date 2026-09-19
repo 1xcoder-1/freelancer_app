@@ -11,6 +11,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.12.9",
     "@hookform/resolvers": "^3.10.0",
+    "@sentry/nextjs": "^10.75.0",
     "@tanstack/react-query": "^5.67.2",
     "@tiptap/pm": "^2.11.5",
     "@tiptap/react": "^2.11.5",
@@ -43,7 +44,8 @@
   "packageManager": "pnpm@11.22.0",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@clerk/shared"
+      "@clerk/shared",
+      "@sentry/cli"
     ]
   }
 }

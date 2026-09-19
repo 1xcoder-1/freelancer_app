@@ -1,14 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, X, Send, CheckCircle2, Sparkles } from "lucide-react";
 
 export function FloatingContact() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+
+  // Only display Floating Support trigger on the public landing page (/)
+  if (pathname !== "/") {
+    return null;
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -35,7 +35,16 @@ class Settings(BaseSettings):
     BREVO_SENDER_EMAIL: str = "noreply@freelancebook.com"
     BREVO_SENDER_NAME: str = "Freelance Book"
     
-    # Object & File Storage (Cloudflare R2)
+    # Storage Provider Selection ('cloudinary' or 'r2')
+    STORAGE_PROVIDER: str = "cloudinary"
+    
+    # Object & Media Storage (Cloudinary)
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_URL: Optional[str] = None
+
+    # Object & File Storage (Cloudflare R2 - Alternative)
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""

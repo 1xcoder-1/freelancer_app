@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowUp } from "lucide-react";
 
 export function BackToTop() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -26,6 +28,10 @@ export function BackToTop() {
       behavior: "smooth",
     });
   };
+
+  if (pathname !== "/") {
+    return null;
+  }
 
   return (
     <AnimatePresence>

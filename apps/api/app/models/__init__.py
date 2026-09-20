@@ -7,6 +7,7 @@ from app.models.contract import Contract
 from app.models.proposal import Proposal
 from app.models.intake import IntakeForm, IntakeSubmission
 from app.models.booking import BookingConsultation, BookingAppointment
+from app.models.report_card import ReportCard
 
 __all__ = [
     "Base",
@@ -30,5 +31,6 @@ __all__ = [
     "IntakeSubmission",
     "BookingConsultation",
     "BookingAppointment",
+    "ReportCard",
 ]
 

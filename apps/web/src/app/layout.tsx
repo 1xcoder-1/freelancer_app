@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter, Schibsted_Grotesk } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { ScrollProgress } from "@/components/ui/ScrollProgress";
-import { BackToTop } from "@/components/ui/BackToTop";
-import { CookieBanner } from "@/components/ui/CookieBanner";
-import { FloatingContact } from "@/components/ui/FloatingContact";
+import { ScrollProgress } from "@/components/common/ScrollProgress";
+import { BackToTop } from "@/components/common/BackToTop";
+import { CookieBanner } from "@/components/common/CookieBanner";
+import { FloatingContact } from "@/components/common/FloatingContact";
 import { UtmTracker } from "@/components/providers/UtmTracker";
 import { SentryProvider } from "@/components/providers/SentryProvider";
 import "./globals.css";
@@ -16,6 +16,17 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+/* Report card font choices (settings popover: Schibsted / Inter / Geist) */
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+});
+
+const schibsted = Schibsted_Grotesk({
+  variable: "--font-schibsted",
   subsets: ["latin"],
 });
 
@@ -33,7 +44,7 @@ export const metadata: Metadata = {
     "freelance project management",
     "time tracking software",
     "free invoice generator",
-    "Cloudflare D1",
+    "Neon PostgreSQL",
     "FastAPI",
   ],
   authors: [{ name: "Freelance Book Team" }],
@@ -89,23 +100,30 @@ export default function RootLayout({
     <ClerkProvider>
       <html
         lang="en"
-        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+        data-scroll-behavior="smooth"
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${schibsted.variable} h-full antialiased`}
       >
         <head>
+          {/* Apply saved theme before first paint (no flash). Default: dark. */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `try{var t=localStorage.getItem('fb-theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}`,
+            }}
+          />
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
           />
         </head>
-        <body className="min-h-full flex flex-col bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-slate-950 font-sans">
+        <body className="min-h-full flex flex-col bg-bg text-fg selection:bg-accent selection:text-accent-fg font-sans">
           <SentryProvider>
-            {/* Skip to Content Accessibility Link (Checklist Item) */}
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 z-[200] px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-2xl focus:outline-none"
-            >
-              Skip to main content
-            </a>
+          {/* Skip to Content Accessibility Link (Checklist Item) */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 z-[200] px-4 py-2 rounded-xl bg-accent text-accent-fg font-bold text-xs shadow-2xl focus:outline-none"
+          >
+            Skip to main content
+          </a>
 
             {/* UTM Tracking Capture */}
             <UtmTracker />

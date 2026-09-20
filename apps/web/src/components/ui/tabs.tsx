@@ -53,7 +53,7 @@ function TabsList({
   return (
     <div
       className={cn(
-        "inline-flex items-center justify-center rounded-2xl bg-slate-900/90 border border-slate-800 p-1.5 text-slate-400 backdrop-blur-xl",
+        "inline-flex items-center justify-center rounded-xl bg-card border border-line p-1.5 text-muted backdrop-blur-xl",
         className
       )}
       {...props}
@@ -83,10 +83,10 @@ function TabsTrigger({
       aria-selected={isSelected}
       onClick={() => context.onValueChange(value)}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
         isSelected
-          ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold"
-          : "hover:text-white hover:bg-slate-800/60 text-slate-400",
+          ? "bg-accent text-accent-fg shadow-sm font-bold"
+          : "hover:text-fg hover:bg-surface text-muted",
         className
       )}
       {...props}

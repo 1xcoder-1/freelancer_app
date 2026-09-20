@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional
 from app.core.database import get_db
@@ -10,6 +10,7 @@ from app.models.project import Project, Task, Milestone
 from app.models.contract import Contract
 from app.models.client import Client
 from app.models.workspace import Workspace
+from app.models.finance import TimeEntry
 from app.schemas.domain import (
     ProjectCreate,
     ProjectOut,
@@ -31,9 +32,21 @@ def calculate_progress(milestones: list, tasks: list, project_status: str) -> in
     if tasks and len(tasks) > 0:
         done = sum(1 for t in tasks if t.status == "done")
         return int((done / len(tasks)) * 100)
-    if project_status == "in_progress":
-        return 50
-    return 10
+    # No milestones/tasks logged yet — real progress is 0%, never a fake floor
+    return 0
+
+
+async def _tracked_hours_map(db: AsyncSession, project_ids: list) -> dict:
+    """Real tracked hours per project from TimeEntry records (0.0 = none logged)."""
+    if not project_ids:
+        return {}
+    stmt = (
+        select(TimeEntry.project_id, func.coalesce(func.sum(TimeEntry.duration_seconds), 0))
+        .where(TimeEntry.project_id.in_(project_ids))
+        .group_by(TimeEntry.project_id)
+    )
+    res = await db.execute(stmt)
+    return {pid: round((secs or 0) / 3600.0, 1) for pid, secs in res.all()}
 
 # ------------------------------------------------------------------------------
 # Authenticated Workspace Projects & Milestones
@@ -62,6 +75,8 @@ async def list_projects(
         c_res = await db.execute(c_stmt)
         clients_map = {c.id: c.name for c in c_res.scalars().all()}
 
+    # Real tracked hours per project (from logged time entries)
+    hours_map = await _tracked_hours_map(db, [p.id for p in projects])
     out = []
     for p in projects:
         pct = calculate_progress(p.milestones, p.tasks, p.status)
@@ -77,7 +92,7 @@ async def list_projects(
             "hourly_rate": p.hourly_rate,
             "share_token": p.share_token,
             "progress_pct": pct,
-            "tracked_hours": 0.0,
+            "tracked_hours": hours_map.get(p.id, 0.0),
             "tasks": p.tasks,
             "milestones": p.milestones,
             "created_at": p.created_at
@@ -106,7 +121,7 @@ async def create_project(
     await db.refresh(project)
 
     # Auto-seed standard 3-phase milestones if none provided
-    m1 = Milestone(project_id=project.id, title="Phase 1: Discovery & Architecture", amount=project.budget * 0.3, is_completed=True, deliverable_note="Wireframes & Tech Architecture Approved")
+    m1 = Milestone(project_id=project.id, title="Phase 1: Discovery & Architecture", amount=project.budget * 0.3, is_completed=False, deliverable_note="Wireframes & Tech Architecture Approved")
     m2 = Milestone(project_id=project.id, title="Phase 2: Core Feature Implementation", amount=project.budget * 0.4, is_completed=False, deliverable_note="MVP Features & Staging Deployment")
     m3 = Milestone(project_id=project.id, title="Phase 3: QA, Final Delivery & Launch", amount=project.budget * 0.3, is_completed=False, deliverable_note="Production Deploy & Source Handover")
     db.add_all([m1, m2, m3])
@@ -116,6 +131,8 @@ async def create_project(
     stmt = select(Project).options(selectinload(Project.tasks), selectinload(Project.milestones)).where(Project.id == project.id)
     r = await db.execute(stmt)
     full_p = r.scalar_one()
+
+    hours_map = await _tracked_hours_map(db, [full_p.id])
 
     client_name = None
     if full_p.client_id:
@@ -136,7 +153,7 @@ async def create_project(
         "hourly_rate": full_p.hourly_rate,
         "share_token": full_p.share_token,
         "progress_pct": calculate_progress(full_p.milestones, full_p.tasks, full_p.status),
-        "tracked_hours": 0.0,
+        "tracked_hours": hours_map.get(full_p.id, 0.0),
         "tasks": full_p.tasks,
         "milestones": full_p.milestones,
         "created_at": full_p.created_at
@@ -269,7 +286,7 @@ async def get_public_project_portal(
         "budget": project.budget,
         "share_token": project.share_token,
         "progress_pct": progress_pct,
-        "freelancer_name": workspace.name if workspace else "Freelancer",
+        "freelancer_name": workspace.name if workspace else "",
         "client_name": client_name,
         "milestones": project.milestones,
         "completed_milestones_count": completed_milestones,
@@ -354,7 +371,7 @@ async def approve_public_milestone(
         "budget": updated_p.budget,
         "share_token": updated_p.share_token,
         "progress_pct": progress_pct,
-        "freelancer_name": workspace.name if workspace else "Freelancer",
+        "freelancer_name": workspace.name if workspace else "",
         "client_name": client_name,
         "milestones": updated_p.milestones,
         "completed_milestones_count": completed_milestones,

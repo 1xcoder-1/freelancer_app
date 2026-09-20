@@ -26,7 +26,6 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   betaTag?: string;
-  isSpecial?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -39,8 +38,8 @@ const navItems: NavItem[] = [
   { title: "Client Intake", href: "/dashboard/intake", icon: ClipboardList, betaTag: "BETA" },
   { title: "Booking Calendar", href: "/dashboard/booking", icon: Calendar },
   { title: "Expenses & Taxes", href: "/dashboard/taxes", icon: Calculator },
-  { title: "Report Card", href: "/dashboard/report-card", icon: IdCard, isSpecial: true },
-  { title: "Settings & Workspace", href: "/dashboard/settings", icon: Settings },
+  { title: "Report Card", href: "/dashboard/report-card", icon: IdCard },
+  { title: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export function DashboardSidebar() {
@@ -60,75 +59,60 @@ export function DashboardSidebar() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const userName = user?.firstName || user?.fullName || "Abdullah";
+  const userName = user?.firstName || user?.fullName || "Freelancer";
 
   return (
     <motion.aside
-      animate={{ width: isCollapsed ? 76 : 256 }}
+      animate={{ width: isCollapsed ? 72 : 248 }}
       transition={{ duration: 0.22, ease: "easeInOut" }}
-      className="relative flex flex-col h-screen border-r border-white/10 bg-[#0d1117]/95 backdrop-blur-2xl select-none z-40 shrink-0"
+      className="relative flex flex-col h-screen border-r border-dashed border-line bg-card select-none z-40 shrink-0"
     >
-      {/* Brand Header */}
-      <div className="flex items-center justify-between h-16 px-5 border-b border-white/5">
-        <Link href="/dashboard" className="flex items-center gap-3 overflow-hidden">
-          {/* Guru / MasterJi styled Brand Icon */}
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-500/20 shrink-0">
-            <span className="text-base">⚡</span>
-          </div>
+      {/* Brand Header — bold wordmark like the reference */}
+      <div className="flex items-center h-16 px-5 border-b border-dashed border-line">
+        <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
+          <span className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-accent-fg text-[11px] font-black font-mono shrink-0">
+            fb
+          </span>
 
           {!isCollapsed && (
-            <motion.div
+            <motion.span
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex items-baseline gap-1"
+              className="font-display font-bold text-[15px] tracking-tight text-fg whitespace-nowrap"
             >
-              <span className="font-extrabold text-base tracking-tight text-white">
-                Freelancer
-              </span>
-              <span className="font-extrabold text-base tracking-tight text-amber-500">
-                Book
-              </span>
-            </motion.div>
+              Freelance<span className="text-accent">Book</span>
+            </motion.span>
           )}
         </Link>
       </div>
 
       {/* Main Navigation List */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname.startsWith(item.href));
           const Icon = item.icon;
-          const isSpecialProfile = item.isSpecial;
 
           return (
             <Link key={item.title} href={item.href}>
               <div
-                className={`relative flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-[13px] font-medium transition-all ${
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-full text-sm transition-colors ${
                   isActive
-                    ? isSpecialProfile
-                      ? "bg-amber-500/20 text-amber-400 font-semibold border border-amber-500/30 shadow-sm"
-                      : "bg-white/[0.08] text-white font-semibold border border-white/10 shadow-sm"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                    ? "bg-accent-soft text-accent font-semibold dark:bg-accent dark:text-accent-fg"
+                    : "text-muted font-medium hover:bg-surface hover:text-fg"
                 } ${isCollapsed ? "justify-center px-0" : ""}`}
                 title={isCollapsed ? item.title : undefined}
               >
-                <Icon
-                  className={`w-4 h-4 shrink-0 transition-colors ${
-                    isActive
-                      ? isSpecialProfile
-                        ? "text-amber-400"
-                        : "text-white"
-                      : "text-slate-400 group-hover:text-slate-200"
-                  }`}
-                />
+                <Icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? "text-current" : ""}`} />
 
                 {!isCollapsed && (
                   <div className="flex items-center justify-between flex-1 overflow-hidden">
                     <span className="truncate">{item.title}</span>
                     {item.betaTag && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400/90 font-mono tracking-wide ml-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      <span className="inline-flex items-center gap-1.5 text-[9px] font-bold text-muted font-mono tracking-wide ml-2 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                         {item.betaTag}
                       </span>
                     )}
@@ -140,37 +124,28 @@ export function DashboardSidebar() {
         })}
       </div>
 
-      {/* Bottom User Pill Matching Provided MasterJi Design */}
-      <div className="p-3 border-t border-white/5 bg-slate-950/40">
+      {/* Bottom dashed user pill + collapse control (reference style) */}
+      <div className="p-3 border-t border-dashed border-line">
         {!isCollapsed ? (
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <Link
               href="/dashboard/settings"
-              className="flex-1 flex items-center gap-2.5 p-1.5 pr-3 rounded-full border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] transition-all group overflow-hidden"
+              className="flex-1 flex items-center gap-2.5 p-1.5 pr-3 rounded-full border border-dashed border-line-strong hover:border-accent/50 transition-colors group overflow-hidden"
               title="View Profile Settings"
             >
-              <div className="w-7 h-7 rounded-full overflow-hidden border border-white/10 bg-slate-800 shrink-0 flex items-center justify-center text-xs">
+              <span className="w-7 h-7 rounded-full overflow-hidden border border-line bg-surface shrink-0 flex items-center justify-center text-xs">
                 {user?.imageUrl ? (
-                  <img
-                    src={user.imageUrl}
-                    alt={userName}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={user.imageUrl} alt={userName} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="font-bold text-slate-300">
-                    {userName.charAt(0).toUpperCase()}
-                  </span>
+                  <span className="font-bold text-muted">{userName.charAt(0).toUpperCase()}</span>
                 )}
-              </div>
-              <span className="text-xs font-medium text-slate-300 group-hover:text-white truncate">
-                {userName}
               </span>
+              <span className="text-xs font-semibold text-fg truncate">{userName}</span>
             </Link>
 
-            {/* Collapse Trigger on right */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="ml-2 p-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0"
+              className="p-1.5 rounded-full border border-line text-muted hover:text-fg hover:border-line-strong transition-colors shrink-0"
               title="Collapse Sidebar"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -180,25 +155,19 @@ export function DashboardSidebar() {
           <div className="flex flex-col items-center gap-2">
             <Link
               href="/dashboard/settings"
-              className="w-8 h-8 rounded-full border border-dashed border-white/20 flex items-center justify-center hover:scale-105 transition-transform overflow-hidden"
+              className="w-8 h-8 rounded-full border border-dashed border-line-strong flex items-center justify-center hover:border-accent/50 transition-colors overflow-hidden"
               title={userName}
             >
               {user?.imageUrl ? (
-                <img
-                  src={user.imageUrl}
-                  alt={userName}
-                  className="w-full h-full object-cover"
-                />
+                <img src={user.imageUrl} alt={userName} className="w-full h-full object-cover" />
               ) : (
-                <span className="text-xs font-bold text-slate-300">
-                  {userName.charAt(0).toUpperCase()}
-                </span>
+                <span className="text-xs font-bold text-muted">{userName.charAt(0).toUpperCase()}</span>
               )}
             </Link>
 
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1 rounded-full border border-line text-muted hover:text-fg hover:border-line-strong transition-colors"
               title="Expand Sidebar"
             >
               <ChevronRight className="w-3.5 h-3.5" />

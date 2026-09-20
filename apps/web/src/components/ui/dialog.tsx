@@ -49,13 +49,13 @@ export function DialogContent({
       {/* Modal Dialog Body */}
       <div
         className={cn(
-          "relative z-50 w-full rounded-2xl bg-slate-900 border border-white/10 p-6 shadow-2xl animate-in zoom-in-95 duration-200",
+          "relative z-50 w-full rounded-xl bg-card border border-line p-6 shadow-2xl animate-in zoom-in-95 duration-200",
           className
         )}
       >
         <button
           onClick={() => context.onOpenChange(false)}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:text-fg hover:bg-surface transition-colors"
         >
           <X className="w-4 h-4" />
           <span className="sr-only">Close</span>
@@ -84,7 +84,7 @@ export function DialogTitle({
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h2
-      className={cn("text-lg font-semibold leading-none tracking-tight text-white", className)}
+      className={cn("text-lg font-semibold leading-none tracking-tight text-fg", className)}
       {...props}
     />
   );
@@ -96,7 +96,7 @@ export function DialogDescription({
 }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
     <p
-      className={cn("text-xs text-slate-400", className)}
+      className={cn("text-xs text-muted", className)}
       {...props}
     />
   );

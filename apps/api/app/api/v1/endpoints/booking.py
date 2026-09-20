@@ -181,7 +181,7 @@ async def get_public_consultation(
         "description": consultation.description,
         "duration_minutes": consultation.duration_minutes,
         "price": consultation.price,
-        "freelancer_name": workspace.name if workspace else "Freelancer",
+        "freelancer_name": workspace.name if workspace else "",
         "token": consultation.token,
         "created_at": consultation.created_at
     }

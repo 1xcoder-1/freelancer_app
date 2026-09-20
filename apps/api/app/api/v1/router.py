@@ -13,7 +13,7 @@ from app.api.v1.endpoints import (
     proposals,
     intake,
     booking,
-    portfolio
+    report_card
 )
 
 api_router = APIRouter()
@@ -30,7 +30,7 @@ api_router.include_router(expenses.router)
 api_router.include_router(proposals.router)
 api_router.include_router(intake.router)
 api_router.include_router(booking.router)
-api_router.include_router(portfolio.router, prefix="/portfolio", tags=["Portfolio"])
+api_router.include_router(report_card.router, prefix="/report-card", tags=["Report Card"])
 
 
 

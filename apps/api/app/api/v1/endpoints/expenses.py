@@ -28,7 +28,7 @@ async def list_expenses(
             "category": exp.category,
             "amount": exp.amount,
             "description": exp.description,
-            "receipt_cloudinary_url": exp.receipt_r2_url,
+            "receipt_cloudinary_url": exp.receipt_cloudinary_url,
             "created_at": exp.created_at
         }
         for exp in expenses
@@ -55,7 +55,7 @@ async def create_expense(
         category=payload.category,
         amount=payload.amount,
         description=payload.description,
-        receipt_r2_url=payload.receipt_cloudinary_url
+        receipt_cloudinary_url=payload.receipt_cloudinary_url
     )
     db.add(expense)
     await db.commit()
@@ -67,7 +67,7 @@ async def create_expense(
         "category": expense.category,
         "amount": expense.amount,
         "description": expense.description,
-        "receipt_cloudinary_url": expense.receipt_r2_url,
+        "receipt_cloudinary_url": expense.receipt_cloudinary_url,
         "created_at": expense.created_at
     }
 

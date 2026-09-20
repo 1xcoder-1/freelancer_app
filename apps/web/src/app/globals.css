@@ -1,13 +1,71 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (real-time toggle via .dark on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------
+   Design tokens — marketing-grade orange accent on clean neutral-warm
+   surfaces: near-white paper (light) / near-black charcoal (dark).
+   Flip instantly with the .dark class on <html>.
+------------------------------------------------------------------- */
 :root {
-  --background: #090d16;
-  --foreground: #f8fafc;
+  --bg: #fafaf9;
+  --fg: #171512;
+  --muted: #6b6560;
+  --faint: #9a938c;
+  --card: #ffffff;
+  --surface: #f4f3f1;
+  --line: #ebe9e6;
+  --line-strong: #dcd8d3;
+  --accent: #ea6311;
+  --accent-hi: #c9520b;
+  --accent-soft: #fdeee1;
+  --accent-fg: #ffffff;
+  --ok: #15803d;
+  --warn: #a16207;
+  --danger: #cc3b31;
+  --info: #3563a8;
+  --violet: #7c53c3;
+}
+
+.dark {
+  --bg: #0e0e0f;
+  --fg: #f0efed;
+  --muted: #a19d98;
+  --faint: #6f6b66;
+  --card: #161617;
+  --surface: #1d1d1f;
+  --line: #28282a;
+  --line-strong: #38383b;
+  --accent: #f97b2c;
+  --accent-hi: #fb9148;
+  --accent-soft: #2b1a10;
+  --accent-fg: #1a120a;
+  --ok: #3fbf6f;
+  --warn: #e3a83a;
+  --danger: #ef6f5f;
+  --info: #6ea8dc;
+  --violet: #b18ce0;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hi: var(--accent-hi);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-violet: var(--violet);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -18,15 +76,16 @@ html {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--fg);
   overflow-x: hidden;
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Accessibility visible focus rings */
 :focus-visible {
-  outline: 2px solid #10b981;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -37,16 +96,57 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: var(--bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--line-strong);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: var(--faint);
+}
+
+/* Display headline used across landing + section headers (clean grotesque, like refs) */
+.font-display {
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* Terminal-style section eyebrow: // FEATURES */
+.eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Underline-style form field (reference profile pages) */
+.input-line {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  padding: 0.55rem 0.125rem;
+  color: var(--fg);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.input-line::placeholder {
+  color: var(--faint);
+}
+.input-line:focus {
+  border-bottom-color: var(--accent);
+}
+
+/* Dashed vertical divider between sidebar and content (reference) */
+.divider-dashed {
+  border-right: 1px dashed var(--line);
 }
 
 /* Shimmer Animation for Skeleton Components */
@@ -87,10 +187,9 @@ body {
   .no-print {
     display: none !important;
   }
-  
+
   body {
     background: #ffffff !important;
     color: #000000 !important;
   }
 }
-

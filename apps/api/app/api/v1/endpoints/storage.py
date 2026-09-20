@@ -49,7 +49,7 @@ async def get_upload_signature(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ) -> Dict[str, Any]:
     """
-    [SECURE] Generates a signed upload token for Cloudinary or presigned PUT URL for R2.
+    [SECURE] Generates a signed upload token for Cloudinary direct upload.
     - Requires authenticated Clerk user token.
     - Enforces user workspace folder sandboxing to prevent cross-user file overwrites.
     - Validates MIME content types against security whitelists.

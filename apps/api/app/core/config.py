@@ -1,5 +1,10 @@
+from pathlib import Path
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Anchor .env to apps/api/ so settings load identically whether uvicorn is
+# started from the repo root (pnpm dev:api) or from apps/api manually
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 class Settings(BaseSettings):
     # App Settings
@@ -7,6 +12,10 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
     PORT: int = 8000
+
+    # Print every SQL statement in the terminal (set SQL_ECHO=true in .env
+    # only when debugging database queries — keeps normal logs clean)
+    SQL_ECHO: bool = False
     
     # CORS Origins
     CORS_ORIGINS: List[str] = [
@@ -16,59 +25,30 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000"
     ]
     
-    # Primary Database (Cloudflare D1 - Serverless SQL Database)
+    # Primary Database (Neon PostgreSQL via asyncpg; SQLite fallback in dev)
     DATABASE_URL: str = "sqlite+aiosqlite:///./freelance_book.db"
-    CLOUDFLARE_ACCOUNT_ID: str = ""
-    CLOUDFLARE_D1_DATABASE_ID: str = ""
-    CLOUDFLARE_API_TOKEN: str = ""
     
     # Clerk Authentication
     CLERK_SECRET_KEY: str = ""
     CLERK_PUBLISHABLE_KEY: str = ""
     CLERK_ISSUER: Optional[str] = None
+
+    # Explicit opt-in for mock/dev auth bypass. Only takes effect when
+    # APP_ENV is a development value; rejected at startup otherwise.
+    ALLOW_DEV_AUTH: bool = False
     
-    # Cache & Temporary Workloads (Upstash Redis)
-    REDIS_URL: str = ""
-    
-    # Transactional Email (Brevo)
-    BREVO_API_KEY: str = ""
-    BREVO_SENDER_EMAIL: str = "noreply@freelancebook.com"
-    BREVO_SENDER_NAME: str = "Freelance Book"
-    
-    # Storage Provider Selection ('cloudinary' or 'r2')
-    STORAGE_PROVIDER: str = "cloudinary"
-    
-    # Object & Media Storage (Cloudinary)
+    # Object & Media Storage (Cloudinary - primary media/receipt/invoice store)
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
     CLOUDINARY_URL: Optional[str] = None
-
-    # Object & File Storage (Cloudflare R2 - Alternative)
-    R2_ACCOUNT_ID: str = ""
-    R2_ACCESS_KEY_ID: str = ""
-    R2_SECRET_ACCESS_KEY: str = ""
-    R2_BUCKET_NAME: str = "freelance-book-assets"
-    R2_ENDPOINT: str = ""
-    
-    # Background Workflows (Inngest)
-    INNGEST_EVENT_KEY: str = ""
-    INNGEST_SIGNING_KEY: str = ""
-    
-    # AI Engines
-    GEMINI_API_KEY: str = ""
-    OPENAI_API_KEY: str = ""
     
     # Error Monitoring
     SENTRY_DSN: str = ""
     
-    # Optional Supabase (If selected for specific realtime needs)
-    SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
-    SUPABASE_SERVICE_ROLE_KEY: str = ""
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore"
     )

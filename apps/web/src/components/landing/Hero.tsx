@@ -1,258 +1,168 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { Play, ArrowRight, Clock } from "lucide-react";
-import { Spotlight } from "@/components/ui/aceternity/spotlight";
-import { SparklesCore } from "@/components/ui/aceternity/sparkles";
+import { motion } from "framer-motion";
+import { ArrowRight, BookOpen, CheckCircle2, Flame, Receipt, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 export function Hero() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "kanban" | "invoices">("dashboard");
-
   return (
-    <section className="relative pt-16 pb-24 overflow-hidden">
-      {/* Aceternity Spotlight Lighting */}
-      <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="rgba(16, 185, 129, 0.25)" />
-      <Spotlight className="top-10 right-0 md:right-40" fill="rgba(99, 102, 241, 0.2)" />
-
-      {/* Sparkles Particle Layer */}
-      <div className="absolute inset-0 w-full h-[550px] -z-10 pointer-events-none">
-        <SparklesCore
-          id="heroSparkles"
-          background="transparent"
-          minSize={0.6}
-          maxSize={1.8}
-          particleDensity={40}
-          particleColor="#10b981"
-          speed={0.8}
-        />
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-        {/* Top Announcement Pill (shadcn Badge + micro-glow) */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="inline-flex items-center gap-2 mb-8"
-        >
-          <Badge variant="emerald" className="px-4 py-1.5 text-xs font-semibold rounded-full shadow-lg shadow-emerald-500/10 flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Freelance Book 1.0 OS</span>
-            <span className="text-slate-500">•</span>
-            <span className="text-emerald-300 font-bold flex items-center gap-1">
-              Next.js + FastAPI + D1 <ArrowRight className="w-3 h-3 inline" />
+    <section className="relative pt-20 pb-24 overflow-hidden">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 grid lg:grid-cols-2 gap-14 items-center relative z-10">
+        {/* Left: copy */}
+        <div>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="inline-flex items-center gap-2 mb-7 rounded-full border border-line bg-card px-3.5 py-1.5 text-xs text-muted"
+          >
+            <span className="w-5 h-5 rounded-md bg-accent flex items-center justify-center">
+              <BookOpen className="w-3 h-3 text-accent-fg" />
             </span>
-          </Badge>
-        </motion.div>
+            <span className="font-mono">Your whole freelance biz</span>
+            <span className="font-semibold text-fg">one book</span>
+          </motion.div>
 
-        {/* Hero Headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
-          className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white tracking-tight leading-[1.08] max-w-5xl mx-auto mb-6"
-        >
-          The Complete Operating System for{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400">
-            Independent Freelancers
-          </span>
-        </motion.h1>
+          <motion.h1
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.05, ease: "easeOut" }}
+            className="font-display text-[2.6rem] sm:text-6xl font-bold text-fg leading-[1.05] tracking-tight mb-6"
+          >
+            Freelancing feels lighter when it{" "}
+            <span className="italic font-medium text-accent">lives here.</span>
+          </motion.h1>
 
-        {/* Subtitle */}
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.15, ease: "easeOut" }}
+            className="text-[15px] sm:text-base text-muted max-w-md leading-relaxed mb-9"
+          >
+            Freelance Book is the operating system where clients, projects, time,
+            invoices and proposals finally meet. Less tab-shuffling — more shipping
+            and getting paid.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.25, ease: "easeOut" }}
+            className="flex flex-col sm:flex-row items-center gap-3"
+          >
+            <Link href="/sign-up" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto rounded-lg font-bold px-7">
+                Start Free
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
+            <Link href="/dashboard" className="w-full sm:w-auto">
+              <Button variant="outline" size="lg" className="w-full sm:w-auto rounded-lg font-semibold px-7">
+                View Live Demo
+              </Button>
+            </Link>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="mt-10 font-mono text-[11px] tracking-wider text-faint uppercase"
+          >
+            No credit card&nbsp;&nbsp;·&nbsp;&nbsp;Free core plan&nbsp;&nbsp;·&nbsp;&nbsp;Set up in 90 seconds
+          </motion.div>
+        </div>
+
+        {/* Right: mock app window + floating chips (reference style) */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}
-          className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed font-normal"
+          className="relative"
         >
-          Unify project management, client CRM, precision time tracking, automated invoices, smart contracts, and AI workflow assistance into one unified desktop & cloud experience.
-        </motion.p>
-
-        {/* Action Buttons using shadcn/ui */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
-        >
-          <Link href="/sign-up">
-            <Button size="lg" className="w-full sm:w-auto px-8 py-6 text-base font-bold rounded-2xl shadow-xl shadow-emerald-500/25 group">
-              <span>Start Free Operating System</span>
-              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </Link>
-
-          <a href="#features">
-            <Button variant="outline" size="lg" className="w-full sm:w-auto px-8 py-6 text-base rounded-2xl border-slate-700 bg-slate-900/80 hover:bg-slate-800 backdrop-blur-md">
-              <Play className="w-4 h-4 mr-2 text-emerald-400 fill-emerald-400" />
-              <span>Explore OS Modules</span>
-            </Button>
-          </a>
-        </motion.div>
-
-        {/* Live Interactive OS Preview Shell with Aceternity backdrop styling */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 30 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
-          className="relative max-w-5xl mx-auto rounded-3xl border border-slate-800/80 bg-slate-900/80 backdrop-blur-2xl shadow-2xl p-4 sm:p-6 text-left"
-        >
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-rose-500/80" />
-              <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-              <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-              <span className="text-xs font-mono text-slate-400 ml-2">freelance-book-os.app</span>
+          <div className="rounded-xl border border-line bg-card shadow-2xl overflow-hidden">
+            {/* Window chrome */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-line bg-surface/60">
+              <span className="w-2.5 h-2.5 rounded-full bg-danger/70" />
+              <span className="w-2.5 h-2.5 rounded-full bg-warn/70" />
+              <span className="w-2.5 h-2.5 rounded-full bg-ok/70" />
+              <span className="ml-3 font-mono text-[10px] text-faint tracking-wider">freelancebook.app/dashboard</span>
             </div>
 
-            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
-              {(["dashboard", "kanban", "invoices"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 rounded-lg transition-all capitalize relative ${
-                    activeTab === tab ? "text-white font-semibold" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {activeTab === tab && (
-                    <motion.div
-                      layoutId="activeTabGlow"
-                      className="absolute inset-0 bg-slate-800 rounded-lg -z-10 shadow-sm"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  {tab === "kanban" ? "Projects & Kanban" : tab === "invoices" ? "Invoices & Profit" : "Dashboard"}
-                </button>
-              ))}
+            <div className="grid grid-cols-[120px_1fr] sm:grid-cols-[150px_1fr]">
+              {/* Mini sidebar */}
+              <div className="border-r border-dashed border-line p-3 space-y-1.5 hidden sm:block">
+                <div className="flex items-center gap-2 rounded-full bg-accent px-2.5 py-1.5 text-[10px] font-semibold text-accent-fg">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent-fg/80" /> Dashboard
+                </div>
+                {["Clients", "Projects", "Time", "Invoices", "Proposals"].map((i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-full px-2.5 py-1.5 text-[10px] text-muted">
+                    <span className="w-1.5 h-1.5 rounded-full bg-line-strong" /> {i}
+                  </div>
+                ))}
+              </div>
+
+              {/* Mini content */}
+              <div className="p-4 space-y-3">
+                <div>
+                  <div className="font-display text-base font-bold text-fg">Dashboard</div>
+                  <div className="text-[10px] text-muted">Overview of your week</div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { l: "Paid", v: "$4,820" },
+                    { l: "Pending", v: "$1,150" },
+                    { l: "Hours", v: "36h" },
+                  ].map((s) => (
+                    <div key={s.l} className="rounded-lg border border-line bg-bg p-2.5">
+                      <div className="text-[9px] text-muted">{s.l}</div>
+                      <div className="font-mono text-[13px] font-bold text-fg">{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg border border-line bg-bg divide-y divide-line">
+                  {[
+                    { i: Receipt, t: "INV-024 · Acme Corp", a: "$1,200", ok: true },
+                    { i: Clock, t: "Deep work · Platform API", a: "2h 40m", ok: false },
+                  ].map((r) => {
+                    const I = r.i;
+                    return (
+                      <div key={r.t} className="flex items-center gap-2.5 p-2.5">
+                        <span className="w-6 h-6 rounded-full bg-accent-soft dark:bg-accent/15 text-accent flex items-center justify-center">
+                          <I className="w-3 h-3" />
+                        </span>
+                        <span className="text-[11px] text-fg flex-1 truncate">{r.t}</span>
+                        <span className="font-mono text-[10px] text-muted">{r.a}</span>
+                        {r.ok && <CheckCircle2 className="w-3.5 h-3.5 text-ok" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 
-          <AnimatePresence mode="wait">
-            {activeTab === "dashboard" && (
-              <motion.div
-                key="dashboard"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-6"
-              >
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 hover:border-emerald-500/40 transition-colors">
-                    <div className="text-xs text-slate-400 font-medium mb-1">Monthly Revenue</div>
-                    <div className="text-2xl font-mono font-bold text-emerald-400">$12,480.00</div>
-                    <div className="text-[11px] text-emerald-400 font-medium mt-1">↑ +18.4% vs last month</div>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 hover:border-indigo-500/40 transition-colors">
-                    <div className="text-xs text-slate-400 font-medium mb-1">Active Projects</div>
-                    <div className="text-2xl font-mono font-bold text-white">6 Client Specs</div>
-                    <div className="text-[11px] text-indigo-400 font-medium mt-1">2 Milestones due today</div>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 hover:border-cyan-500/40 transition-colors">
-                    <div className="text-xs text-slate-400 font-medium mb-1">Billable Hours</div>
-                    <div className="text-2xl font-mono font-bold text-cyan-400">142.5 hrs</div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-1">Eff. Rate: $87.50/hr</div>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 hover:border-amber-500/40 transition-colors">
-                    <div className="text-xs text-slate-400 font-medium mb-1">Pending Invoices</div>
-                    <div className="text-2xl font-mono font-bold text-amber-400">$3,850.00</div>
-                    <div className="text-[11px] text-amber-400 font-medium mt-1">1 invoice awaiting approval</div>
-                  </div>
-                </div>
+          {/* Floating chips */}
+          <motion.div
+            animate={{ y: [0, -7, 0] }}
+            transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute -top-5 -right-3 sm:-right-6 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-xl flex items-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-ok" />
+            <span className="text-[11px] font-semibold text-fg">Invoice paid</span>
+            <span className="font-mono text-[11px] text-ok">+$1,200</span>
+          </motion.div>
 
-                <div className="p-5 rounded-2xl bg-slate-950/90 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-white">Today&apos;s Focus Task</div>
-                      <div className="text-xs text-slate-400">Fintech Dashboard Refactor • Acme Corp Client</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-                    <span className="font-mono text-lg font-bold text-emerald-400">02:45:12</span>
-                    <Button variant="default" size="sm" className="rounded-xl px-4 py-2 font-bold text-xs">
-                      Stop Timer
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === "kanban" && (
-              <motion.div
-                key="kanban"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-                className="grid grid-cols-1 md:grid-cols-3 gap-4"
-              >
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
-                  <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
-                    <span>To Do (3)</span>
-                    <span className="w-2 h-2 rounded-full bg-slate-500" />
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 mb-2">
-                    <div className="text-sm font-medium text-white mb-1">Contract Scope Draft</div>
-                    <div className="text-xs text-slate-400">SaaS Client • $2,500 budget</div>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
-                  <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-                    <span>In Progress (2)</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-900 border border-emerald-500/30 mb-2">
-                    <div className="text-sm font-medium text-white mb-1">FastAPI Auth Middleware</div>
-                    <div className="text-xs text-emerald-400 font-mono">Timer Running (01:24:00)</div>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
-                  <div className="text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-                    <span>Completed (4)</span>
-                    <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 mb-2">
-                    <div className="text-sm font-medium text-slate-300 line-through mb-1">Cloudflare D1 Setup</div>
-                    <div className="text-xs text-slate-500">Delivered • Approved</div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === "invoices" && (
-              <motion.div
-                key="invoices"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-3"
-              >
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-white">INV-2026-004 • Acme Corp</div>
-                    <div className="text-xs text-slate-400">Web App Development & Design System</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-base font-mono font-bold text-emerald-400">$4,500.00</div>
-                    <Badge variant="emerald" className="mt-1">
-                      Paid via Stripe
-                    </Badge>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
+            className="absolute -bottom-5 -left-3 sm:-left-6 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-xl flex items-center gap-2"
+          >
+            <Flame className="w-4 h-4 text-accent" />
+            <span className="text-[11px] font-semibold text-fg">Billing streak</span>
+            <span className="font-mono text-[11px] text-accent">12 days</span>
+          </motion.div>
         </motion.div>
       </div>
     </section>

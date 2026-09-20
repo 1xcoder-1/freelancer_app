@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
+from app.api.v1.endpoints.projects import calculate_progress
 from app.models.project import Project, Task
 from app.models.client import Client
 from app.models.finance import Invoice, TimeEntry, Expense
@@ -84,7 +85,7 @@ async def get_dashboard_stats(
         "active_clients_count": active_clients_count,
         "currency": workspace.currency or "USD",
         "timestamp": datetime.utcnow().isoformat(),
-        "user_email": user.get("email") or "user@freelancebook.com"
+        "user_email": user.get("email") or ""
     }
 
 @router.get("/overview")
@@ -101,7 +102,7 @@ async def get_dashboard_overview(
     # 1. Fetch live projects
     proj_stmt = (
         select(Project)
-        .options(selectinload(Project.tasks))
+        .options(selectinload(Project.tasks), selectinload(Project.milestones))
         .where(Project.workspace_id == workspace.id)
         .order_by(Project.created_at.desc())
         .limit(5)
@@ -116,17 +117,29 @@ async def get_dashboard_overview(
         c_res = await db.execute(select(Client).where(Client.id.in_(client_ids)))
         clients_map = {c.id: c.name for c in c_res.scalars().all()}
 
+    # Real tracked hours per project (from logged time entries)
+    proj_ids = [p.id for p in projects]
+    hours_map = {}
+    if proj_ids:
+        h_stmt = (
+            select(TimeEntry.project_id, func.coalesce(func.sum(TimeEntry.duration_seconds), 0))
+            .where(TimeEntry.project_id.in_(proj_ids))
+            .group_by(TimeEntry.project_id)
+        )
+        h_res = await db.execute(h_stmt)
+        hours_map = {pid: round((secs or 0) / 3600.0, 1) for pid, secs in h_res.all()}
+
     recent_projects = []
     for p in projects:
         recent_projects.append({
             "id": p.id,
             "title": p.title,
-            "client_name": clients_map.get(p.client_id, "Direct Client"),
+            "client_name": clients_map.get(p.client_id, ""),
             "status": p.status,
-            "progress_pct": 100 if p.status == "completed" else 50,
+            "progress_pct": calculate_progress(p.milestones, p.tasks, p.status),
             "budget": p.budget,
-            "tracked_hours": 0.0,
-            "due_date": "Active"
+            "tracked_hours": hours_map.get(p.id, 0.0),
+            "due_date": ""
         })
 
     # 2. Fetch live invoices
@@ -153,10 +166,10 @@ async def get_dashboard_overview(
         recent_invoices.append({
             "id": inv.id,
             "number": inv.invoice_number,
-            "client": inv_clients_map.get(inv.client_id, "Client"),
+            "client": inv_clients_map.get(inv.client_id, ""),
             "amount": inv.total_amount,
             "status": inv.status,
-            "issue_date": inv.issue_date.strftime("%Y-%m-%d") if inv.issue_date else "Today"
+            "issue_date": inv.issue_date.strftime("%Y-%m-%d") if inv.issue_date else ""
         })
 
     # 3. Fetch live time entries
@@ -169,6 +182,13 @@ async def get_dashboard_overview(
     time_res = await db.execute(time_stmt)
     time_entries = time_res.scalars().all()
 
+    # Resolve real project titles for the time entries
+    te_project_ids = [t.project_id for t in time_entries if t.project_id]
+    te_projects_map = {}
+    if te_project_ids:
+        tp_res = await db.execute(select(Project).where(Project.id.in_(te_project_ids)))
+        te_projects_map = {pr.id: pr.title for pr in tp_res.scalars().all()}
+
     recent_time_entries = []
     total_duration_sec = 0
     for t in time_entries:
@@ -177,11 +197,11 @@ async def get_dashboard_overview(
         hrs, mins = divmod(mins, 60)
         recent_time_entries.append({
             "id": t.id,
-            "project": "Project",
-            "task": t.description or "General Work",
+            "project": te_projects_map.get(t.project_id, ""),
+            "task": t.description or "",
             "duration": f"{hrs:02d}:{mins:02d}:{secs:02d}",
             "billable": t.is_billable,
-            "date": t.created_at.strftime("%Y-%m-%d") if t.created_at else "Today"
+            "date": t.created_at.strftime("%Y-%m-%d") if t.created_at else ""
         })
 
     billable_hours = round(total_duration_sec / 3600.0, 1)
@@ -198,8 +218,8 @@ async def get_dashboard_overview(
         "recent_time_entries": recent_time_entries,
         "active_focus_timer": {
             "is_running": False,
-            "project_name": "No active timer",
-            "task_name": "Ready to track focus session",
+            "project_name": "",
+            "task_name": "",
             "elapsed_seconds": 0,
             "started_at": datetime.utcnow().isoformat(),
         }

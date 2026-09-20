@@ -138,7 +138,7 @@ async def get_public_intake_form(
         "title": form.title,
         "description": form.description,
         "questions": raw_questions,
-        "freelancer_name": workspace.name if workspace else "Freelancer",
+        "freelancer_name": workspace.name if workspace else "",
         "token": form.token,
         "created_at": form.created_at
     }

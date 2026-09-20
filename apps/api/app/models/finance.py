@@ -50,4 +50,4 @@ class Expense(Base, TimestampMixin):
     category: Mapped[str] = mapped_column(String(100), default="General")
     amount: Mapped[float] = mapped_column(Float, default=0.0)
     description: Mapped[str] = mapped_column(Text, nullable=True)
-    receipt_r2_url: Mapped[str] = mapped_column(String(512), nullable=True)
+    receipt_cloudinary_url: Mapped[str] = mapped_column(String(512), nullable=True)

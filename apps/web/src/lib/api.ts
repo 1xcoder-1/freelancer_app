@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
-export const apiClient = axios.create({
+const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
@@ -10,7 +10,9 @@ export const apiClient = axios.create({
   timeout: 15000,
 });
 
-// Response interceptor for unified error formatting and resilience
+// Response interceptor for unified error formatting and resilience.
+// The HTTP status is copied onto the thrown Error so callers can branch on
+// 403/404/410 (e.g. revoked / expired share links) instead of parsing text.
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -19,27 +21,24 @@ apiClient.interceptors.response.use(
       error?.response?.data?.message ||
       error?.message ||
       'An unexpected network error occurred. Please try again.';
-    return Promise.reject(new Error(customMessage));
+    const wrapped = new Error(customMessage) as Error & {
+      status?: number;
+      response?: unknown;
+    };
+    wrapped.status = error?.response?.status;
+    wrapped.response = error?.response;
+    return Promise.reject(wrapped);
   }
 );
 
 // Helper to attach authorization header
 const authHeaders = (token?: string) => (token ? { headers: { Authorization: `Bearer ${token}` } } : {});
 
-// ------------------------------------------------------------------------------
-// Health & Status
-// ------------------------------------------------------------------------------
-export interface HealthCheckResponse {
-  status: string;
-  service: string;
-  timestamp: string;
-  version: string;
+/** Error thrown by every API helper: `status` is the HTTP code (if any). */
+export interface ApiError extends Error {
+  status?: number;
+  response?: { status?: number };
 }
-
-export const checkBackendHealth = async (): Promise<HealthCheckResponse> => {
-  const response = await apiClient.get<HealthCheckResponse>('/health');
-  return response.data;
-};
 
 // ------------------------------------------------------------------------------
 // Dashboard Overview & Stats
@@ -230,20 +229,6 @@ export const createProject = async (payload: Partial<Project>, token?: string): 
   return response.data;
 };
 
-export const createMilestone = async (
-  projectId: string,
-  payload: { title: string; amount?: number; description?: string; deliverable_note?: string },
-  token?: string
-): Promise<Milestone> => {
-  const response = await apiClient.post<Milestone>(`/projects/${projectId}/milestones`, payload, authHeaders(token));
-  return response.data;
-};
-
-export const createTask = async (projectId: string, payload: Partial<Task>, token?: string): Promise<Task> => {
-  const response = await apiClient.post<Task>(`/projects/${projectId}/tasks`, payload, authHeaders(token));
-  return response.data;
-};
-
 export const getPublicProjectPortal = async (token: string): Promise<PublicProjectPortal> => {
   const response = await apiClient.get<PublicProjectPortal>(`/projects/portal/${token}`);
   return response.data;
@@ -297,10 +282,6 @@ export const createInvoice = async (payload: Partial<Invoice>, token?: string): 
 export const updateInvoiceStatus = async (invoiceId: string, statusVal: string, token?: string) => {
   const response = await apiClient.patch(`/invoices/${invoiceId}/status?status_val=${statusVal}`, {}, authHeaders(token));
   return response.data;
-};
-
-export const deleteInvoice = async (invoiceId: string, token?: string): Promise<void> => {
-  await apiClient.delete(`/invoices/${invoiceId}`, authHeaders(token));
 };
 
 // ------------------------------------------------------------------------------
@@ -362,35 +343,6 @@ export const createExpense = async (payload: Partial<Expense>, token?: string): 
 
 export const deleteExpense = async (expenseId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/expenses/${expenseId}`, authHeaders(token));
-};
-
-// ------------------------------------------------------------------------------
-// Cloudinary / Cloudflare Storage
-// ------------------------------------------------------------------------------
-export interface UploadSignatureResponse {
-  provider: string;
-  upload_url: string;
-  api_key?: string;
-  timestamp?: number;
-  signature?: string;
-  folder?: string;
-  public_id?: string;
-  file_key: string;
-  is_mock?: boolean;
-}
-
-export const getUploadSignature = async (
-  file_key: string,
-  content_type: string = 'image/jpeg',
-  category: string = 'receipts',
-  token?: string
-): Promise<UploadSignatureResponse> => {
-  const response = await apiClient.post<UploadSignatureResponse>(
-    '/storage/upload-signature',
-    { file_key, content_type, category },
-    authHeaders(token)
-  );
-  return response.data;
 };
 
 // ------------------------------------------------------------------------------
@@ -603,12 +555,10 @@ export const submitPublicIntakeForm = async (
   return response.data;
 };
 
-export const getFormSubmissions = async (formId: string, token?: string): Promise<IntakeSubmission[]> => {
+export const getIntakeSubmissions = async (formId: string, token?: string): Promise<IntakeSubmission[]> => {
   const response = await apiClient.get<IntakeSubmission[]>(`/intake/${formId}/submissions`, authHeaders(token));
   return response.data;
 };
-
-export const getIntakeSubmissions = getFormSubmissions;
 
 // ------------------------------------------------------------------------------
 // Booking & Consultation Calendar
@@ -675,7 +625,7 @@ export const getPublicBooking = async (token: string): Promise<PublicBookingCons
   return response.data;
 };
 
-export const schedulePublicAppointment = async (
+export const schedulePublicBooking = async (
   token: string,
   payload: { client_name: string; client_email: string; appointment_time: string; notes?: string }
 ): Promise<BookingAppointment> => {
@@ -683,26 +633,37 @@ export const schedulePublicAppointment = async (
   return response.data;
 };
 
-export const schedulePublicBooking = schedulePublicAppointment;
-
 // ------------------------------------------------------------------------------
-// Developer Portfolio & Public Profile (LeetCode / MasterJi UI Style)
+// Report Card — editable, shareable personal card (persisted in Neon per user)
 // ------------------------------------------------------------------------------
-export interface SkillItem {
-  name: string;
-  count: number;
+export interface SectionItem {
+  id: string;
+  title: string;
+  description: string;
+  link?: string | null;
+  icon: string;   // lucide icon key rendered by the frontend
+  color: string;  // icon chip background colour
 }
 
-export interface SkillsCategory {
-  advanced: SkillItem[];
-  intermediate: SkillItem[];
-  fundamental: SkillItem[];
+export interface WritingItem {
+  id: string;
+  title: string;
+  date: string;
+  link?: string | null;
 }
 
-export interface LanguageStat {
-  language: string;
-  solved_count: number;
-  projects_count: number;
+export interface CardContent {
+  name_aka: string;
+  bio_paragraphs: string[];
+  things_i_do: SectionItem[];
+  companies: SectionItem[];
+  work_with_me: SectionItem[];
+  writings: WritingItem[];
+}
+
+export interface CardSettings {
+  font: string;    // schibsted | inter | geist
+  accent: string;  // accent colour chosen in the settings popover
 }
 
 export interface ScopeStat {
@@ -719,97 +680,10 @@ export interface DeliveryStats {
   hard: ScopeStat;
 }
 
-export interface BadgeItem {
-  id: string;
-  name: string;
-  icon_type: string;
-  category: string;
-  date: string;
-  description: string;
-}
-
 export interface HeatmapCell {
   date: string;
   count: number;
   level: number;
-}
-
-export interface FeaturedCaseStudy {
-  id: string;
-  title: string;
-  author: string;
-  category: string;
-  progress_solved: number;
-  progress_total: number;
-  tags: string[];
-  link?: string;
-  description: string;
-}
-
-export interface RecentSubmission {
-  id: string;
-  title: string;
-  client: string;
-  status: string;
-  time_ago: string;
-  tags: string[];
-  amount: number;
-}
-
-export interface TestimonialItem {
-  id: string;
-  client_name: string;
-  client_avatar: string;
-  company: string;
-  rating: number;
-  comment: string;
-  project_title: string;
-}
-
-export interface DiscussionItem {
-  id: string;
-  title: string;
-  upvotes: number;
-  views: number;
-  replies: number;
-  time_ago: string;
-}
-
-export interface PortfolioProfile {
-  username: string;
-  full_name: string;
-  avatar_url: string;
-  headline: string;
-  bio: string;
-  rank: string;
-  rank_percentile: string;
-  following: number;
-  followers: number;
-  location: string;
-  organization: string;
-  website_url: string;
-  github_url: string;
-  twitter_url: string;
-  linkedin_url: string;
-  discord_handle: string;
-  tags: string[];
-  hourly_rate: number;
-  views_count: number;
-  solutions_count: number;
-  discuss_count: number;
-  reputation_score: number;
-  active_days_count: number;
-  current_streak: number;
-  max_streak: number;
-  languages: LanguageStat[];
-  skills: SkillsCategory;
-  delivery_stats: DeliveryStats;
-  badges: BadgeItem[];
-  heatmap: HeatmapCell[];
-  featured_case_studies: FeaturedCaseStudy[];
-  recent_submissions: RecentSubmission[];
-  testimonials: TestimonialItem[];
-  discussions: DiscussionItem[];
 }
 
 export interface ShareStatusResponse {
@@ -823,8 +697,38 @@ export interface ShareStatusResponse {
   status: "active" | "expired" | "revoked";
 }
 
+export interface ReportCardData {
+  username: string;
+  full_name: string;
+  avatar_url: string;
+  content: CardContent;
+  settings: CardSettings;
+  share: ShareStatusResponse;
+  views_count: number;
+  current_streak: number;
+  max_streak: number;
+  active_days_count: number;
+  delivery_stats: DeliveryStats;
+  heatmap: HeatmapCell[];
+}
+
+export const getMyReportCard = async (token?: string): Promise<ReportCardData> => {
+  const response = await apiClient.get<ReportCardData>('/report-card/me', authHeaders(token));
+  return response.data;
+};
+
+export const saveReportCardContent = async (content: CardContent, token?: string): Promise<ReportCardData> => {
+  const response = await apiClient.put<ReportCardData>('/report-card/me/content', { content }, authHeaders(token));
+  return response.data;
+};
+
+export const saveReportCardSettings = async (settings: CardSettings, token?: string): Promise<ReportCardData> => {
+  const response = await apiClient.put<ReportCardData>('/report-card/me/settings', { settings }, authHeaders(token));
+  return response.data;
+};
+
 export const getShareStatus = async (token?: string): Promise<ShareStatusResponse> => {
-  const response = await apiClient.get<ShareStatusResponse>('/portfolio/share/status', authHeaders(token));
+  const response = await apiClient.get<ShareStatusResponse>('/report-card/share/status', authHeaders(token));
   return response.data;
 };
 
@@ -832,31 +736,22 @@ export const createShareLink = async (
   payload: { expiration: string; include_styling: boolean },
   token?: string
 ): Promise<ShareStatusResponse> => {
-  const response = await apiClient.post<ShareStatusResponse>('/portfolio/share', payload, authHeaders(token));
+  const response = await apiClient.post<ShareStatusResponse>('/report-card/share', payload, authHeaders(token));
   return response.data;
 };
 
 export const revokeShareLink = async (token?: string): Promise<{ success: boolean; message: string }> => {
-  const response = await apiClient.delete<{ success: boolean; message: string }>('/portfolio/share', authHeaders(token));
+  const response = await apiClient.delete<{ success: boolean; message: string }>('/report-card/share', authHeaders(token));
   return response.data;
 };
 
-export const getPublicPortfolio = async (username: string, shareToken?: string | null): Promise<PortfolioProfile> => {
-  const url = shareToken ? `/portfolio/${username}?token=${encodeURIComponent(shareToken)}` : `/portfolio/${username}`;
-  const response = await apiClient.get<PortfolioProfile>(url);
+export const getPublicReportCard = async (username: string, shareToken?: string | null): Promise<ReportCardData> => {
+  const url = shareToken
+    ? `/report-card/public/${encodeURIComponent(username)}?token=${encodeURIComponent(shareToken)}`
+    : `/report-card/public/${encodeURIComponent(username)}`;
+  const response = await apiClient.get<ReportCardData>(url);
   return response.data;
 };
 
-export const getMyPortfolio = async (token?: string): Promise<PortfolioProfile> => {
-  const response = await apiClient.get<PortfolioProfile>('/portfolio/me/profile', authHeaders(token));
-  return response.data;
-};
-
-export const updateMyPortfolio = async (payload: Partial<PortfolioProfile>, token?: string): Promise<PortfolioProfile> => {
-  const response = await apiClient.put<PortfolioProfile>('/portfolio/me/profile', payload, authHeaders(token));
-  return response.data;
-};
-
-export { cn } from './utils';
 
 

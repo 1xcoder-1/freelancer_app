@@ -3,19 +3,6 @@ from typing import Optional, List
 from datetime import datetime
 
 # ------------------------------------------------------------------------------
-# Workspace & User Schemas
-# ------------------------------------------------------------------------------
-class WorkspaceOut(BaseModel):
-    id: str
-    name: str
-    slug: str
-    currency: str = "USD"
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# ------------------------------------------------------------------------------
 # Client Schemas
 # ------------------------------------------------------------------------------
 class ClientCreate(BaseModel):

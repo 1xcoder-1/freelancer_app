@@ -48,6 +48,13 @@ engine_kwargs = {
 # for Postgres URLs is Neon's documented fix and costs only a trivial re-parse.
 if db_url.startswith("postgresql"):
     engine_kwargs["connect_args"] = {"statement_cache_size": 0}
+    # /dashboard/overview now runs several sections concurrently (one extra
+    # session each), so a single page load checks out a handful of connections
+    # at once. Give the pool headroom above the default 5 to avoid checkout
+    # waits under parallel dashboard loads. Keep modest so a DIRECT (non-pooler)
+    # Neon host is never over-connected — see .env.example note.
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 10
 
 # Serverless Postgres (Neon) and other cloud DBs kill idle connections,
 # which leaves dead connections sitting in SQLAlchemy's pool and causes
@@ -68,12 +75,31 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False
 )
 
+from sqlalchemy import text
+
 async def init_db():
     """
-    Initializes database tables automatically on startup if using SQLite (dev).
+    Initializes database tables automatically on startup and adds any missing columns.
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # In development, auto-sync any newly added columns in models to the database
+        if engine.dialect.name == "postgresql" and settings.APP_ENV.strip().lower() in ("development", "dev", "local"):
+            for table_name, table in Base.metadata.tables.items():
+                res = await conn.execute(text(f"""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = '{table_name}';
+                """))
+                existing_cols = {row[0] for row in res.fetchall()}
+                if not existing_cols:
+                    continue
+
+                for col in table.columns:
+                    if col.name not in existing_cols:
+                        col_type = col.type.compile(dialect=engine.dialect)
+                        await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col.name} {col_type};"))
 
 async def get_db():
     """

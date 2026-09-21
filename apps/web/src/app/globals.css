@@ -73,39 +73,58 @@
 html {
   scroll-behavior: smooth;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
   overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100vh;
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Accessibility visible focus rings */
-:focus-visible {
+/* Accessibility visible focus rings (exclude unstyled/transparent inputs) */
+:focus-visible:not(input):not(textarea):not(select) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* Custom sleek scrollbar */
+/* Utility to hide scrollbars on horizontal scroll strips while keeping scrollable */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none !important;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Visible sleek scrollbar styling (Cross-browser: Firefox + Chromium + Safari) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
+  background-color: var(--line-strong);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--faint);
+  background-color: var(--muted);
 }
 
 /* Display headline used across landing + section headers (clean grotesque, like refs) */

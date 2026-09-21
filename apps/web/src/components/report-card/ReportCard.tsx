@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import {
   Pencil,
   Share2,
+  Link2,
   Save,
   X,
   Layers,
   Sparkles,
   Trash2,
+  Check,
 } from "lucide-react";
 import type { CardContent, CardSettings, ReportCardData } from "@/lib/api";
 import {
@@ -20,6 +22,8 @@ import {
   fontCssVar,
   isEmptyContent,
   starterTemplate,
+  blankInspirationItem,
+  blankProjectItem,
 } from "./constants";
 import { SettingsPopover } from "./SettingsPopover";
 import { ShareDialog } from "./ShareDialog";
@@ -27,7 +31,11 @@ import { StatsPanel } from "./StatsPanel";
 import {
   CompanyGrid,
   DottedDivider,
+  FooterSection,
+  InspirationList,
   ItemList,
+  ProjectGrid,
+  QuoteSection,
   SectionShell,
   WritingList,
   blankSectionItem,
@@ -65,7 +73,22 @@ export function ReportCard({
     data.content || emptyContent(),
   );
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [shareOpen, setShareOpen] = useState(false);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const draftRef = useRef<CardContent>(draft);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  // Sync draft from data.content when not actively editing
+  useEffect(() => {
+    if (!editing) {
+      setDraft(data.content || emptyContent());
+      draftRef.current = data.content || emptyContent();
+    }
+  }, [data.content, editing]);
 
   const dirty = useMemo(
     () =>
@@ -97,34 +120,108 @@ export function ReportCard({
     key: K,
     value: CardContent[K],
   ) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      draftRef.current = next;
+      return next;
+    });
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSaveContent(draft);
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
+  const saveToServer = useCallback(
+    async (contentToSave: CardContent, exitEditMode: boolean = false) => {
+      setSaving(true);
+      setSaveStatus("saving");
+      try {
+        await onSaveContent(contentToSave);
+        setSaveStatus("saved");
+        if (exitEditMode) {
+          setEditing(false);
+        }
+        setTimeout(() => setSaveStatus("idle"), 2500);
+      } catch (err) {
+        console.error("Save error:", err);
+        setSaveStatus("idle");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [onSaveContent],
+  );
+
+  const handleSaveClick = async () => {
+    await saveToServer(draftRef.current, true);
   };
+
+  // Real-time debounced auto-save (saves 1.8s after typing stops during edit)
+  useEffect(() => {
+    if (!editing || !dirty) return;
+
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await saveToServer(draftRef.current, false);
+      } catch (err) {
+        console.error("Auto-save error:", err);
+      }
+    }, 1800);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [draft, editing, dirty, saveToServer]);
+
+  // Global Ctrl + S / Cmd + S / Ctrl + Alt keyboard shortcut (VS Code style instant save)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const isAlt = e.altKey;
+      const isKeyS = e.key.toLowerCase() === "s" || e.code === "KeyS";
+
+      // Triggers on Ctrl+S, Cmd+S, Ctrl+Alt, Ctrl+Alt+S
+      if (
+        (isCtrlOrCmd && isKeyS) ||
+        (isCtrlOrCmd && isAlt) ||
+        (isAlt && isKeyS)
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isOwner) {
+          // Cancel any pending debounce timer since we're saving immediately
+          if (autoSaveTimeoutRef.current) {
+            clearTimeout(autoSaveTimeoutRef.current);
+            autoSaveTimeoutRef.current = null;
+          }
+          saveToServer(draftRef.current, false);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true, passive: false });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [isOwner, saveToServer]);
 
   const handleDiscard = () => {
     setDraft(data.content || emptyContent());
+    draftRef.current = data.content || emptyContent();
     setEditing(false);
   };
 
-  // The draft is only ever read while editing, so it is seeded from the server
-  // content at the moment editing starts (event handler, no render-time sync).
   const startEditing = () => {
-    setDraft(data.content || emptyContent());
+    const initial = data.content || emptyContent();
+    setDraft(initial);
+    draftRef.current = initial;
     setEditing(true);
   };
 
   const installTemplate = async () => {
     const template = starterTemplate();
     setDraft(template);
+    draftRef.current = template;
     setEditing(true);
     await onSaveContent(template);
   };
@@ -132,6 +229,7 @@ export function ReportCard({
   const clearAll = async () => {
     const blank = emptyContent();
     setDraft(blank);
+    draftRef.current = blank;
     await onSaveContent(blank);
   };
 
@@ -211,9 +309,9 @@ export function ReportCard({
 
   const thingsSection = (
     <SectionShell
-      label="Things I do"
+      label="Things I focus on"
       editing={editing}
-      addLabel="Add thing"
+      addLabel="Add focus area"
       onAdd={() =>
         setSection("things_i_do", [
           ...(content.things_i_do || []),
@@ -289,6 +387,58 @@ export function ReportCard({
     </SectionShell>
   );
 
+  const inspirationSection = (
+    <InspirationList
+      items={
+        content.inspirations && content.inspirations.length > 0
+          ? content.inspirations
+          : starterTemplate().inspirations || []
+      }
+      introParagraphs={
+        content.inspiration_intro && content.inspiration_intro.length > 0
+          ? content.inspiration_intro
+          : starterTemplate().inspiration_intro
+      }
+      editing={editing}
+      onAdd={() =>
+        setSection("inspirations", [
+          ...(content.inspirations && content.inspirations.length > 0
+            ? content.inspirations
+            : starterTemplate().inspirations || []),
+          blankInspirationItem(),
+        ])
+      }
+      onChange={(next) => setSection("inspirations", next)}
+      onIntroChange={(nextIntro) => setSection("inspiration_intro", nextIntro)}
+    />
+  );
+
+  const projectSection = (
+    <ProjectGrid
+      items={
+        content.projects && content.projects.length > 0
+          ? content.projects
+          : starterTemplate().projects || []
+      }
+      introParagraphs={
+        content.projects_intro && content.projects_intro.length > 0
+          ? content.projects_intro
+          : starterTemplate().projects_intro
+      }
+      editing={editing}
+      onAdd={() =>
+        setSection("projects", [
+          ...(content.projects && content.projects.length > 0
+            ? content.projects
+            : starterTemplate().projects || []),
+          blankProjectItem(),
+        ])
+      }
+      onChange={(next) => setSection("projects", next)}
+      onIntroChange={(nextIntro) => setSection("projects_intro", nextIntro)}
+    />
+  );
+
   const statsSection = (
     <StatsPanel
       accent={accent}
@@ -301,33 +451,52 @@ export function ReportCard({
     />
   );
 
+  const quoteSection = (
+    <QuoteSection
+      quote={content.quote}
+      editing={editing}
+      onChange={(next) => setSection("quote", next)}
+    />
+  );
+
+  const footerSection = (
+    <FooterSection
+      footer={content.footer}
+      displayName={displayName}
+      editing={editing}
+      onChange={(next) => setSection("footer", next)}
+    />
+  );
+
   return (
     <div
-      className="min-h-screen bg-bg text-fg pb-24 selection:bg-accent/25"
+      className="min-h-screen bg-bg text-fg pb-10 selection:bg-accent/25"
       style={{ fontFamily }}
     >
       <div className="max-w-3xl mx-auto px-6 lg:px-0 pt-10">
         {/* Header: Clerk avatar + real name (live) + owner controls */}
         <header className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={avatarUrl}
                 alt={displayName}
-                className="w-10 h-10 rounded-lg object-cover border border-line shrink-0"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] object-cover border border-line bg-surface shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-lg bg-surface border border-line flex items-center justify-center font-bold text-muted uppercase shrink-0">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] bg-surface border border-line flex items-center justify-center font-bold text-muted text-xs uppercase shrink-0">
                 {(displayName || "?").charAt(0)}
               </div>
             )}
-            <h1 className="text-[26px] leading-tight font-semibold text-fg truncate">
-              {displayName}
+            <h1 className="text-[22px] sm:text-[24px] leading-tight font-medium text-fg break-words flex items-center flex-wrap gap-x-2">
+              <span className="font-semibold text-fg">{displayName}</span>
               {content.name_aka ? (
-                <span className="text-muted font-normal italic">
-                  {" "}
-                  aka <span className="italic">{content.name_aka}</span>
+                <span className="font-normal text-muted/70">
+                  aka{" "}
+                  <span className="font-semibold text-fg italic">
+                    {content.name_aka}
+                  </span>
                 </span>
               ) : null}
             </h1>
@@ -339,35 +508,40 @@ export function ReportCard({
                 <>
                   <button
                     type="button"
-                    onClick={handleSave}
-                    disabled={saving || !dirty}
-                    className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hi transition-all disabled:opacity-40"
+                    onClick={handleSaveClick}
+                    disabled={saving}
+                    title="Save changes to database (Ctrl+S or Ctrl+Alt)"
+                    className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hi transition-all cursor-pointer shadow-xs disabled:opacity-70"
                   >
-                    <Save className="w-4 h-4" />
-                    {saving ? "Saving..." : dirty ? "Save" : "Saved"}
+                    {saveStatus === "saved" ? (
+                      <Check className="w-4 h-4 text-emerald-300" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {saveStatus === "saving" ? (
+                      "Saving..."
+                    ) : saveStatus === "saved" ? (
+                      "Saved"
+                    ) : (
+                      <>
+                        Save <span className="text-[10px] opacity-75 font-mono">Ctrl+Alt</span>
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={handleDiscard}
-                    className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl bg-surface border border-line text-fg text-xs font-semibold hover:border-line-strong transition-all"
+                    className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-surface border border-line text-fg text-xs font-semibold hover:border-line-strong transition-all cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearAll}
-                    title="Clear everything and start from scratch"
-                    className="inline-flex items-center h-10 px-3 rounded-xl bg-surface border border-line text-danger text-xs font-semibold hover:border-danger/40 transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
                   </button>
                 </>
               ) : (
                 <button
                   type="button"
                   onClick={startEditing}
-                  className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-surface border border-line hover:border-line-strong text-fg text-xs font-semibold transition-all"
+                  className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-surface border border-line hover:border-line-strong text-fg text-xs font-semibold transition-all cursor-pointer"
                 >
                   <Pencil className="w-4 h-4" />
                   Edit
@@ -377,16 +551,21 @@ export function ReportCard({
               <button
                 type="button"
                 onClick={() => setShareOpen(true)}
-                title="Share report card"
-                className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-surface border border-line hover:border-line-strong text-fg text-xs font-semibold transition-all"
+                title={
+                  data.share?.is_shared
+                    ? "Share link active (click to copy or manage)"
+                    : "Share report card"
+                }
+                className={`w-10 h-10 rounded-xl bg-surface border hover:border-line-strong flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                  data.share?.is_shared
+                    ? "border-accent/50 text-accent"
+                    : "border-line text-fg"
+                }`}
               >
-                <Share2 className="w-4 h-4" />
-                Share
-                {data.share?.is_shared && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-ok"
-                    title="Link is live"
-                  />
+                {data.share?.is_shared ? (
+                  <Link2 className="w-4 h-4 text-accent" />
+                ) : (
+                  <Share2 className="w-4 h-4" />
                 )}
               </button>
 
@@ -462,19 +641,19 @@ export function ReportCard({
             <DottedDivider />
             {thingsSection}
             <DottedDivider />
-            {statsSection}
-          </>
-        )}
-
-        {activeTab === "inspiration" && (
-          <>
             {companiesSection}
             <DottedDivider />
-            {thingsSection}
+            {workSection}
+            <DottedDivider />
+            {statsSection}
+            <DottedDivider />
+            {quoteSection}
           </>
         )}
 
-        {activeTab === "blog" && writingSection}
+        {activeTab === "inspiration" && inspirationSection}
+
+        {activeTab === "projects" && projectSection}
 
         {activeTab === "sponsor" && (
           <>
@@ -484,52 +663,8 @@ export function ReportCard({
           </>
         )}
 
-        {/* Footer (reference design) */}
-        <DottedDivider />
-        <footer className="pt-10 text-center space-y-1.5">
-          <p
-            className="text-2xl italic text-fg/80"
-            style={{ fontFamily: "var(--font-schibsted)" }}
-          >
-            {(displayName || "").split(" ")[0]}
-          </p>
-          <p className="text-[13px] text-muted">
-            Built by yours truly
-            {content.things_i_do?.[0]?.link ? (
-              <>
-                {" — "}
-                <a
-                  href={content.things_i_do[0].link}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-fg underline decoration-dotted underline-offset-4 hover:text-accent"
-                >
-                  see my work
-                </a>
-              </>
-            ) : null}
-            {isOwner ? (
-              <>
-                {" · "}
-                <Link
-                  href={tabHref("sponsor")}
-                  className="text-fg underline decoration-dotted underline-offset-4 hover:text-accent"
-                >
-                  work with me
-                </Link>
-              </>
-            ) : null}
-          </p>
-          <p className="text-[12px] text-faint">
-            Report card powered by{" "}
-            <Link
-              href="/"
-              className="text-fg underline decoration-dotted underline-offset-4 hover:text-accent"
-            >
-              Freelance Book
-            </Link>
-          </p>
-        </footer>
+        {/* Footer (100% editable real-time signature & attribution) */}
+        {footerSection}
       </div>
 
       {isOwner && (

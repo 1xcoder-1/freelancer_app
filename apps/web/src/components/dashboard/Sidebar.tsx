@@ -17,6 +17,7 @@ import {
   Calculator,
   IdCard,
   Settings,
+  Zap,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { title: "Proposals & AI", href: "/dashboard/proposals", icon: Sparkles, betaTag: "AI" },
   { title: "Client Intake", href: "/dashboard/intake", icon: ClipboardList, betaTag: "BETA" },
   { title: "Booking Calendar", href: "/dashboard/booking", icon: Calendar },
+  { title: "Smart Automations", href: "/dashboard/automations", icon: Zap, betaTag: "BETA" },
   { title: "Expenses & Taxes", href: "/dashboard/taxes", icon: Calculator },
   { title: "Report Card", href: "/dashboard/report-card", icon: IdCard },
   { title: "Settings", href: "/dashboard/settings", icon: Settings },

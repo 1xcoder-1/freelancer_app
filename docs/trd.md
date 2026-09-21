@@ -35,7 +35,7 @@ freelance-book/
 | **File Storage** | **Cloudflare R2** | S3-Compatible Object Store | Storage for invoice PDFs, images, ZIP files, project attachments, and client assets. |
 | **Realtime** | **FastAPI WebSockets** | Bi-directional Connection | Live comments, live notifications, task status updates, and user presence. |
 | **Transactional Email** | **Brevo** | Email Service Provider | Sending invoice notifications, client invitations, account alerts. |
-| **Background Jobs** | **Inngest** | Background Workflow Engine | Scheduled billing reminders, recurring jobs, background workflow automation. |
+| **Background Jobs** | **Inngest** | Background Workflow Engine | ✅ Implemented in `apps/api` (Python SDK, served at `/api/inngest`): overdue-invoice cron scan, 4-day payment reminders, 24h booking reminders. |
 | **Push Notifications** | **FCM (Firebase)** | Mobile Push Notification Service | Push notifications for Android devices. |
 | **AI Models** | **Gemini / OpenAI API** | LLM Services | AI assistant capabilities ("Book AI") integrated via FastAPI server. |
 | **Monitoring** | **Sentry** | Crash Reporting & APM | Real-time error tracking and performance monitoring. |

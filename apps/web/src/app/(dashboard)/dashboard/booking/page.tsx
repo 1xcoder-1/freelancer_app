@@ -14,7 +14,8 @@ import {
   Users,
   Video,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,12 +38,10 @@ import {
   BookingConsultation,
   BookingAppointment
 } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function BookingPage() {
   const { getToken } = useAuth();
-  const [consultations, setConsultations] = useState<BookingConsultation[]>([]);
-  const [appointments, setAppointments] = useState<BookingAppointment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   // Create Modal
@@ -54,25 +53,20 @@ export default function BookingPage() {
   const [meetingProvider, setMeetingProvider] = useState("google_meet");
   const [creating, setCreating] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      const token = (await getToken()) || undefined;
+  const { data: pageData, loading, refresh: fetchData, mutate } = useApiData(
+    "booking:data",
+    async (token) => {
       const [cons, appts] = await Promise.all([
-        getBookings(token),
-        getBookingAppointments(token),
+        getBookings(token).catch(() => []),
+        getBookingAppointments(token).catch(() => []),
       ]);
-      setConsultations(cons);
-      setAppointments(appts);
-    } catch (err) {
-      console.error("Failed to load booking data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { consultations: cons, appointments: appts };
+    },
+    { reportContext: "booking" }
+  );
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const consultations = pageData?.consultations ?? [];
+  const appointments = pageData?.appointments ?? [];
 
   const handleCopyLink = (token: string) => {
     const url = `${window.location.origin}/booking/${token}`;
@@ -101,6 +95,7 @@ export default function BookingPage() {
       setDurationMinutes(30);
       setPrice(100);
       setCreateModalOpen(false);
+      invalidateCache("dashboard:data");
       await fetchData();
     } catch (err) {
       console.error("Failed to create consultation:", err);
@@ -114,7 +109,11 @@ export default function BookingPage() {
     try {
       const token = (await getToken()) || undefined;
       await deleteBooking(id, token);
-      setConsultations((prev) => prev.filter((c) => c.id !== id));
+      mutate((prev) => ({
+        consultations: (prev?.consultations ?? []).filter((c) => c.id !== id),
+        appointments: prev?.appointments ?? [],
+      }));
+      invalidateCache("dashboard:data");
     } catch (err) {
       console.error("Failed to delete booking:", err);
     }
@@ -136,13 +135,27 @@ export default function BookingPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => setCreateModalOpen(true)}
-          className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Consultation Type
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchData(true)}
+            disabled={loading}
+            className="border-line text-fg"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => setCreateModalOpen(true)}
+            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Add Consultation Type
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="consultations" className="space-y-6">
@@ -265,6 +278,10 @@ export default function BookingPage() {
 
         {/* TAB 2: Scheduled Appointments */}
         <TabsContent value="appointments" className="space-y-4">
+          <p className="text-xs text-faint">
+            Clients automatically receive a reminder email 24 hours before their
+            meeting — powered by Smart Automations, no action needed from you.
+          </p>
           {loading ? (
             <div className="space-y-3">
               {[1, 2].map((i) => (

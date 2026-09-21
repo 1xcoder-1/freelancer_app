@@ -8,8 +8,6 @@ import {
   DollarSign,
   Receipt,
   Plus,
-  Play,
-  Pause,
   FolderKanban,
   RefreshCw,
   SquareStack,
@@ -20,59 +18,28 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader, StatCard, StatChip } from "@/components/dashboard/patterns";
 import { getDashboardStats, getDashboardOverview, type DashboardStats, type DashboardOverview } from "@/lib/api";
+import { useApiData } from "@/hooks/use-api-data";
 
 type TabKey = "projects" | "invoices" | "time";
 
 export default function DashboardPage() {
-  const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(0);
+  const { user } = useUser();
   const [tab, setTab] = useState<TabKey>("projects");
 
-  // Live Timer Ticking
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setTimerSeconds((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning]);
-
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
+  const { data: dashboardData, loading, refresh: loadData } = useApiData(
+    "dashboard:data",
+    async (token) => {
       const [statsRes, overviewRes] = await Promise.all([
         getDashboardStats(token).catch(() => null),
         getDashboardOverview(token).catch(() => null),
       ]);
-      setStats(statsRes);
-      setOverview(overviewRes);
-    } catch (err) {
-      console.error("Failed to load live dashboard:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { stats: statsRes, overview: overviewRes };
+    },
+    { reportContext: "dashboard" }
+  );
 
-  useEffect(() => {
-    if (isLoaded) {
-      loadData(false);
-    }
-  }, [isLoaded]);
-
-  const formatTimer = (totalSeconds: number) => {
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+  const stats = dashboardData?.stats ?? null;
+  const overview = dashboardData?.overview ?? null;
 
   const usd = (n: number | undefined) =>
     `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
@@ -101,8 +68,8 @@ export default function DashboardPage() {
               Refresh
             </Button>
             <Link href="/dashboard/invoices">
-              <Button className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm">
-                <Plus className="w-4 h-4 mr-1" />
+              <Button size="sm" className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm">
+                <Plus className="w-3.5 h-3.5 mr-1" />
                 New Invoice
               </Button>
             </Link>
@@ -172,46 +139,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Focus Timer Strip */}
-      <div className="bg-card border border-line rounded-xl p-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={`p-2.5 rounded-full border transition-colors ${
-                isTimerRunning
-                  ? "border-accent text-accent bg-accent-soft dark:bg-accent dark:text-accent-fg animate-pulse"
-                  : "border-line bg-surface text-muted"
-              }`}
-            >
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-fg">Live Focus Timer</h3>
-              <p className="text-xs text-muted">
-                {isTimerRunning ? "Recording billable time session..." : "Click start to begin tracking time"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="font-mono text-2xl font-bold text-fg tracking-wider">
-              {formatTimer(timerSeconds)}
-            </span>
-            <Button
-              onClick={() => setIsTimerRunning(!isTimerRunning)}
-              className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg"
-              size="sm"
-            >
-              {isTimerRunning ? <Pause className="w-4 h-4 mr-1.5" /> : <Play className="w-4 h-4 mr-1.5" />}
-              {isTimerRunning ? "Pause Timer" : "Start Focus"}
-            </Button>
-          </div>
-        </div>
-      </div>
-
       {/* Underline tabs + content (reference style) */}
       <div>
-        <div className="flex items-center gap-6 border-b border-line mb-5 overflow-x-auto">
+        <div className="flex items-center gap-6 border-b border-line mb-5 overflow-x-auto no-scrollbar">
           {tabs.map((t) => (
             <button
               key={t.key}

@@ -6,29 +6,46 @@ import {
   Clock,
   Play,
   Pause,
-  Plus,
   Trash2,
   RefreshCw,
-  FolderKanban,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getTimeEntries, logTimeEntry, deleteTimeEntry, getProjects, type TimeEntry, type Project } from "@/lib/api";
+import { getTimeEntries, logTimeEntry, deleteTimeEntry, getProjects } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function TimeTrackerPage() {
   const { getToken } = useAuth();
-  const [entries, setEntries] = useState<TimeEntry[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Timer
   const [isRunning, setIsRunning] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [description, setDescription] = useState("");
+
+  const { data: pageData, loading, refresh: loadData } = useApiData(
+    "time-tracker:data",
+    async (token) => {
+      const [entriesRes, projRes] = await Promise.all([
+        getTimeEntries(token).catch(() => []),
+        getProjects(token).catch(() => [])
+      ]);
+      return { entries: entriesRes, projects: projRes };
+    },
+    {
+      reportContext: "time-tracker",
+      onSuccess: (data) => {
+        if (data.projects.length > 0) {
+          setSelectedProjectId((prev) => prev || data.projects[0].id);
+        }
+      }
+    }
+  );
+
+  const entries = pageData?.entries ?? [];
+  const projects = pageData?.projects ?? [];
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -39,30 +56,6 @@ export default function TimeTrackerPage() {
     }
     return () => clearInterval(interval);
   }, [isRunning]);
-
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
-      const [entriesRes, projRes] = await Promise.all([
-        getTimeEntries(token).catch(() => []),
-        getProjects(token).catch(() => [])
-      ]);
-      setEntries(entriesRes);
-      setProjects(projRes);
-      if (projRes.length > 0) {
-        setSelectedProjectId((prev) => prev || projRes[0].id);
-      }
-    } catch (err) {
-      console.error("Error loading time entries:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData(false);
-  }, []);
 
   const handleStopAndSave = async () => {
     if (!selectedProjectId) {
@@ -80,6 +73,7 @@ export default function TimeTrackerPage() {
       }, token);
       setSeconds(0);
       setDescription("");
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error saving time entry:", err);
@@ -91,6 +85,7 @@ export default function TimeTrackerPage() {
     try {
       const token = (await getToken()) || undefined;
       await deleteTimeEntry(id, token);
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error deleting time entry:", err);

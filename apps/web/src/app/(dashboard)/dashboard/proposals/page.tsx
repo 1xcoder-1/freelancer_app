@@ -28,41 +28,33 @@ import {
   type Proposal,
   type Client,
 } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function ProposalsPage() {
   const { getToken } = useAuth();
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [clientScope, setClientScope] = useState("");
   const [targetBudget, setTargetBudget] = useState(1500);
   const [proposalTitle, setProposalTitle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPitch, setGeneratedPitch] = useState("");
-  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
+  const { data: pageData, loading, refresh: loadData } = useApiData(
+    "proposals:data",
+    async (token) => {
       const [propsRes, clientsRes] = await Promise.all([
         getProposals(token).catch(() => []),
         getClients(token).catch(() => []),
       ]);
-      setProposals(propsRes);
-      setClients(clientsRes);
-    } catch (err) {
-      console.error("Failed to load proposals:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { proposals: propsRes, clients: clientsRes };
+    },
+    { reportContext: "proposals" }
+  );
 
-  useEffect(() => {
-    loadData(false);
-  }, []);
+  const proposals = pageData?.proposals ?? [];
+  const clients = pageData?.clients ?? [];
 
   const handleGenerateAI = async () => {
     if (!clientScope.trim()) return;

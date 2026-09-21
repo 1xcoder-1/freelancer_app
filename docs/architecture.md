@@ -43,6 +43,14 @@ freelancer-book/
 - **Framework**: Python 3.12+ / FastAPI / Uvicorn
 - **Database ORM**: SQLAlchemy 2.0 async / Alembic migrations
 - **Caching**: Redis
+- **Background Jobs**: Inngest (Python SDK) — implemented. The serve endpoint
+  (`/api/inngest`) is mounted directly on the FastAPI app (gated by
+  `INNGEST_ENABLED`), so no separate worker process exists. Durable workflows:
+  daily overdue-invoice scan (cron), 4-day payment reminder (`sleep_until`),
+  and 24h-before booking reminder — all delivering through the pluggable
+  `email_service` (console in dev, Resend in prod). Events are emitted from
+  the invoice/booking endpoints with a failure guard: job-infrastructure
+  outages can never fail a user request.
 
 ---
 

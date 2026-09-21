@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
-  ApiError,
   CardContent,
   CardSettings,
   ReportCardData,
@@ -11,57 +10,48 @@ import {
   getPublicReportCard,
   saveReportCardContent,
   saveReportCardSettings,
+  type ApiError,
 } from "@/lib/api";
+
+import { useApiData } from "@/hooks/use-api-data";
 
 /** Owner-side data layer: loads/saves the signed-in user's card in Neon. */
 export function useOwnerReportCard() {
   const { getToken } = useAuth();
   const getTokenRef = useRef(getToken);
 
-  // Clerk re-creates getToken every render; keeping the latest one in a ref
-  // (updated from an effect, never during render) lets refresh() stay stable so
-  // the load effect below runs once instead of looping.
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  const [data, setData] = useState<ReportCardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const token = (await getTokenRef.current()) || undefined;
-      const next = await getMyReportCard(token);
-      setData(next);
-      setError(null);
-    } catch (err) {
-      console.warn("Failed to load report card:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load report card",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const { data, loading, error, refresh: reloadData, mutate } = useApiData<ReportCardData>(
+    "report-card:my",
+    async (token) => {
+      return await getMyReportCard(token);
+    },
+    { reportContext: "report_card" }
+  );
 
   const saveContent = useCallback(async (content: CardContent) => {
     const token = (await getTokenRef.current()) || undefined;
     const next = await saveReportCardContent(content, token);
-    setData(next);
-  }, []);
+    mutate(next);
+  }, [mutate]);
 
   const saveSettings = useCallback(async (settings: CardSettings) => {
     const token = (await getTokenRef.current()) || undefined;
     const next = await saveReportCardSettings(settings, token);
-    setData(next);
-  }, []);
+    mutate(next);
+  }, [mutate]);
 
-  return { data, loading, error, refresh, saveContent, saveSettings };
+  return {
+    data,
+    loading,
+    error: error ? error.message : null,
+    refresh: () => reloadData(true),
+    saveContent,
+    saveSettings,
+  };
 }
 
 export type PublicCardStatus =

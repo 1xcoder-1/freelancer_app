@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as Sentry from '@sentry/nextjs';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -27,9 +28,46 @@ apiClient.interceptors.response.use(
     };
     wrapped.status = error?.response?.status;
     wrapped.response = error?.response;
+    reportApiFailure(error, wrapped);
     return Promise.reject(wrapped);
   }
 );
+
+// Central Sentry reporting for background API failures: pages swallow errors
+// to degrade gracefully (.catch(() => [])), so without this the SDK would
+// never see outages. Only server-side failures are reported — 4xx responses
+// are expected app states (expired share links, validation), and public
+// anonymous endpoints failing 4xx would otherwise pollute the error feed.
+// Metadata only: never the Authorization header or token contents.
+interface AxiosFailureShape {
+  response?: { status?: number };
+  config?: {
+    method?: string;
+    url?: string;
+    headers?: { Authorization?: string; get?: (name: string) => unknown };
+  };
+}
+
+function reportApiFailure(axiosError: AxiosFailureShape, reportedError: Error): void {
+  try {
+    const status = axiosError?.response?.status;
+    const isServerFailure = typeof status === 'number' ? status >= 500 : true;
+    if (!isServerFailure) return;
+
+    Sentry.withScope((scope) => {
+      scope.setTag('error_type', 'api-request');
+      scope.setContext('api', {
+        method: axiosError?.config?.method?.toUpperCase?.() ?? axiosError?.config?.method,
+        url: axiosError?.config?.url,
+        status,
+        hasAuthHeader: Boolean(axiosError?.config?.headers?.Authorization ?? axiosError?.config?.headers?.get?.('Authorization')),
+      });
+      Sentry.captureException(reportedError);
+    });
+  } catch {
+    // Reporting must never break the request path.
+  }
+}
 
 // Helper to attach authorization header
 const authHeaders = (token?: string) => (token ? { headers: { Authorization: `Bearer ${token}` } } : {});
@@ -641,8 +679,9 @@ export interface SectionItem {
   title: string;
   description: string;
   link?: string | null;
-  icon: string;   // lucide icon key rendered by the frontend
+  icon: string;   // lucide icon key or brand logo key rendered by the frontend
   color: string;  // icon chip background colour
+  logo_url?: string | null; // optional custom logo image URL or SVG identifier
 }
 
 export interface WritingItem {
@@ -652,6 +691,33 @@ export interface WritingItem {
   link?: string | null;
 }
 
+export interface ProjectItem {
+  id: string;
+  title: string;
+  description: string;
+  category?: string;
+  link?: string | null;
+  icon: string;
+  color: string;
+  logo_url?: string | null;
+  tags?: string[];
+  year?: string;
+}
+
+export interface QuoteItem {
+  text: string;
+  author: string;
+  emoji?: string;
+}
+
+export interface FooterContent {
+  signature_name?: string;
+  code_link?: string;
+  video_link?: string;
+  inspired_by_name?: string;
+  inspired_by_link?: string;
+}
+
 export interface CardContent {
   name_aka: string;
   bio_paragraphs: string[];
@@ -659,6 +725,12 @@ export interface CardContent {
   companies: SectionItem[];
   work_with_me: SectionItem[];
   writings: WritingItem[];
+  inspirations?: SectionItem[];
+  inspiration_intro?: string[];
+  projects?: ProjectItem[];
+  projects_intro?: string[];
+  quote?: QuoteItem | null;
+  footer?: FooterContent | null;
 }
 
 export interface CardSettings {
@@ -750,6 +822,28 @@ export const getPublicReportCard = async (username: string, shareToken?: string 
     ? `/report-card/public/${encodeURIComponent(username)}?token=${encodeURIComponent(shareToken)}`
     : `/report-card/public/${encodeURIComponent(username)}`;
   const response = await apiClient.get<ReportCardData>(url);
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Smart Automations — Inngest background-job state (read-only dashboard view)
+// ------------------------------------------------------------------------------
+export interface AutomationState {
+  enabled: boolean;
+  overdue_scan_cron: string;
+  reminder_grace_days: number;
+  booking_reminder_lead_hours: number;
+  overdue_invoice_count: number;
+  overdue_invoice_amount: number;
+  sent_unpaid_count: number;
+  upcoming_appointments_7d_count: number;
+  email_provider: string; // "console" | "resend"
+  web_app_url: string;
+  timestamp: string;
+}
+
+export const getAutomationState = async (token?: string): Promise<AutomationState> => {
+  const response = await apiClient.get<AutomationState>('/automations/state', authHeaders(token));
   return response.data;
 };
 

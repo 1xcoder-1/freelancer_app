@@ -56,13 +56,25 @@ const DEFAULT_CONFIG: WorkspaceConfig = {
 export default function SettingsPage() {
   const { user } = useUser();
   const { getToken } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [config, setConfig] = useState<WorkspaceConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<WorkspaceConfig>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("freelancer_workspace_config");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse config", e);
+        }
+      }
+    }
+    return DEFAULT_CONFIG;
+  });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
-  // Load saved config from localStorage on mount
+  // Sync config from localStorage on client mount if SSR didn't have window
   useEffect(() => {
     const saved = localStorage.getItem("freelancer_workspace_config");
     if (saved) {
@@ -72,10 +84,6 @@ export default function SettingsPage() {
         console.error("Failed to parse config", e);
       }
     }
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 450);
-    return () => clearTimeout(timer);
   }, []);
 
   const handleSave = () => {

@@ -70,6 +70,21 @@ def _get_jwk_client() -> PyJWKClient:
     return _jwk_client
 
 
+async def warm_jwks() -> None:
+    """
+    Pre-fetch and cache Clerk's signing keys at startup.
+
+    Without this, the first authenticated request after every (re)start pays a
+    blocking HTTPS round trip to the issuer's JWKS endpoint, which shows up as
+    a multi-second dashboard open. Never raises — a failed warm-up just leaves
+    the lazy per-request fetch as the fallback.
+    """
+    try:
+        await asyncio.to_thread(_get_jwk_client().get_signing_keys)
+    except Exception as exc:  # non-fatal by design
+        print(f"JWKS warm-up notice (will retry lazily per request): {exc}")
+
+
 def dev_auth_enabled() -> bool:
     """
     Dev/sandbox auth (mock tokens, keyless fallback) is ONLY allowed when BOTH:

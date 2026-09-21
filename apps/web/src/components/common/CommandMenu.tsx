@@ -71,15 +71,17 @@ export function CommandMenu() {
 
   return (
     <>
-      {/* Quick Search Shortcut Trigger Pill (Visible on large screens) */}
+      {/* Quick Search Shortcut Trigger Button */}
       <button
         onClick={() => setOpen(true)}
-        className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-line text-xs text-muted hover:text-fg hover:border-line-strong transition-all cursor-pointer"
-        aria-label="Search site (Ctrl+K)"
+        className="inline-flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl bg-surface border border-dashed border-line-strong text-xs text-muted hover:text-fg hover:border-accent hover:bg-accent-soft/20 transition-all cursor-pointer w-48 sm:w-72 md:w-80 shadow-xs group"
+        aria-label="Search modules and shortcuts (Ctrl+K)"
       >
-        <Search className="w-3.5 h-3.5 text-muted" />
-        <span>Quick search...</span>
-        <kbd className="px-1.5 py-0.5 rounded border border-line bg-surface text-[10px] font-mono text-muted">
+        <div className="flex items-center gap-2 text-muted group-hover:text-fg transition-colors truncate">
+          <Search className="w-3.5 h-3.5 text-accent shrink-0" />
+          <span className="font-medium truncate">Search anything...</span>
+        </div>
+        <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded border border-line bg-card text-[10px] font-mono text-muted font-semibold shadow-2xs shrink-0">
           Ctrl K
         </kbd>
       </button>
@@ -87,7 +89,7 @@ export function CommandMenu() {
       {/* Modal Dialog */}
       <AnimatePresence>
         {open && (
-          <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20 px-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -99,26 +101,26 @@ export function CommandMenu() {
 
             {/* Dialog Card */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+              initial={{ opacity: 0, scale: 0.95, y: 0 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              exit={{ opacity: 0, scale: 0.95, y: 0 }}
               transition={{ duration: 0.2 }}
-              className="relative w-full max-w-lg rounded-xl bg-card border border-line shadow-2xl overflow-hidden z-10 text-fg"
+              className="relative w-full max-w-lg rounded-xl bg-card border border-dashed border-line shadow-2xl overflow-hidden z-10 text-fg"
             >
               {/* Input Header */}
-              <div className="flex items-center px-4 border-b border-line">
+              <div className="flex items-center px-4 border-b border-dashed border-line">
                 <Search className="w-5 h-5 text-accent mr-3 flex-shrink-0" />
                 <input
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search modules, features, architecture..."
-                  className="w-full py-4 bg-transparent text-sm text-fg placeholder:text-faint focus:outline-none"
+                  className="w-full py-4 bg-transparent text-sm text-fg placeholder:text-faint border-none outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none ring-0"
                   autoFocus
                 />
                 <button
                   onClick={() => setOpen(false)}
-                  className="p-1.5 rounded-lg text-muted hover:text-fg"
+                  className="p-1.5 rounded-lg text-muted hover:text-fg cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>

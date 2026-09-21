@@ -18,11 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getClients, createClient, deleteClient, type Client } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function ClientsPage() {
   const { getToken } = useAuth();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Form
@@ -33,22 +32,15 @@ export default function ClientsPage() {
   const [website, setWebsite] = useState("");
   const [notes, setNotes] = useState("");
 
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
-      const res = await getClients(token);
-      setClients(res);
-    } catch (err) {
-      console.error("Error loading clients:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: clientsData, loading, refresh: loadData } = useApiData<Client[]>(
+    "clients:data",
+    async (token) => {
+      return await getClients(token);
+    },
+    { reportContext: "clients" }
+  );
 
-  useEffect(() => {
-    loadData(false);
-  }, []);
+  const clients = clientsData ?? [];
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +62,8 @@ export default function ClientsPage() {
       setPhone("");
       setWebsite("");
       setNotes("");
+      invalidateCache("dashboard:data");
+      invalidateCache("invoices:data");
       loadData();
     } catch (err) {
       console.error("Error creating client:", err);
@@ -81,6 +75,8 @@ export default function ClientsPage() {
     try {
       const token = (await getToken()) || undefined;
       await deleteClient(id, token);
+      invalidateCache("dashboard:data");
+      invalidateCache("invoices:data");
       loadData();
     } catch (err) {
       console.error("Error deleting client:", err);
@@ -109,10 +105,11 @@ export default function ClientsPage() {
           </Button>
 
           <Button
+            size="sm"
             onClick={() => setShowCreateModal(true)}
             className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
           >
-            <Plus className="w-4 h-4 mr-1.5" />
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
             Add New Client
           </Button>
         </div>

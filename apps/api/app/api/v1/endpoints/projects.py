@@ -67,13 +67,13 @@ async def list_projects(
     result = await db.execute(stmt)
     projects = result.scalars().all()
 
-    # Load client names
+    # Load client names (columns-only — full ORM rows cost extra load state)
     client_ids = [p.client_id for p in projects if p.client_id]
     clients_map = {}
     if client_ids:
-        c_stmt = select(Client).where(Client.id.in_(client_ids))
+        c_stmt = select(Client.id, Client.name).where(Client.id.in_(client_ids))
         c_res = await db.execute(c_stmt)
-        clients_map = {c.id: c.name for c in c_res.scalars().all()}
+        clients_map = {cid: name for cid, name in c_res.all()}
 
     # Real tracked hours per project (from logged time entries)
     hours_map = await _tracked_hours_map(db, [p.id for p in projects])

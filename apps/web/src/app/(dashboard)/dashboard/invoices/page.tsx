@@ -20,12 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInvoices, createInvoice, getClients, updateInvoiceStatus, type Invoice, type Client } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function InvoicesPage() {
   const { getToken } = useAuth();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Form State
@@ -35,29 +33,27 @@ export default function InvoicesPage() {
   const [itemQty, setItemQty] = useState(1);
   const [itemRate, setItemRate] = useState(1200);
 
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
+  const { data: pageData, loading, refresh: loadData } = useApiData(
+    "invoices:data",
+    async (token) => {
       const [invRes, clientRes] = await Promise.all([
         getInvoices(token).catch(() => []),
         getClients(token).catch(() => [])
       ]);
-      setInvoices(invRes);
-      setClients(clientRes);
-      if (clientRes.length > 0) {
-        setClientId((prev) => prev || clientRes[0].id);
+      return { invoices: invRes, clients: clientRes };
+    },
+    {
+      reportContext: "invoices",
+      onSuccess: (data) => {
+        if (data.clients.length > 0) {
+          setClientId((prev) => prev || data.clients[0].id);
+        }
       }
-    } catch (err) {
-      console.error("Failed to load invoices:", err);
-    } finally {
-      setLoading(false);
     }
-  };
+  );
 
-  useEffect(() => {
-    loadData(false);
-  }, []);
+  const invoices = pageData?.invoices ?? [];
+  const clients = pageData?.clients ?? [];
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +76,7 @@ export default function InvoicesPage() {
         ]
       }, token);
       setShowCreateModal(false);
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error creating invoice:", err);
@@ -90,6 +87,7 @@ export default function InvoicesPage() {
     try {
       const token = (await getToken()) || undefined;
       await updateInvoiceStatus(invId, "paid", token);
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error updating invoice:", err);
@@ -119,10 +117,11 @@ export default function InvoicesPage() {
           </Button>
 
           <Button
+            size="sm"
             onClick={() => setShowCreateModal(true)}
             className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
           >
-            <Plus className="w-4 h-4 mr-1.5" />
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
             Create Invoice
           </Button>
         </div>
@@ -172,7 +171,9 @@ export default function InvoicesPage() {
                         className={
                           inv.status === "paid"
                             ? "bg-accent-soft text-accent border-accent/20"
-                            : "bg-warn/10 text-warn border-warn/20"
+                            : inv.status === "overdue"
+                              ? "bg-danger/10 text-danger border-danger/20"
+                              : "bg-warn/10 text-warn border-warn/20"
                         }
                       >
                         {inv.status.toUpperCase()}

@@ -25,14 +25,39 @@ class SectionItem(BaseModel):
     title: str = ""
     description: str = ""
     link: Optional[str] = None
-    icon: str = "zap"          # lucide icon key rendered by the frontend
+    icon: str = "zap"          # lucide icon key or brand logo key rendered by the frontend
     color: str = "#ea6311"     # icon chip background
+    logo_url: Optional[str] = None  # optional custom logo image URL or SVG identifier
 
 class WritingItem(BaseModel):
     id: str = ""
     title: str = ""
     date: str = ""             # display date, e.g. 24-03-2022
     link: Optional[str] = None
+
+class ProjectItem(BaseModel):
+    id: str = ""
+    title: str = ""
+    description: str = ""
+    category: str = "Web Dev"  # Web Dev | App Dev | UI/UX Design | Graphic Design | Branding | AI & Automation
+    link: Optional[str] = None
+    icon: str = "globe"
+    color: str = "#3b82f6"
+    logo_url: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    year: str = ""
+
+class QuoteItem(BaseModel):
+    text: str = ""
+    author: str = ""
+    emoji: str = "✨"
+
+class FooterContent(BaseModel):
+    signature_name: str = ""
+    code_link: str = ""
+    video_link: str = ""
+    inspired_by_name: str = ""
+    inspired_by_link: str = ""
 
 class CardContent(BaseModel):
     name_aka: str = ""                                     # the italic "aka Paaji" part
@@ -41,6 +66,12 @@ class CardContent(BaseModel):
     companies: List[SectionItem] = Field(default_factory=list)
     work_with_me: List[SectionItem] = Field(default_factory=list)
     writings: List[WritingItem] = Field(default_factory=list)
+    inspirations: List[SectionItem] = Field(default_factory=list)
+    inspiration_intro: List[str] = Field(default_factory=list)
+    projects: List[ProjectItem] = Field(default_factory=list)
+    projects_intro: List[str] = Field(default_factory=list)
+    quote: Optional[QuoteItem] = None
+    footer: Optional[FooterContent] = None
 
 class CardSettings(BaseModel):
     font: str = "geist"        # schibsted | inter | geist

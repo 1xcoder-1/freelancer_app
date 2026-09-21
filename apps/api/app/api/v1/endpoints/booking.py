@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
+from app.core.inngest_client import emit
 from app.core.workspace import get_or_create_user_workspace
 from app.models.booking import BookingConsultation, BookingAppointment
 from app.models.workspace import Workspace
@@ -214,6 +215,19 @@ async def schedule_public_appointment(
     db.add(appointment)
     await db.commit()
     await db.refresh(appointment)
+
+    # Schedule the durable "reminder 24h before" workflow (guarded no-op when
+    # Inngest is disabled or unreachable — never fails this public request).
+    await emit("booking.scheduled", {
+        "appointment_id": appointment.id,
+        "consultation_id": consultation.id,
+        "workspace_id": consultation.workspace_id,
+        "client_name": appointment.client_name,
+        "client_email": appointment.client_email,
+        "appointment_time": appointment.appointment_time.isoformat(),
+        "meeting_link": appointment.meeting_link,
+        "consultation_title": consultation.title,
+    })
 
     return {
         "id": appointment.id,

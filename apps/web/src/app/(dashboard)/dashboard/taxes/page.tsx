@@ -1,40 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { Calculator, Plus, Trash2, Receipt, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Receipt, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getExpenses, createExpense, deleteExpense, type Expense } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function TaxesPage() {
   const { getToken } = useAuth();
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [category, setCategory] = useState("Software & Subscriptions");
   const [amount, setAmount] = useState(49);
   const [description, setDescription] = useState("");
 
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
-      const res = await getExpenses(token);
-      setExpenses(res);
-    } catch (err) {
-      console.error("Error loading expenses:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: expensesData, loading, refresh: loadData } = useApiData<Expense[]>(
+    "taxes:expenses",
+    async (token) => {
+      return await getExpenses(token);
+    },
+    { reportContext: "taxes" }
+  );
 
-  useEffect(() => {
-    loadData(false);
-  }, []);
-
+  const expenses = expensesData ?? [];
   const totalDeductions = expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
   const estimatedTaxReserve = totalDeductions * 0.25;
 
@@ -49,6 +40,7 @@ export default function TaxesPage() {
       }, token);
       setShowModal(false);
       setDescription("");
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error saving expense:", err);
@@ -59,6 +51,7 @@ export default function TaxesPage() {
     try {
       const token = (await getToken()) || undefined;
       await deleteExpense(id, token);
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error deleting expense:", err);
@@ -87,10 +80,11 @@ export default function TaxesPage() {
           </Button>
 
           <Button
+            size="sm"
             onClick={() => setShowModal(true)}
             className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
           >
-            <Plus className="w-4 h-4 mr-1.5" />
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
             Log Business Expense
           </Button>
         </div>

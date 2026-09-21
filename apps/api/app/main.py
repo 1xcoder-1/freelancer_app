@@ -4,9 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import init_db, engine
 from app.core.rate_limit import enforce_rate_limit
 from app.api.v1.router import api_router
+from app.core.auth import warm_jwks
 import sentry_sdk
 from app.core.sentry import setup_sentry
 
@@ -25,6 +26,15 @@ async def lifespan(app: FastAPI):
     is_dev_env = settings.APP_ENV.strip().lower() in ("development", "dev", "local")
     is_local_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
+    # SECURITY GUARD: the Inngest serve endpoint (/api/inngest) is public —
+    # in production its requests MUST be signature-verified via the signing
+    # key (mirrors the ALLOW_DEV_AUTH guard above).
+    if settings.INNGEST_ENABLED and not is_dev_env and not settings.INNGEST_SIGNING_KEY:
+        raise RuntimeError(
+            "INNGEST_ENABLED=true requires INNGEST_SIGNING_KEY outside "
+            "development. Set it in the environment or disable background jobs."
+        )
+
     # Auto-create tables only for local development databases. Shared/prod
     # databases (e.g. Neon) must never be mutated implicitly at startup —
     # schema changes there belong to migrations.
@@ -37,6 +47,21 @@ async def lifespan(app: FastAPI):
                 # booting an app that would 500 on every request
                 raise
             print(f"Database initialization notice: {e}")
+
+    # Warm the two cold paths that would otherwise hit the FIRST page load:
+    # a sleeping Neon serverless branch (SELECT 1 wakes it) and Clerk's JWKS
+    # fetch. Both are non-fatal here — per-request fallbacks remain.
+    import asyncio
+    from sqlalchemy import text
+
+    async def _wake_database():
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+        except Exception as e:
+            print(f"DB warm-up notice (queries will retry per request): {e}")
+
+    await asyncio.gather(_wake_database(), warm_jwks())
     yield
 
 app = FastAPI(
@@ -74,6 +99,17 @@ async def add_security_headers(request: Request, call_next):
             print(f"Unhandled Exception in request {request.url}: {exc}")
             traceback.print_exc()
             if settings.SENTRY_DSN:
+                # Attach request context so 500s in Sentry show which route
+                # failed; the client-facing body stays sanitized below.
+                # Use the parameterized route template (e.g. /intake/{token})
+                # rather than the raw path so live share-link tokens are never
+                # shipped to Sentry; fall back to the raw path if routing info
+                # is unavailable (path is already free of tokens in that case).
+                route = request.scope.get("route")
+                path_tag = getattr(route, "path_format", None) or request.url.path
+                with sentry_sdk.configure_scope() as scope:
+                    scope.set_tag("api.path", path_tag)
+                    scope.set_tag("api.method", request.method)
                 sentry_sdk.capture_exception(exc)
             response = JSONResponse(
                 status_code=500,
@@ -99,6 +135,29 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+
+# Background Jobs: Inngest serve endpoint (GET/PUT/POST /api/inngest, added
+# by the SDK). Deliberately outside /api/v1: Inngest Cloud / the local Dev
+# Server authenticates with the signing key (verified by the SDK itself)
+# instead of a Clerk bearer token. Imports stay inside the gate so a disabled
+# deployment never touches the SDK; the security-header middleware above
+# still covers these routes.
+if settings.INNGEST_ENABLED:
+    # Fail fast with a clear message before the SDK raises its own opaque
+    # SigningKeyMissingError from serve() (mirrors the lifespan guard, which
+    # runs too late since serve executes at import time).
+    if settings.APP_ENV.strip().lower() not in ("development", "dev", "local") and not settings.INNGEST_SIGNING_KEY:
+        raise RuntimeError(
+            "INNGEST_ENABLED=true requires INNGEST_SIGNING_KEY outside "
+            "development. Set it in the environment or disable background jobs."
+        )
+
+    import inngest.fast_api
+
+    from app.core.inngest_client import inngest_client
+    from app.inngest_functions import functions
+
+    inngest.fast_api.serve(app, inngest_client, functions)
 
 @app.get("/")
 async def root():

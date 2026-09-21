@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter, Schibsted_Grotesk } from "next/font/google";
+import { Caveat, Geist, Geist_Mono, Inter, Schibsted_Grotesk } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ScrollProgress } from "@/components/common/ScrollProgress";
 import { BackToTop } from "@/components/common/BackToTop";
@@ -27,6 +27,11 @@ const inter = Inter({
 
 const schibsted = Schibsted_Grotesk({
   variable: "--font-schibsted",
+  subsets: ["latin"],
+});
+
+const caveat = Caveat({
+  variable: "--font-signature",
   subsets: ["latin"],
 });
 
@@ -101,7 +106,7 @@ export default function RootLayout({
       <html
         lang="en"
         data-scroll-behavior="smooth"
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${schibsted.variable} h-full antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${schibsted.variable} ${caveat.variable} h-full antialiased`}
       >
         <head>
           {/* Apply saved theme before first paint (no flash). Default: dark. */}

@@ -40,6 +40,8 @@ import {
   type Client,
   type Contract,
 } from "@/lib/api";
+import { reportLoadError } from "@/lib/report";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 const CONTRACT_TEMPLATES = [
   {
@@ -87,15 +89,21 @@ Any deliverables or requests outside the documented project scope shall be quote
     content: `# MUTUAL NON-DISCLOSURE AGREEMENT (NDA)
 
 ### 1. Definition of Confidential Information
-"Confidential Information" includes all technical data, business strategies, software source code, customer records, and financial projections disclosed between the parties.
+Freelancer agrees to perform development, design, and deployment services for the Project as defined in the associated milestone specification.
 
-### 2. Obligations
-The receiving party shall hold all Confidential Information in strict confidence and shall not disclose it to any third party without prior written consent.`,
+### 2. Milestone Payment Terms
+Client agrees to remit milestone payments upon review and acceptance of designated project deliverables. Invoices carry standard Net-15 terms.
+
+### 3. Intellectual Property
+Upon full and final payment, Freelancer transfers all proprietary rights, source code, and assets to the Client.
+
+### 4. Warranties & Acceptance
+Freelancer warrants that all code delivered is original and free of malicious software. Client has a 14-day acceptance window upon delivery.`,
   },
   {
-    id: "retainer",
-    name: "Monthly Retainer & Support Agreement",
-    description: "Dedicated monthly development capacity with rollover rules.",
+    id: "hourly-retainer",
+    name: "Monthly Advisory & Engineering Retainer",
+    description: "Covers ongoing fractional CTO, bug fixing, and continuous development blocks.",
     content: `# MONTHLY RETAINER SERVICES AGREEMENT
 
 ### 1. Retainer Scope & Allocation
@@ -109,12 +117,6 @@ Retainer fees are billed at the beginning of each monthly cycle and entitle the 
 export default function ProjectsPage() {
   const { getToken } = useAuth();
   const [activeTab, setActiveTab] = useState<"projects" | "contracts">("projects");
-
-  // Data state
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Modals
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -137,31 +139,33 @@ export default function ProjectsPage() {
   const [contractContent, setContractContent] = useState(CONTRACT_TEMPLATES[0].content);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
-  const loadData = async (isManualRefresh?: unknown) => {
-    try {
-      if (isManualRefresh === true) setLoading(true);
-      const token = (await getToken()) || undefined;
+  const { data: pageData, loading, refresh: loadData } = useApiData<{
+    projects: Project[];
+    clients: Client[];
+    contracts: Contract[];
+  }>(
+    "projects:data",
+    async (token) => {
       const [projRes, clientRes, contractRes] = await Promise.all([
         getProjects(token).catch(() => []),
         getClients(token).catch(() => []),
         getContracts(undefined, token).catch(() => []),
       ]);
-      setProjects(projRes);
-      setClients(clientRes);
-      setContracts(contractRes);
-      if (projRes.length > 0 && !contractProjectId) {
-        setContractProjectId(projRes[0].id);
-      }
-    } catch (err) {
-      console.error("Error loading projects & contracts:", err);
-    } finally {
-      setLoading(false);
+      return { projects: projRes, clients: clientRes, contracts: contractRes };
+    },
+    {
+      reportContext: "projects",
+      onSuccess: (data) => {
+        if (data.projects.length > 0 && !contractProjectId) {
+          setContractProjectId(data.projects[0].id);
+        }
+      },
     }
-  };
+  );
 
-  useEffect(() => {
-    loadData(false);
-  }, []);
+  const projects = pageData?.projects ?? [];
+  const clients = pageData?.clients ?? [];
+  const contracts = pageData?.contracts ?? [];
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,6 +184,7 @@ export default function ProjectsPage() {
       setShowCreateProjectModal(false);
       setTitle("");
       setDescription("");
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error creating project:", err);
@@ -191,6 +196,7 @@ export default function ProjectsPage() {
     try {
       const token = (await getToken()) || undefined;
       await deleteProject(id, token);
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error deleting project:", err);
@@ -217,6 +223,7 @@ export default function ProjectsPage() {
         token
       );
       setShowCreateContractModal(false);
+      invalidateCache("dashboard:data");
       loadData();
       setActiveTab("contracts");
     } catch (err) {
@@ -229,6 +236,7 @@ export default function ProjectsPage() {
     try {
       const token = (await getToken()) || undefined;
       await deleteContract(id, token);
+      invalidateCache("dashboard:data");
       loadData();
     } catch (err) {
       console.error("Error deleting contract:", err);
@@ -285,18 +293,20 @@ export default function ProjectsPage() {
 
           {activeTab === "projects" ? (
             <Button
+              size="sm"
               onClick={() => setShowCreateProjectModal(true)}
               className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4 mr-1.5" />
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
               New Project
             </Button>
           ) : (
             <Button
+              size="sm"
               onClick={() => setShowCreateContractModal(true)}
               className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
             >
-              <FileSignature className="w-4 h-4 mr-1.5" />
+              <FileSignature className="w-3.5 h-3.5 mr-1.5" />
               Create & Send Contract
             </Button>
           )}

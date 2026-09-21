@@ -45,7 +45,27 @@ class Settings(BaseSettings):
     
     # Error Monitoring
     SENTRY_DSN: str = ""
-    
+
+    # Background Jobs (Inngest). Disabled by default so the API behaves
+    # exactly as before without a Dev Server / cloud connection: emit() is a
+    # no-op and the /api/inngest serve routes are never registered.
+    INNGEST_ENABLED: bool = False
+    INNGEST_EVENT_KEY: str = ""
+    # REQUIRED in production: the serve endpoint is public and must have its
+    # requests signature-verified (enforced by a startup guard in main.py).
+    INNGEST_SIGNING_KEY: str = ""
+    # Dev Server / cloud base URL override; empty = SDK default
+    # (http://localhost:8282 event API when running the local Dev Server).
+    INNGEST_BASE_URL: str = ""
+
+    # Transactional email (used by Inngest reminder jobs). Empty = console
+    # provider: emails are logged, never sent — safe for local dev.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "Freelance Book <notifications@freelancebook.local>"
+
+    # Public web app origin — builds payment/portal links inside reminders
+    WEB_APP_URL: str = "http://localhost:3000"
+
     
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

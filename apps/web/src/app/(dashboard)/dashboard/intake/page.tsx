@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Sparkles,
   HelpCircle,
-  FileText
+  FileText,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,10 +35,9 @@ import {
   IntakeForm,
   IntakeSubmission
 } from "@/lib/api";
+import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 
 export default function IntakePage() {
-  const [forms, setForms] = useState<IntakeForm[]>([]);
-  const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Modal states
@@ -57,20 +57,15 @@ export default function IntakePage() {
   ]);
   const [creating, setCreating] = useState(false);
 
-  const fetchForms = async () => {
-    try {
-      const data = await getIntakeForms();
-      setForms(data);
-    } catch (err) {
-      console.error("Failed to load intake forms:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: formsData, loading, refresh: fetchForms, mutate } = useApiData<IntakeForm[]>(
+    "intake:forms",
+    async (token) => {
+      return await getIntakeForms(token);
+    },
+    { reportContext: "intake" }
+  );
 
-  useEffect(() => {
-    fetchForms();
-  }, []);
+  const forms = formsData ?? [];
 
   const handleCopy = (token: string, id: string) => {
     const url = `${window.location.origin}/intake/${token}`;
@@ -127,7 +122,7 @@ export default function IntakePage() {
     if (!confirm("Are you sure you want to delete this intake form?")) return;
     try {
       await deleteIntakeForm(id);
-      setForms((prev) => prev.filter((f) => f.id !== id));
+      mutate((prev) => (prev ?? []).filter((f) => f.id !== id));
     } catch (err) {
       console.error("Failed to delete form:", err);
     }
@@ -163,13 +158,27 @@ export default function IntakePage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => setCreateModalOpen(true)}
-          className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Intake Form
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchForms(true)}
+            disabled={loading}
+            className="border-line text-fg"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => setCreateModalOpen(true)}
+            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Create Intake Form
+          </Button>
+        </div>
       </div>
 
       {/* Forms List */}

@@ -1,4 +1,5 @@
 import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.core.config import settings
 
 
@@ -30,5 +31,10 @@ def setup_sentry() -> bool:
         profile_lifecycle="trace",
         before_send=_tag_sentry_event,
         before_send_transaction=_tag_sentry_event,
+        # FastAPI middleware auto-registers only when sentry_sdk.init runs
+        # BEFORE the FastAPI app object is created; main.py satisfies that
+        # order, but passing it explicitly guarantees it regardless of later
+        # import rearrangement.
+        integrations=[FastApiIntegration()],
     )
     return True

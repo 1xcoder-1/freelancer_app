@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
+from app.core.inngest_client import emit
 from app.core.workspace import get_or_create_user_workspace
 from app.models.finance import Invoice, InvoiceItem
 from app.models.client import Client
@@ -63,6 +64,7 @@ async def create_invoice(
     
     # Verify client ownership if provided
     client_name = None
+    client_email = None
     if payload.client_id:
         c_res = await db.execute(
             select(Client).where(Client.id == payload.client_id, Client.workspace_id == workspace.id)
@@ -71,6 +73,7 @@ async def create_invoice(
         if not client:
             raise HTTPException(status_code=400, detail="Specified client does not exist in your workspace")
         client_name = client.name
+        client_email = client.email
 
     total = 0.0
     items_to_create = []
@@ -97,6 +100,18 @@ async def create_invoice(
     db.add(invoice)
     await db.commit()
     await db.refresh(invoice)
+
+    # Kick off the 4-day overdue-reminder workflow (guarded no-op when
+    # Inngest is disabled or unreachable — never fails the request).
+    if invoice.status == "sent":
+        await emit("invoice.sent", {
+            "invoice_id": invoice.id,
+            "workspace_id": workspace.id,
+            "invoice_number": invoice.invoice_number,
+            "total_amount": invoice.total_amount,
+            "due_date": invoice.due_date.isoformat() if invoice.due_date else None,
+            "client_email": client_email or "",
+        })
 
     return {
         "id": invoice.id,
@@ -126,8 +141,25 @@ async def update_invoice_status(
     inv = res.scalar_one_or_none()
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    prev_status = inv.status
     inv.status = status_val
     await db.commit()
+
+    # draft/sent lifecycle: mark-as-sent (re)schedules the reminder workflow
+    if status_val == "sent" and prev_status != "sent":
+        c_res = await db.execute(
+            select(Client).where(Client.id == inv.client_id, Client.workspace_id == workspace.id)
+        )
+        client = c_res.scalar_one_or_none()
+        await emit("invoice.sent", {
+            "invoice_id": inv.id,
+            "workspace_id": workspace.id,
+            "invoice_number": inv.invoice_number,
+            "total_amount": inv.total_amount,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
+            "client_email": client.email if client else "",
+        })
+
     return {"id": inv.id, "status": inv.status}
 
 @router.delete("/{invoice_id}", status_code=status.HTTP_204_NO_CONTENT)

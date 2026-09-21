@@ -18,7 +18,7 @@ export function OwnerReportCardScreen({ tab }: { tab?: string }) {
   if (tab && !match) {
     return (
       <CardLoadError
-        message="That report card page doesn't exist. Available pages: Inspiration, Blog and Sponsor."
+        message="That report card page doesn't exist. Available pages: Inspiration, Projects and Sponsor."
         onRetry={refresh}
       />
     );

@@ -66,6 +66,18 @@ class Settings(BaseSettings):
     # Public web app origin — builds payment/portal links inside reminders
     WEB_APP_URL: str = "http://localhost:3000"
 
+    # Google Calendar integration (optional per-user OAuth connection + sync).
+    # Create OAuth 2.0 Client ID (Desktop/Web) at console.cloud.google.com →
+    # APIs & Services → Credentials, and add the redirect URI below to the
+    # "Authorized redirect URIs" list. Empty client id = feature disabled and
+    # /calendar/google/connect answers a clear 400 instead of a broken URL.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:3000/dashboard/calendar/callback"
+    # Sync window (days back / days forward) for Google Calendar mirroring
+    GOOGLE_SYNC_LOOKBACK_DAYS: int = 30
+    GOOGLE_SYNC_LOOKAHEAD_DAYS: int = 90
+
     
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

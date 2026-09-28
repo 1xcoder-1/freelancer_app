@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPublicContract, signPublicContract, type PublicContract } from "@/lib/api";
+import { toast } from "sonner";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -123,7 +124,7 @@ export default function SignContractPage({ params }: PageProps) {
   const handleSign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreeTerms) {
-      alert("Please check the box to agree to the legal terms.");
+      toast.error("Please check the box to agree to the legal terms");
       return;
     }
 
@@ -131,13 +132,13 @@ export default function SignContractPage({ params }: PageProps) {
     if (signMode === "draw") {
       const canvas = canvasRef.current;
       if (!canvas || !hasDrawn) {
-        alert("Please draw your signature in the signature pad.");
+        toast.error("Please draw your signature in the signature pad");
         return;
       }
       signatureData = canvas.toDataURL("image/png");
     } else {
       if (!typedSignature.trim()) {
-        alert("Please type your legal signature.");
+        toast.error("Please type your legal signature");
         return;
       }
       signatureData = `typed:${typedSignature.trim()}`;
@@ -154,7 +155,7 @@ export default function SignContractPage({ params }: PageProps) {
       setSignedSuccess(true);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
-      alert(axiosErr?.response?.data?.detail || "Failed to submit signature.");
+      toast.error(axiosErr?.response?.data?.detail || "Failed to submit signature.");
     } finally {
       setSubmitting(false);
     }

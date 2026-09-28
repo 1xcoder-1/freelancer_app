@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.9",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@sentry/nextjs": "^10.75.0",
     "axios": "^1.8.2",
     "class-variance-authority": "^0.7.1",
@@ -20,7 +21,10 @@
     "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "tailwind-merge": "^3.0.2"
+    "recharts": "^3.10.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.0.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -48,20 +48,16 @@ async def _ws_cache_put(clerk_id: str, user: User, workspace: Workspace, name: s
             if len(_WS_CACHE) >= _WS_CACHE_MAX_ENTRIES:
                 _WS_CACHE.clear()
         
-        # Detached in-memory copies safe to reuse across requests without session binding
-        cached_user = User(
-            id=user.id,
-            clerk_id=user.clerk_id,
-            email=user.email,
-            full_name=user.full_name,
-            avatar_url=user.avatar_url,
-        )
-        cached_workspace = Workspace(
-            id=workspace.id,
-            name=workspace.name,
-            slug=workspace.slug,
-            currency=workspace.currency or "USD",
-        )
+        # Detached in-memory copies safe to reuse across requests without
+        # session binding. All mapped columns are copied (not a hand-picked
+        # subset) so workspace settings read through a cache hit — currency,
+        # default rate, invoice prefix — are exactly the saved values.
+        cached_user = User(**{
+            c.key: getattr(user, c.key) for c in user.__table__.columns
+        })
+        cached_workspace = Workspace(**{
+            c.key: getattr(workspace, c.key) for c in workspace.__table__.columns
+        })
         _WS_CACHE[clerk_id] = (time.monotonic() + _WS_CACHE_TTL_SEC, cached_user, cached_workspace, name, avatar)
 
 

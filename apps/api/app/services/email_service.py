@@ -102,3 +102,55 @@ def build_booking_reminder_email(
         + "<p>Talk soon,<br>Freelance Book</p>"
     )
     return subject, text, html
+
+
+def build_contract_reminder_email(
+    *,
+    client_name: str,
+    contract_title: str,
+    sign_link: str,
+) -> tuple[str, str, str]:
+    """3-days follow-up reminder for an unsigned contract."""
+    subject = f"Signature Request: {contract_title}"
+    text = (
+        f"Hi {client_name},\n\n"
+        f"This is a quick follow-up regarding the agreement \"{contract_title}\". "
+        f"Please review and sign the document when you have a moment:\n\n"
+        f"{sign_link}\n\n"
+        f"Thank you,\nFreelance Book"
+    )
+    html = (
+        f"<p>Hi {client_name},</p>"
+        f"<p>This is a quick follow-up regarding the agreement <strong>{contract_title}</strong>.</p>"
+        f'<p><a href="{sign_link}" style="display:inline-block;padding:10px 18px;background-color:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">Review &amp; Sign Contract</a></p>'
+        f"<p>Or open directly: <a href=\"{sign_link}\">{sign_link}</a></p>"
+        f"<p>Thank you,<br>Freelance Book</p>"
+    )
+    return subject, text, html
+
+
+def build_proposal_reminder_email(
+    *,
+    client_name: str,
+    proposal_title: str,
+    proposal_link: str | None = None,
+) -> tuple[str, str, str]:
+    """3-days follow-up reminder for a pending proposal."""
+    subject = f"Follow-up: Proposal for {proposal_title}"
+    link_line = f"You can review the scope here: {proposal_link}\n\n" if proposal_link else ""
+    text = (
+        f"Hi {client_name},\n\n"
+        f"I wanted to follow up and see if you had any questions regarding the proposal for \"{proposal_title}\".\n\n"
+        f"{link_line}"
+        f"Looking forward to hearing your thoughts!\n\n"
+        f"Best regards,\nFreelance Book"
+    )
+    html = (
+        f"<p>Hi {client_name},</p>"
+        f"<p>I wanted to follow up and see if you had any questions regarding the proposal for <strong>{proposal_title}</strong>.</p>"
+        + (f'<p><a href="{proposal_link}" style="display:inline-block;padding:8px 16px;background-color:#059669;color:#ffffff;text-decoration:none;border-radius:6px;">View Proposal</a></p>' if proposal_link else "")
+        + "<p>Looking forward to hearing your thoughts!</p>"
+        + "<p>Best regards,<br>Freelance Book</p>"
+    )
+    return subject, text, html
+

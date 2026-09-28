@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Settings,
   Download,
@@ -12,9 +13,7 @@ import {
   Building,
   DollarSign,
   Receipt,
-  Database,
   CloudUpload,
-  Shield,
   RefreshCw,
   Clock,
   Sparkles,
@@ -22,12 +21,29 @@ import {
   Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { AutomationsPanel } from "@/components/dashboard/panels/AutomationsPanel";
 import { useUser, useAuth } from "@clerk/nextjs";
-import { getInvoices, getClients, getExpenses, getDashboardStats } from "@/lib/api";
+import {
+  getInvoices,
+  getClients,
+  getExpenses,
+  getDashboardStats,
+  getWorkspaceSettings,
+  updateWorkspaceSettings,
+} from "@/lib/api";
+import { invalidateCache } from "@/hooks/use-api-data";
+import { toast } from "sonner";
+import { z } from "zod";
+import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
+
+const workspaceSchema = z.object({
+  businessName: nameSchema("Business name", 150),
+  invoicePrefix: nameSchema("Invoice prefix", 20),
+  hourlyRate: moneySchema("Hourly rate"),
+});
 
 interface WorkspaceConfig {
   businessName: string;
@@ -42,54 +58,99 @@ interface WorkspaceConfig {
 }
 
 const DEFAULT_CONFIG: WorkspaceConfig = {
-  businessName: "Studio Nexus Freelance",
-  professionalTitle: "Full-Stack Engineer & Product Designer",
-  currency: "USD ($)",
+  businessName: "",
+  professionalTitle: "",
+  currency: "USD",
   hourlyRate: "95",
-  taxId: "TAX-US-948201",
-  invoicePrefix: "INV-2026-",
+  taxId: "",
+  invoicePrefix: "INV-",
   paymentTerms: "Net 15 Days",
-  lateFeePolicy: "2% per 30 days past due",
-  paymentNotes: "Thank you for your business! Please wire payments within the specified terms.",
+  lateFeePolicy: "",
+  paymentNotes: "",
 };
 
-export default function SettingsPage() {
+const SETTINGS_TABS = ["business", "invoicing", "data", "cloud", "automations"];
+
+function SettingsContent() {
   const { user } = useUser();
   const { getToken } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [config, setConfig] = useState<WorkspaceConfig>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("freelancer_workspace_config");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Failed to parse config", e);
-        }
-      }
-    }
-    return DEFAULT_CONFIG;
-  });
+  const [config, setConfig] = useState<WorkspaceConfig>(DEFAULT_CONFIG);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
-  // Sync config from localStorage on client mount if SSR didn't have window
-  useEffect(() => {
-    const saved = localStorage.getItem("freelancer_workspace_config");
-    if (saved) {
-      try {
-        setConfig(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse config", e);
-      }
-    }
-  }, []);
+  // Load the persisted workspace settings from Neon (single source of truth,
+  // shared across every device) instead of browser-local storage.
+  const loadSettings = useCallback(async () => {
+    const token = (await getToken()) || undefined;
+    const ws = await getWorkspaceSettings(token);
+    setConfig({
+      businessName: ws.business_name ?? "",
+      professionalTitle: ws.professional_title ?? "",
+      currency: ws.currency ?? "USD",
+      hourlyRate: String(ws.default_hourly_rate ?? 0),
+      taxId: ws.tax_id ?? "",
+      invoicePrefix: ws.invoice_prefix ?? "INV-",
+      paymentTerms: ws.payment_terms ?? "",
+      lateFeePolicy: ws.late_fee_policy ?? "",
+      paymentNotes: ws.payment_notes ?? "",
+    });
+  }, [getToken]);
 
-  const handleSave = () => {
-    localStorage.setItem("freelancer_workspace_config", JSON.stringify(config));
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await loadSettings();
+      } catch (err) {
+        console.error("Failed to load workspace settings:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [loadSettings]);
+
+  const handleSave = async () => {
+    if (!validateOrToast(workspaceSchema, {
+      businessName: config.businessName,
+      invoicePrefix: config.invoicePrefix,
+      hourlyRate: Number(config.hourlyRate) || 0,
+    })) return;
+    setSaving(true);
+    try {
+      const token = (await getToken()) || undefined;
+      await updateWorkspaceSettings(
+        {
+          business_name: config.businessName,
+          professional_title: config.professionalTitle,
+          currency: config.currency,
+          default_hourly_rate: Number(config.hourlyRate) || 0,
+          tax_id: config.taxId,
+          invoice_prefix: config.invoicePrefix,
+          payment_terms: config.paymentTerms,
+          late_fee_policy: config.lateFeePolicy,
+          payment_notes: config.paymentNotes,
+        },
+        token
+      );
+      // The saved currency/rate feed the dashboard stats and the billing timer.
+      invalidateCache("dashboard:data");
+      invalidateCache("dashboard:overview");
+      setSavedSuccess(true);
+      toast.success("Settings saved");
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to save workspace settings:", err);
+      toast.error("Could not save settings. Please check your input and try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Export JSON Backup with LIVE Database Data
@@ -127,8 +188,10 @@ export default function SettingsPage() {
       a.download = `freelancer_database_backup_${new Date().toISOString().split("T")[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success("Backup downloaded");
     } catch (err) {
       console.error("Export JSON failed:", err);
+      toast.error("Could not export your data");
     } finally {
       setExporting(false);
     }
@@ -193,27 +256,45 @@ export default function SettingsPage() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success("CSV exported");
     } catch (err) {
       console.error("Export CSV failed:", err);
+      toast.error("Could not export the CSV");
     } finally {
       setExporting(false);
     }
   };
 
   // Import Data Handler
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
         if (file.name.endsWith(".json")) {
           const parsed = JSON.parse(content);
           if (parsed.workspace) {
-            setConfig(parsed.workspace);
-            localStorage.setItem("freelancer_workspace_config", JSON.stringify(parsed.workspace));
+            const restored: WorkspaceConfig = { ...DEFAULT_CONFIG, ...parsed.workspace };
+            setConfig(restored);
+            // Persist the restored profile to Neon so it survives the device.
+            const token = (await getToken()) || undefined;
+            await updateWorkspaceSettings(
+              {
+                business_name: restored.businessName,
+                professional_title: restored.professionalTitle,
+                currency: restored.currency,
+                default_hourly_rate: Number(restored.hourlyRate) || 0,
+                tax_id: restored.taxId,
+                invoice_prefix: restored.invoicePrefix,
+                payment_terms: restored.paymentTerms,
+                late_fee_policy: restored.lateFeePolicy,
+                payment_notes: restored.paymentNotes,
+              },
+              token
+            );
           }
           setImportStatus(`Successfully restored ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
         } else {
@@ -232,14 +313,9 @@ export default function SettingsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Workspace Settings</h1>
-            <Badge className="bg-accent-soft text-info border-accent/20 font-mono text-xs">
-              Config & Live DB Exports
-            </Badge>
-          </div>
+          <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Settings</h1>
           <p className="text-muted text-sm mt-1">
-            Configure business defaults, export live Neon database records, and view cloud infrastructure status.
+            Set your business details once — they apply to every invoice and every device.
           </p>
         </div>
 
@@ -252,10 +328,11 @@ export default function SettingsPage() {
           )}
           <Button
             onClick={handleSave}
+            disabled={saving || loading}
             className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
           >
-            <Save className="w-4 h-4 mr-2" />
-            Save Changes
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            {saving ? "Saving…" : "Save Changes"}
           </Button>
         </div>
       </div>
@@ -269,23 +346,27 @@ export default function SettingsPage() {
           </div>
         </div>
       ) : (
-        <Tabs defaultValue="business" className="space-y-6">
+        <Tabs defaultValue={SETTINGS_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "business"} className="space-y-6">
           <TabsList className="bg-card border border-line p-1 rounded-xl flex flex-wrap gap-1">
             <TabsTrigger value="business" className="flex items-center gap-2">
               <Building className="w-4 h-4" />
-              Business Profile
+              Business
             </TabsTrigger>
             <TabsTrigger value="invoicing" className="flex items-center gap-2">
               <Receipt className="w-4 h-4" />
-              Invoicing & Terms
+              Invoicing
             </TabsTrigger>
             <TabsTrigger value="data" className="flex items-center gap-2">
               <Download className="w-4 h-4" />
-              Import & Export Data
+              Data
             </TabsTrigger>
             <TabsTrigger value="cloud" className="flex items-center gap-2">
-              <Database className="w-4 h-4" />
-              Cloud & Storage Hub
+              <CloudUpload className="w-4 h-4" />
+              Cloud
+            </TabsTrigger>
+            <TabsTrigger value="automations" className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Automations
             </TabsTrigger>
           </TabsList>
 
@@ -364,13 +445,13 @@ export default function SettingsPage() {
                       onChange={(e) => setConfig({ ...config, currency: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <option value="USD ($)">USD ($) - US Dollar</option>
-                      <option value="EUR (€)">EUR (€) - Euro</option>
-                      <option value="GBP (£)">GBP (£) - British Pound</option>
-                      <option value="CAD ($)">CAD ($) - Canadian Dollar</option>
-                      <option value="AUD ($)">AUD ($) - Australian Dollar</option>
-                      <option value="PKR (Rs)">PKR (Rs) - Pakistani Rupee</option>
-                      <option value="INR (₹)">INR (₹) - Indian Rupee</option>
+                      <option value="USD">USD ($) - US Dollar</option>
+                      <option value="EUR">EUR (€) - Euro</option>
+                      <option value="GBP">GBP (£) - British Pound</option>
+                      <option value="CAD">CAD ($) - Canadian Dollar</option>
+                      <option value="AUD">AUD ($) - Australian Dollar</option>
+                      <option value="PKR">PKR (Rs) - Pakistani Rupee</option>
+                      <option value="INR">INR (₹) - Indian Rupee</option>
                     </select>
                   </div>
 
@@ -487,10 +568,10 @@ export default function SettingsPage() {
                 <CardHeader>
                   <CardTitle className="text-fg text-lg flex items-center gap-2">
                     <Download className="w-5 h-5 text-info" />
-                    Export Live Workspace Data
+                    Download Your Data
                   </CardTitle>
                   <CardDescription className="text-muted text-xs">
-                    Direct live extraction from Neon PostgreSQL in CSV and JSON formats.
+                    Save any part of your work as a file you can open in Excel or Google Sheets.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -502,9 +583,8 @@ export default function SettingsPage() {
                   >
                     <span className="flex items-center gap-2">
                       <FileCode className="w-4 h-4 text-info" />
-                      Complete Live Database Snapshot (.JSON)
+                      Everything in one backup file (.json)
                     </span>
-                    <Badge variant="outline" className="text-[10px] text-info border-accent/20">Full DB</Badge>
                   </Button>
 
                   <Button
@@ -515,9 +595,8 @@ export default function SettingsPage() {
                   >
                     <span className="flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-accent" />
-                      Live Invoices & Billing History (.CSV)
+                      Invoices & payments (.csv)
                     </span>
-                    <Badge variant="outline" className="text-[10px] text-accent border-accent">Excel / Sheets</Badge>
                   </Button>
 
                   <Button
@@ -528,9 +607,8 @@ export default function SettingsPage() {
                   >
                     <span className="flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-accent" />
-                      Live Clients CRM Contact List (.CSV)
+                      Client contact list (.csv)
                     </span>
-                    <Badge variant="outline" className="text-[10px] text-accent border-line-strong">CRM Export</Badge>
                   </Button>
 
                   <Button
@@ -541,9 +619,8 @@ export default function SettingsPage() {
                   >
                     <span className="flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-warn" />
-                      Live Tax Deductions & Expenses (.CSV)
+                      Expenses & tax deductions (.csv)
                     </span>
-                    <Badge variant="outline" className="text-[10px] text-warn border-warn/20">Tax Deductible</Badge>
                   </Button>
                 </CardContent>
               </Card>
@@ -553,20 +630,20 @@ export default function SettingsPage() {
                 <CardHeader>
                   <CardTitle className="text-fg text-lg flex items-center gap-2">
                     <Upload className="w-5 h-5 text-info dark:text-info" />
-                    Import & Restore Data
+                    Restore a Backup
                   </CardTitle>
                   <CardDescription className="text-muted text-xs">
-                    Upload a JSON snapshot or CSV to import clients, restore configuration, and load records.
+                    Upload a backup file you downloaded earlier to bring your data back.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="border-2 border-dashed border-line rounded-xl p-6 text-center hover:border-accent/40 transition-colors bg-bg">
                     <Upload className="w-8 h-8 text-info mx-auto mb-2" />
                     <p className="text-sm font-medium text-fg mb-1">
-                      Choose JSON or CSV file to import
+                      Pick a backup file to restore
                     </p>
                     <p className="text-xs text-faint mb-4">
-                      Supports workspace snapshots, invoice batches, and client lists
+                      Use a file you downloaded from the export side
                     </p>
                     <label className="inline-block">
                       <input
@@ -582,87 +659,56 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="p-3 rounded-xl bg-bg border border-line text-xs text-muted space-y-1">
-                    <div className="font-semibold text-fg">Supported Import Types:</div>
-                    <div>• Full JSON Workspace backups (.json)</div>
-                    <div>• Client CRM CSVs with Name, Email & Company (.csv)</div>
+                    <div className="font-semibold text-fg">Files we accept:</div>
+                    <div>• Full backup files (.json)</div>
+                    <div>• Client lists with name, email & company (.csv)</div>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* TAB 4: Cloud & Storage Hub */}
+          {/* TAB 4: Cloud — plain-language status, no provider jargon */}
           <TabsContent value="cloud" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Neon DB Status */}
-              <Card className="bg-card border-line backdrop-blur-md p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-accent-soft text-info">
-                      <Database className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-fg">Neon PostgreSQL</h3>
-                      <p className="text-xs text-muted">Serverless Relational Engine</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="bg-accent-soft text-accent border-accent/20">
-                    🟢 Connected
-                  </Badge>
+            <Card className="bg-card border-line backdrop-blur-md p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-accent-soft text-accent">
+                  <CloudUpload className="w-6 h-6" />
                 </div>
+                <div>
+                  <h3 className="text-base font-bold text-fg">Your data is safe online</h3>
+                  <p className="text-xs text-muted">Stored on secure servers and backed up automatically.</p>
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-bg border border-line text-sm text-muted space-y-2">
+                <p>• Use the app from any device — you'll see the same work everywhere.</p>
+                <p>• Files like invoices and receipts upload over an encrypted connection.</p>
+                <p>• You can download all your data anytime from the Data tab.</p>
+              </div>
+            </Card>
+          </TabsContent>
 
-                <div className="p-3 rounded-xl bg-bg border border-line text-xs font-mono text-muted space-y-1.5">
-                  <div className="flex justify-between">
-                    <span>Driver:</span>
-                    <span className="text-fg">SQLAlchemy asyncpg</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>SSL Mode:</span>
-                    <span className="italic font-medium text-accent">Encrypted (require)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Connection Pool:</span>
-                    <span className="text-fg">Auto-Scaling</span>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Cloudinary CDN Status */}
-              <Card className="bg-card border-line backdrop-blur-md p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-accent-soft text-accent">
-                      <CloudUpload className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-fg">Cloudinary Storage CDN</h3>
-                      <p className="text-xs text-muted">Media, Invoices & Receipt Uploads</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="bg-accent-soft text-accent border-accent/20">
-                    🟢 Active CDN
-                  </Badge>
-                </div>
-
-                <div className="p-3 rounded-xl bg-bg border border-line text-xs font-mono text-muted space-y-1.5">
-                  <div className="flex justify-between">
-                    <span>Cloud Name:</span>
-                    <span className="text-fg">dntr4xqiy</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Delivery:</span>
-                    <span className="italic font-medium text-accent">Global Edge Accelerated</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Direct Uploads:</span>
-                    <span className="text-fg">Signed & Secure</span>
-                  </div>
-                </div>
-              </Card>
-            </div>
+          {/* TAB 5: Automations (merged from the old Automations page) */}
+          <TabsContent value="automations">
+            <AutomationsPanel />
           </TabsContent>
         </Tabs>
       )}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-96 rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
   );
 }

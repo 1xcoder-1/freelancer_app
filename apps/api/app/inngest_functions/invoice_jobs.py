@@ -42,14 +42,14 @@ async def mark_overdue_invoices(session, now: datetime | None = None) -> dict:
     fn_id="invoice.overdue-scan",
     trigger=inngest.TriggerCron(cron="0 6 * * *"),
 )
-async def invoice_overdue_scan(ctx: inngest.Context, step: inngest.Step) -> dict:
+async def invoice_overdue_scan(ctx: inngest.Context) -> dict:
     """Daily sweep: mark past-due 'sent' invoices as 'overdue'."""
 
     async def _mark() -> dict:
         async with AsyncSessionLocal() as session:
             return await mark_overdue_invoices(session)
 
-    result = await step.run("mark-overdue-invoices", _mark)
+    result = await ctx.step.run("mark-overdue-invoices", _mark)
     ctx.logger.info(f"Overdue scan finished: {result['marked_overdue']} invoice(s) marked")
     return result
 
@@ -58,7 +58,7 @@ async def invoice_overdue_scan(ctx: inngest.Context, step: inngest.Step) -> dict
     fn_id="invoice.reminder-4d",
     trigger=inngest.TriggerEvent(event="invoice.sent"),
 )
-async def invoice_reminder_4d(ctx: inngest.Context, step: inngest.Step) -> dict:
+async def invoice_reminder_4d(ctx: inngest.Context) -> dict:
     """Sleep until 4 days past the due date, then email a payment reminder."""
     data = dict(ctx.event.data)
     invoice_id = str(data.get("invoice_id", ""))
@@ -71,7 +71,7 @@ async def invoice_reminder_4d(ctx: inngest.Context, step: inngest.Step) -> dict:
         due = datetime.utcnow() + timedelta(days=14)
     wake_at = due + timedelta(days=REMINDER_GRACE_DAYS)
     if wake_at > datetime.utcnow():
-        await step.sleep_until("wait-until-4-days-past-due", wake_at)
+        await ctx.step.sleep_until("wait-until-4-days-past-due", wake_at)
 
     async def _check() -> dict:
         async with AsyncSessionLocal() as session:
@@ -91,7 +91,7 @@ async def invoice_reminder_4d(ctx: inngest.Context, step: inngest.Step) -> dict:
                 "due_date": inv.due_date.isoformat() if inv.due_date else None,
             }
 
-    invoice = await step.run("check-still-unpaid", _check)
+    invoice = await ctx.step.run("check-still-unpaid", _check)
     if not invoice.get("send"):
         ctx.logger.info(f"Skipping invoice reminder: {invoice.get('reason')}")
         return {"skipped": True, "reason": invoice.get("reason")}
@@ -106,5 +106,5 @@ async def invoice_reminder_4d(ctx: inngest.Context, step: inngest.Step) -> dict:
         )
         return await send_email(to=invoice["client_email"], subject=subject, text=text, html=html)
 
-    result = await step.run("send-reminder-email", _send)
+    result = await ctx.step.run("send-reminder-email", _send)
     return {"sent": True, "provider": result.get("provider")}

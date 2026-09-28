@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
+import { z } from "zod";
+import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
+import { confirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Sparkles,
   Send,
@@ -16,13 +20,13 @@ import {
   Building,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getProposals,
   createProposal,
   deleteProposal,
+  updateProposalStatus,
   generateAIProposalPitch,
   getClients,
   type Proposal,
@@ -57,7 +61,7 @@ export default function ProposalsPage() {
   const clients = pageData?.clients ?? [];
 
   const handleGenerateAI = async () => {
-    if (!clientScope.trim()) return;
+    if (!validateOrToast(z.object({ clientScope: nameSchema("Project scope", 1000), targetBudget: moneySchema("Target budget") }), { clientScope, targetBudget: Number(targetBudget) })) return;
     try {
       setIsGenerating(true);
       const token = (await getToken()) || undefined;
@@ -72,7 +76,11 @@ export default function ProposalsPage() {
   };
 
   const handleSaveProposal = async () => {
-    if (!generatedPitch.trim()) return;
+    if (!validateOrToast(z.object({
+      clientScope: nameSchema("Project scope", 1000),
+      pitch: z.string().trim().min(1, "Generate a pitch before saving"),
+      budget: moneySchema("Budget"),
+    }), { clientScope, pitch: generatedPitch, budget: Number(targetBudget) })) return;
     try {
       setIsSaving(true);
       const token = (await getToken()) || undefined;
@@ -92,21 +100,41 @@ export default function ProposalsPage() {
       setProposalTitle("");
       setSelectedClientId("");
       loadData();
+      toast.success("Proposal saved");
     } catch (err) {
       console.error("Failed to save proposal:", err);
+      toast.error("Could not save proposal");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this proposal?")) return;
+    const ok = await confirmDialog({
+      title: "Delete proposal",
+      message: "This proposal will be removed. Any link already sent to the client will stop working.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const token = (await getToken()) || undefined;
       await deleteProposal(id, token);
       loadData();
+      toast.success("Proposal deleted");
     } catch (err) {
       console.error("Failed to delete proposal:", err);
+      toast.error("Could not delete proposal");
+    }
+  };
+
+  const handleSetStatus = async (id: string, statusVal: "draft" | "sent" | "accepted" | "declined") => {
+    try {
+      const token = (await getToken()) || undefined;
+      await updateProposalStatus(id, statusVal, token);
+      loadData();
+    } catch (err) {
+      console.error("Failed to update proposal status:", err);
     }
   };
 
@@ -122,13 +150,10 @@ export default function ProposalsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Proposals & AI Pitch Generator</h1>
-            <Badge className="bg-accent-soft text-accent border-line-strong font-mono text-xs">
-              🤖 Neon DB Connected
-            </Badge>
+            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Proposals</h1>
           </div>
           <p className="text-muted text-sm mt-1">
-            Write high-converting client proposals, persist them to database, and track deal closures.
+            Write winning proposals for new clients, save them, and mark deals as won.
           </p>
         </div>
 
@@ -245,7 +270,7 @@ export default function ProposalsPage() {
                   className="w-full bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
                 >
                   <Send className="w-4 h-4 mr-1.5" />
-                  {isSaving ? "Saving to Neon DB..." : "Save Proposal to Database"}
+                  {isSaving ? "Saving..." : "Save Proposal"}
                 </Button>
               </div>
             )}
@@ -255,9 +280,6 @@ export default function ProposalsPage() {
           <Card className="bg-card border-line p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-fg">Saved Proposals ({proposals.length})</h3>
-              <Badge variant="outline" className="text-[10px] text-muted border-line">
-                PostgreSQL Live
-              </Badge>
             </div>
 
             {proposals.length > 0 ? (
@@ -278,9 +300,24 @@ export default function ProposalsPage() {
                         </p>
                       </div>
 
-                      <Badge variant="outline" className="text-[10px] bg-accent-soft text-accent border-line-strong uppercase">
-                        {p.status}
-                      </Badge>
+                      <select
+                        value={p.status}
+                        onChange={(e) => handleSetStatus(p.id, e.target.value as "draft" | "sent" | "accepted" | "declined")}
+                        className={
+                          "text-[10px] uppercase font-semibold rounded-lg border px-2 py-1 bg-bg focus:outline-none " +
+                          (p.status === "accepted"
+                            ? "text-accent border-accent/30"
+                            : p.status === "declined"
+                              ? "text-danger border-danger/30"
+                              : "text-muted border-line")
+                        }
+                        title="Update proposal status"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="sent">Sent</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="declined">Declined</option>
+                      </select>
                     </div>
 
                     <p className="text-xs text-fg line-clamp-2 font-mono bg-card p-2 rounded-lg border border-line">
@@ -320,7 +357,7 @@ export default function ProposalsPage() {
               </div>
             ) : (
               <div className="text-center py-16 text-faint text-xs">
-                No proposals in database yet. Use the AI generator on the left to create and save your first proposal.
+                No saved proposals yet. Write one on the left and press Save.
               </div>
             )}
           </Card>

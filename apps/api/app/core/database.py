@@ -86,6 +86,10 @@ async def init_db():
         
         # In development, auto-sync any newly added columns in models to the database
         if engine.dialect.name == "postgresql" and settings.APP_ENV.strip().lower() in ("development", "dev", "local"):
+            # Retired columns (features removed from the models) are dropped here
+            # once; DROP COLUMN IF EXISTS keeps it a no-op on fresh databases.
+            for _table, _column in (("projects", "budgeted_hours"),):
+                await conn.execute(text(f"ALTER TABLE {_table} DROP COLUMN IF EXISTS {_column};"))
             for table_name, table in Base.metadata.tables.items():
                 res = await conn.execute(text(f"""
                     SELECT column_name 

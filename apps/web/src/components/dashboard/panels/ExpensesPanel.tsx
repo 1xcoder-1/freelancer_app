@@ -4,13 +4,25 @@ import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Plus, Trash2, Receipt, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getExpenses, createExpense, deleteExpense, type Expense } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { confirmDialog } from "@/components/common/ConfirmDialog";
+import { toast } from "sonner";
+import { z } from "zod";
+import { validateOrToast, nameSchema } from "@/lib/validation";
 
-export default function TaxesPage() {
+const expenseSchema = z.object({
+  category: nameSchema("Category"),
+  amount: z
+    .number({ message: "Amount must be a number" })
+    .positive("Amount must be greater than 0")
+    .max(10_000_000, "Amount looks too large"),
+  description: nameSchema("Description", 300),
+});
+
+export function ExpensesPanel() {
   const { getToken } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [category, setCategory] = useState("Software & Subscriptions");
@@ -31,6 +43,7 @@ export default function TaxesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateOrToast(expenseSchema, { category, amount: Number(amount), description })) return;
     try {
       const token = (await getToken()) || undefined;
       await createExpense({
@@ -42,19 +55,30 @@ export default function TaxesPage() {
       setDescription("");
       invalidateCache("dashboard:data");
       loadData();
+      toast.success("Expense added");
     } catch (err) {
       console.error("Error saving expense:", err);
+      toast.error("Could not add expense");
     }
   };
 
   const handleDelete = async (id: string) => {
+    const ok = await confirmDialog({
+      title: "Delete expense",
+      message: "This expense will be removed from your records and your tax deductions will change.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const token = (await getToken()) || undefined;
       await deleteExpense(id, token);
       invalidateCache("dashboard:data");
       loadData();
+      toast.success("Expense deleted");
     } catch (err) {
       console.error("Error deleting expense:", err);
+      toast.error("Could not delete expense");
     }
   };
 
@@ -63,13 +87,10 @@ export default function TaxesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Expenses & Tax Deductions Engine</h1>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs">
-              Schedule C Categorizer
-            </Badge>
+            <h2 className="font-display text-lg font-bold tracking-tight text-fg">Expenses</h2>
           </div>
           <p className="text-muted text-sm mt-1">
-            Log business write-offs with Cloudinary receipt scanning and calculate quarterly tax reserves.
+            Write down what you spent on business stuff. It lowers your tax bill.
           </p>
         </div>
 
@@ -85,7 +106,7 @@ export default function TaxesPage() {
             className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
           >
             <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Log Business Expense
+            Add Expense
           </Button>
         </div>
       </div>
@@ -99,15 +120,13 @@ export default function TaxesPage() {
         ) : (
           <>
             <Card className="bg-card border-line p-6 space-y-1">
-              <span className="text-xs font-semibold text-muted">Total Logged Deductions (Write-Offs)</span>
+              <span className="text-xs font-semibold text-muted">Total spent this year</span>
               <div className="font-display text-[26px] font-bold tracking-tight text-fg">${totalDeductions.toFixed(2)}</div>
-              <p className="text-xs text-faint font-mono">Stored in Neon PostgreSQL</p>
             </Card>
 
             <Card className="bg-card border-line p-6 space-y-1">
-              <span className="text-xs font-semibold text-muted">Estimated Tax Savings (25% Bracket)</span>
+              <span className="text-xs font-semibold text-muted">Tax you likely save (at 25%)</span>
               <div className="text-3xl font-bold text-accent">${estimatedTaxReserve.toFixed(2)}</div>
-              <p className="text-xs text-faint font-mono">Saved in your pocket</p>
             </Card>
           </>
         )}
@@ -157,9 +176,9 @@ export default function TaxesPage() {
       ) : (
         <Card className="bg-card border-dashed border-line p-12 text-center">
           <Receipt className="w-12 h-12 text-faint mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-fg">No Expenses Logged Yet</h3>
+          <h3 className="text-lg font-semibold text-fg">No expenses yet</h3>
           <p className="text-sm text-faint mt-1 max-w-md mx-auto">
-            Log software subscriptions, hardware, internet, and office expenses to reduce your taxes.
+            Add software, internet, hardware or office costs here — they count as tax deductions.
           </p>
         </Card>
       )}
@@ -168,12 +187,12 @@ export default function TaxesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <Card className="w-full max-w-md bg-card border-line p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
-              <h3 className="text-lg font-bold text-fg">Log Expense</h3>
+              <h3 className="text-lg font-bold text-fg">Add expense</h3>
               <button onClick={() => setShowModal(false)} className="text-muted hover:text-fg text-sm">✕</button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-muted">Tax Category</label>
+                <label className="text-xs font-semibold text-muted">What was it for?</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -197,7 +216,7 @@ export default function TaxesPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted">Description</label>
+                <label className="text-xs font-semibold text-muted">Note (optional)</label>
                 <input
                   type="text"
                   value={description}

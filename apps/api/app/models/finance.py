@@ -3,6 +3,28 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from app.models.base import Base, TimestampMixin
 
+class TimerSession(Base, TimestampMixin):
+    """A live stopwatch run, persisted so tracking survives a refresh, a closed
+    tab or a different device.
+
+    The server clock owns the duration: elapsed time is derived from
+    `started_at`/`paused_at`, never from what the browser remembered. Stopping
+    a session writes exactly one TimeEntry and marks the session ended.
+    """
+    __tablename__ = "timer_sessions"
+
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=True)
+    is_billable: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_running: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Set while paused: elapsed seconds up to this instant stay frozen in
+    # `accumulated_seconds` and the live clock stops counting.
+    paused_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    accumulated_seconds: Mapped[int] = mapped_column(default=0)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
 class TimeEntry(Base, TimestampMixin):
     __tablename__ = "time_entries"
 
@@ -28,6 +50,10 @@ class Invoice(Base, TimestampMixin):
     due_date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(Text, nullable=True)
+    # Real money-in timestamp, set by the status endpoint when an invoice moves
+    # to "paid". Cash-flow analytics fall back to updated_at for rows paid
+    # before this column existed (COALESCE in the queries).
+    paid_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     items: Mapped[list["InvoiceItem"]] = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
 

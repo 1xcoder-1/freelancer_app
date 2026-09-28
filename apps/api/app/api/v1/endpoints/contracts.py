@@ -6,6 +6,7 @@ from datetime import datetime
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
+from app.core.inngest_client import emit
 from app.models.contract import Contract
 from app.models.project import Project
 from app.models.client import Client
@@ -18,6 +19,24 @@ from app.schemas.domain import (
 )
 
 router = APIRouter(prefix="/contracts", tags=["Contracts & E-Signatures"])
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort originating IP for the signature/read-receipt audit trail.
+
+    Behind Vercel/Cloudflare `request.client.host` is the edge proxy, so the
+    real visitor lives in the proxy-set headers. Read in trust order and never
+    used for authorisation — it is a forensic stamp only, so a spoofed value
+    can't grant access, it just gets truncated like everything else.
+    """
+    for header in ("cf-connecting-ip", "x-real-ip"):
+        value = request.headers.get(header)
+        if value:
+            return value
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "Unknown IP"
 
 # ------------------------------------------------------------------------------
 # Authenticated Workspace Contract Management
@@ -45,12 +64,16 @@ async def list_contracts(
     
     projects_map = {}
     if project_ids:
-        p_res = await db.execute(select(Project).where(Project.id.in_(project_ids)))
+        p_res = await db.execute(
+            select(Project).where(Project.id.in_(project_ids), Project.workspace_id == workspace.id)
+        )
         projects_map = {p.id: p.title for p in p_res.scalars().all()}
-        
+
     clients_map = {}
     if client_ids:
-        c_res = await db.execute(select(Client).where(Client.id.in_(client_ids)))
+        c_res = await db.execute(
+            select(Client).where(Client.id.in_(client_ids), Client.workspace_id == workspace.id)
+        )
         clients_map = {c.id: c.name for c in c_res.scalars().all()}
 
     out = []
@@ -115,10 +138,24 @@ async def create_contract(
 
     client_name = None
     if contract.client_id:
-        c_res = await db.execute(select(Client).where(Client.id == contract.client_id))
+        c_res = await db.execute(
+            select(Client).where(Client.id == contract.client_id, Client.workspace_id == workspace.id)
+        )
         cl = c_res.scalar_one_or_none()
         if cl:
             client_name = cl.name
+
+    await emit(
+        "contract.sent",
+        {
+            "contract_id": contract.id,
+            "title": contract.title,
+            "recipient_email": contract.recipient_email,
+            "recipient_name": contract.recipient_name,
+            "workspace_id": contract.workspace_id,
+            "client_id": contract.client_id,
+        },
+    )
 
     return {
         "id": contract.id,
@@ -180,7 +217,7 @@ async def get_public_contract(
 
     # Real-Time Read Receipt Trigger: Record client opened the contract
     user_agent = request.headers.get("user-agent", "Unknown Device")
-    client_ip = request.client.host if request.client else "Unknown IP"
+    client_ip = _client_ip(request)
     
     if contract.status in ("sent", "draft") and not contract.viewed_at:
         contract.status = "viewed"
@@ -233,7 +270,7 @@ async def sign_public_contract(
 
     # Record signature and legal audit stamps
     user_agent = request.headers.get("user-agent", "Unknown Device")
-    client_ip = request.client.host if request.client else "Unknown IP"
+    client_ip = _client_ip(request)
 
     contract.client_signature = payload.client_signature
     contract.client_signed_at = datetime.utcnow()
@@ -247,6 +284,18 @@ async def sign_public_contract(
 
     await db.commit()
     await db.refresh(contract)
+
+    await emit(
+        "contract.signed",
+        {
+            "contract_id": contract.id,
+            "title": contract.title,
+            "workspace_id": contract.workspace_id,
+            "client_signature": contract.client_signature,
+            "recipient_name": contract.recipient_name,
+            "recipient_email": contract.recipient_email,
+        },
+    )
 
     p_res = await db.execute(select(Project).where(Project.id == contract.project_id))
     project = p_res.scalar_one_or_none()

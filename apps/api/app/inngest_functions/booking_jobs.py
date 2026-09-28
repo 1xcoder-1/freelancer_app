@@ -14,7 +14,7 @@ REMINDER_LEAD_HOURS = 24
     fn_id="booking.reminder-24h",
     trigger=inngest.TriggerEvent(event="booking.scheduled"),
 )
-async def booking_reminder_24h(ctx: inngest.Context, step: inngest.Step) -> dict:
+async def booking_reminder_24h(ctx: inngest.Context) -> dict:
     """Sleep until 24h before the appointment, then email the client with the
     meeting link. Fires from the public scheduling endpoint, so late bookings
     (less than a day out) skip the sleep and remind immediately."""
@@ -27,7 +27,7 @@ async def booking_reminder_24h(ctx: inngest.Context, step: inngest.Step) -> dict
     appointment_time = datetime.fromisoformat(str(appt_raw))
     wake_at = appointment_time - timedelta(hours=REMINDER_LEAD_HOURS)
     if wake_at > datetime.utcnow():
-        await step.sleep_until("wait-until-24h-before", wake_at)
+        await ctx.step.sleep_until("wait-until-24h-before", wake_at)
 
     async def _send() -> dict:
         subject, text, html = build_booking_reminder_email(
@@ -38,6 +38,6 @@ async def booking_reminder_24h(ctx: inngest.Context, step: inngest.Step) -> dict
         )
         return await send_email(to=str(client_email), subject=subject, text=text, html=html)
 
-    result = await step.run("send-booking-reminder", _send)
+    result = await ctx.step.run("send-booking-reminder", _send)
     ctx.logger.info(f"Booking reminder delivered via {result.get('provider')}")
     return {"sent": True, "provider": result.get("provider")}

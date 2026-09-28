@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   ClipboardList,
   Plus,
@@ -10,14 +10,11 @@ import {
   Trash2,
   Eye,
   MessageSquare,
-  Sparkles,
-  HelpCircle,
   FileText,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -35,9 +32,18 @@ import {
   IntakeForm,
   IntakeSubmission
 } from "@/lib/api";
-import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useApiData } from "@/hooks/use-api-data";
+import { confirmDialog } from "@/components/common/ConfirmDialog";
+import { toast } from "sonner";
+import { z } from "zod";
+import { validateOrToast, nameSchema, optionalTextSchema } from "@/lib/validation";
 
-export default function IntakePage() {
+const intakeFormSchema = z.object({
+  title: nameSchema("Form title", 150),
+  description: optionalTextSchema("Description", 1000),
+});
+
+export function IntakePanel() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Modal states
@@ -98,7 +104,7 @@ export default function IntakePage() {
 
   const handleCreateForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!validateOrToast(intakeFormSchema, { title, description })) return;
 
     setCreating(true);
     try {
@@ -111,20 +117,30 @@ export default function IntakePage() {
       setDescription("");
       setCreateModalOpen(false);
       await fetchForms();
+      toast.success("Form created");
     } catch (err) {
       console.error("Failed to create form:", err);
+      toast.error("Could not create form");
     } finally {
       setCreating(false);
     }
   };
 
   const handleDeleteForm = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this intake form?")) return;
+    const ok = await confirmDialog({
+      title: "Delete form",
+      message: "This intake form and all the answers clients submitted through it will be removed permanently.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteIntakeForm(id);
       mutate((prev) => (prev ?? []).filter((f) => f.id !== id));
+      toast.success("Form deleted");
     } catch (err) {
       console.error("Failed to delete form:", err);
+      toast.error("Could not delete form");
     }
   };
 
@@ -148,13 +164,10 @@ export default function IntakePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Client Intake & Onboarding Forms</h1>
-            <Badge className="bg-accent-soft text-info border-accent/20 font-mono text-xs">
-              Live Database Connected
-            </Badge>
+            <h2 className="font-display text-lg font-bold tracking-tight text-fg">Intake forms</h2>
           </div>
           <p className="text-muted text-sm mt-1">
-            Send interactive questionnaires to collect design inspiration, project requirements, and brand assets automatically.
+            Send clients a short questionnaire to collect project details before you start.
           </p>
         </div>
 
@@ -200,9 +213,9 @@ export default function IntakePage() {
       ) : forms.length === 0 ? (
         <Card className="bg-card border-dashed border-line p-12 text-center">
           <ClipboardList className="w-12 h-12 text-faint mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-fg mb-1">No Intake Forms Created Yet</h3>
+          <h3 className="text-lg font-bold text-fg mb-1">No forms yet</h3>
           <p className="text-muted text-sm max-w-md mx-auto mb-6">
-            Create your first client discovery questionnaire to streamline onboarding and collect project briefs.
+            Build a simple questionnaire so new clients give you everything you need up front.
           </p>
           <Button
             onClick={() => setCreateModalOpen(true)}
@@ -295,15 +308,10 @@ export default function IntakePage() {
       {/* Modal: Create Intake Form */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-2xl bg-bg border-line text-fg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-info" />
-              Build Client Intake Questionnaire
-            </DialogTitle>
-            <DialogDescription className="text-muted text-xs">
-              Design the custom questions you want prospective or onboarding clients to answer.
-            </DialogDescription>
-          </DialogHeader>
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="text-lg font-bold text-fg">New intake form</h3>
+              <button onClick={() => setCreateModalOpen(false)} className="text-muted hover:text-fg text-sm">✕</button>
+            </div>
 
           <form onSubmit={handleCreateForm} className="space-y-5 py-2">
             <div className="space-y-3">
@@ -425,7 +433,7 @@ export default function IntakePage() {
                 disabled={creating}
                 className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
               >
-                {creating ? "Saving to Database..." : "Save & Generate Share Link"}
+                {creating ? "Saving..." : "Create form & get link"}
               </Button>
             </DialogFooter>
           </form>
@@ -453,9 +461,9 @@ export default function IntakePage() {
           ) : submissions.length === 0 ? (
             <div className="p-8 text-center bg-card rounded-xl border border-line my-4">
               <FileText className="w-10 h-10 text-faint mx-auto mb-2" />
-              <p className="text-fg font-semibold text-sm">No Client Submissions Yet</p>
+              <p className="text-fg font-semibold text-sm">No answers yet</p>
               <p className="text-faint text-xs mt-1">
-                Share this questionnaire with clients using the public share link to collect live answers.
+                Share the form link with your client — their answers will show up here.
               </p>
             </div>
           ) : (

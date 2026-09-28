@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
+import { z } from "zod";
+import { validateOrToast, nameSchema, moneySchema, optionalTextSchema } from "@/lib/validation";
+import { confirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Calendar as CalendarIcon,
   Clock,
   Link as LinkIcon,
-  DollarSign,
   CheckCircle2,
   Copy,
   Plus,
@@ -14,12 +17,11 @@ import {
   Users,
   Video,
   ExternalLink,
-  Sparkles,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -35,10 +37,19 @@ import {
   createBooking,
   deleteBooking,
   getBookingAppointments,
-  BookingConsultation,
-  BookingAppointment
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+
+const bookingSchema = z.object({
+  title: nameSchema("Service title", 150),
+  description: optionalTextSchema("Description", 1000),
+  durationMinutes: z
+    .number({ message: "Duration must be a number" })
+    .int("Duration must be whole minutes")
+    .positive("Duration must be at least 1 minute")
+    .max(1440, "Duration cannot exceed 24 hours"),
+  price: moneySchema("Price"),
+});
 
 export default function BookingPage() {
   const { getToken } = useAuth();
@@ -77,7 +88,7 @@ export default function BookingPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!validateOrToast(bookingSchema, { title, description, durationMinutes: Number(durationMinutes), price: Number(price) })) return;
 
     setCreating(true);
     try {
@@ -97,15 +108,23 @@ export default function BookingPage() {
       setCreateModalOpen(false);
       invalidateCache("dashboard:data");
       await fetchData();
+      toast.success("Service created");
     } catch (err) {
       console.error("Failed to create consultation:", err);
+      toast.error("Could not create service");
     } finally {
       setCreating(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this consultation type?")) return;
+    const ok = await confirmDialog({
+      title: "Delete service",
+      message: "This consultation type will be removed. Clients can no longer book it.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const token = (await getToken()) || undefined;
       await deleteBooking(id, token);
@@ -114,8 +133,10 @@ export default function BookingPage() {
         appointments: prev?.appointments ?? [],
       }));
       invalidateCache("dashboard:data");
+      toast.success("Service deleted");
     } catch (err) {
       console.error("Failed to delete booking:", err);
+      toast.error("Could not delete service");
     }
   };
 
@@ -125,13 +146,10 @@ export default function BookingPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Booking & Consultation Calendar</h1>
-            <Badge className="bg-info/10 text-info dark:text-info border-info/20 font-mono text-xs">
-              Live Database Connected
-            </Badge>
+            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Booking</h1>
           </div>
           <p className="text-muted text-sm mt-1">
-            Offer paid strategy sessions or free client discovery calls with automated calendar slots.
+            Let clients pick a time to talk to you — paid calls or free intro calls.
           </p>
         </div>
 
@@ -162,11 +180,11 @@ export default function BookingPage() {
         <TabsList className="bg-card border border-line p-1 rounded-xl">
           <TabsTrigger value="consultations" className="flex items-center gap-2">
             <CalendarIcon className="w-4 h-4" />
-            Booking Services ({consultations.length})
+            Services ({consultations.length})
           </TabsTrigger>
           <TabsTrigger value="appointments" className="flex items-center gap-2">
             <Users className="w-4 h-4" />
-            Scheduled Appointments ({appointments.length})
+            Upcoming meetings ({appointments.length})
           </TabsTrigger>
         </TabsList>
 
@@ -279,8 +297,7 @@ export default function BookingPage() {
         {/* TAB 2: Scheduled Appointments */}
         <TabsContent value="appointments" className="space-y-4">
           <p className="text-xs text-faint">
-            Clients automatically receive a reminder email 24 hours before their
-            meeting — powered by Smart Automations, no action needed from you.
+            Clients get a reminder email 24 hours before the meeting. You don&apos;t need to do anything.
           </p>
           {loading ? (
             <div className="space-y-3">
@@ -312,7 +329,7 @@ export default function BookingPage() {
                     </div>
                     <p className="text-xs text-info font-mono mt-0.5">{appt.client_email}</p>
                     {appt.notes && (
-                      <p className="text-xs text-muted mt-1.5 line-clamp-1 italic">"{appt.notes}"</p>
+                      <p className="text-xs text-muted mt-1.5 line-clamp-1 italic">&ldquo;{appt.notes}&rdquo;</p>
                     )}
                   </div>
 

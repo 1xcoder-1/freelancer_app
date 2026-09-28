@@ -5,6 +5,20 @@ when INNGEST_ENABLED is true. Keep this list in sync when adding job modules.
 """
 
 from app.inngest_functions.booking_jobs import booking_reminder_24h
+from app.inngest_functions.calendar_jobs import google_calendar_sync
 from app.inngest_functions.invoice_jobs import invoice_overdue_scan, invoice_reminder_4d
+from app.inngest_functions.contract_jobs import contract_reminder_3d
+from app.inngest_functions.proposal_jobs import proposal_reminder_3d
+from app.inngest_functions.project_jobs import project_status_scan
 
-functions = [invoice_overdue_scan, invoice_reminder_4d, booking_reminder_24h]
+functions = [
+    invoice_overdue_scan,
+    invoice_reminder_4d,
+    booking_reminder_24h,
+    google_calendar_sync,
+    contract_reminder_3d,
+    proposal_reminder_3d,
+    project_status_scan,
+]
+
+

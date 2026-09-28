@@ -14,10 +14,13 @@ from app.models.finance import TimeEntry
 from app.schemas.domain import (
     ProjectCreate,
     ProjectOut,
+    ProjectUpdate,
     TaskCreate,
     TaskOut,
+    TaskUpdate,
     MilestoneCreate,
     MilestoneOut,
+    MilestoneUpdate,
     PublicProjectPortalOut,
 )
 
@@ -48,6 +51,48 @@ async def _tracked_hours_map(db: AsyncSession, project_ids: list) -> dict:
     res = await db.execute(stmt)
     return {pid: round((secs or 0) / 3600.0, 1) for pid, secs in res.all()}
 
+
+async def _client_name_map(db: AsyncSession, workspace_id: str, client_ids: list) -> dict:
+    """Workspace-scoped id -> name map (never leaks other tenants' clients)."""
+    ids = [cid for cid in client_ids if cid]
+    if not ids:
+        return {}
+    res = await db.execute(
+        select(Client.id, Client.name).where(Client.id.in_(ids), Client.workspace_id == workspace_id)
+    )
+    return {cid: name for cid, name in res.all()}
+
+
+async def _project_payload(db: AsyncSession, project: Project) -> dict:
+    """Uniform ProjectOut shape (progress + real tracked hours)."""
+    clients_map = await _client_name_map(db, project.workspace_id, [project.client_id])
+    hours_map = await _tracked_hours_map(db, [project.id])
+    return {
+        "id": project.id,
+        "workspace_id": project.workspace_id,
+        "client_id": project.client_id,
+        "client_name": clients_map.get(project.client_id),
+        "title": project.title,
+        "description": project.description,
+        "status": project.status,
+        "budget": project.budget,
+        "hourly_rate": project.hourly_rate,
+        "share_token": project.share_token,
+        "progress_pct": calculate_progress(project.milestones, project.tasks, project.status),
+        "tracked_hours": hours_map.get(project.id, 0.0),
+        "tasks": project.tasks,
+        "milestones": project.milestones,
+        "created_at": project.created_at,
+    }
+
+async def _project_with_relations(db: AsyncSession, project_id: str, workspace_id: str) -> Optional[Project]:
+    res = await db.execute(
+        select(Project)
+        .options(selectinload(Project.tasks), selectinload(Project.milestones))
+        .where(Project.id == project_id, Project.workspace_id == workspace_id)
+    )
+    return res.scalar_one_or_none()
+
 # ------------------------------------------------------------------------------
 # Authenticated Workspace Projects & Milestones
 # ------------------------------------------------------------------------------
@@ -67,13 +112,10 @@ async def list_projects(
     result = await db.execute(stmt)
     projects = result.scalars().all()
 
-    # Load client names (columns-only — full ORM rows cost extra load state)
-    client_ids = [p.client_id for p in projects if p.client_id]
-    clients_map = {}
-    if client_ids:
-        c_stmt = select(Client.id, Client.name).where(Client.id.in_(client_ids))
-        c_res = await db.execute(c_stmt)
-        clients_map = {cid: name for cid, name in c_res.all()}
+    # Load client names (columns-only — full ORM rows cost extra load state).
+    # Scoped to this workspace: an unscoped IN lookup would leak other
+    # tenants' client names into our response the moment ids ever collide.
+    clients_map = await _client_name_map(db, workspace.id, [p.client_id for p in projects])
 
     # Real tracked hours per project (from logged time entries)
     hours_map = await _tracked_hours_map(db, [p.id for p in projects])
@@ -100,6 +142,7 @@ async def list_projects(
         out.append(p_dict)
     return out
 
+
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def create_project(
     payload: ProjectCreate,
@@ -107,6 +150,15 @@ async def create_project(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    # A project can only ever point at a client that lives in this workspace —
+    # without this check any authenticated user could attach arbitrary client_ids
+    # (IDOR write) and expose another tenant's client on a shared project.
+    if payload.client_id:
+        cl_res = await db.execute(
+            select(Client.id).where(Client.id == payload.client_id, Client.workspace_id == workspace.id)
+        )
+        if cl_res.scalars().first() is None:
+            raise HTTPException(status_code=400, detail="Client not found in current workspace")
     project = Project(
         workspace_id=workspace.id,
         client_id=payload.client_id,
@@ -136,7 +188,9 @@ async def create_project(
 
     client_name = None
     if full_p.client_id:
-        c_res = await db.execute(select(Client).where(Client.id == full_p.client_id))
+        c_res = await db.execute(
+            select(Client).where(Client.id == full_p.client_id, Client.workspace_id == workspace.id)
+        )
         cl = c_res.scalar_one_or_none()
         if cl:
             client_name = cl.name
@@ -212,6 +266,119 @@ async def create_task(
     await db.commit()
     await db.refresh(task)
     return task
+
+async def _get_child_in_workspace(db: AsyncSession, model, child_id: str, workspace_id: str):
+    """Fetch a Task/Milestone only when its parent project belongs to this
+    workspace — ids from another tenant must 404, never 200."""
+    res = await db.execute(
+        select(model)
+        .join(Project, model.project_id == Project.id)
+        .where(model.id == child_id, Project.workspace_id == workspace_id)
+    )
+    return res.scalar_one_or_none()
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+async def update_project(
+    project_id: str,
+    payload: ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Edits and the status lifecycle (planning → in_progress → completed/paused).
+    Without this the progress bar and the 'completed' state were unreachable."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    project = await _project_with_relations(db, project_id, workspace.id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    changes = payload.model_dump(exclude_unset=True)
+    if "client_id" in changes and changes["client_id"]:
+        cl_res = await db.execute(
+            select(Client.id).where(Client.id == changes["client_id"], Client.workspace_id == workspace.id)
+        )
+        if cl_res.scalars().first() is None:
+            raise HTTPException(status_code=400, detail="Client not found in current workspace")
+    for key, value in changes.items():
+        setattr(project, key, value)
+    await db.commit()
+
+    updated = await _project_with_relations(db, project_id, workspace.id)
+    return await _project_payload(db, updated)
+
+
+@router.patch("/{project_id}/tasks/{task_id}", response_model=TaskOut)
+async def update_task(
+    project_id: str,
+    task_id: str,
+    payload: TaskUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    task = await _get_child_in_workspace(db, Task, task_id, workspace.id)
+    if not task or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found in this project")
+
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(task, key, value)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@router.delete("/{project_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    project_id: str,
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    task = await _get_child_in_workspace(db, Task, task_id, workspace.id)
+    if not task or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found in this project")
+    await db.delete(task)
+    await db.commit()
+    return None
+
+
+@router.patch("/{project_id}/milestones/{milestone_id}", response_model=MilestoneOut)
+async def update_milestone(
+    project_id: str,
+    milestone_id: str,
+    payload: MilestoneUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Milestone check-off / amount edits — feeds progress % and the portal."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    milestone = await _get_child_in_workspace(db, Milestone, milestone_id, workspace.id)
+    if not milestone or milestone.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Milestone not found in this project")
+
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(milestone, key, value)
+    await db.commit()
+    await db.refresh(milestone)
+    return milestone
+
+
+@router.delete("/{project_id}/milestones/{milestone_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_milestone(
+    project_id: str,
+    milestone_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    milestone = await _get_child_in_workspace(db, Milestone, milestone_id, workspace.id)
+    if not milestone or milestone.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Milestone not found in this project")
+    await db.delete(milestone)
+    await db.commit()
+    return None
+
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(

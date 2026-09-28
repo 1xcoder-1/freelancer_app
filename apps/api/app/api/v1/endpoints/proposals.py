@@ -6,12 +6,14 @@ from datetime import datetime
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
+from app.core.inngest_client import emit
 from app.models.proposal import Proposal
 from app.models.client import Client
 from app.models.project import Project
 from app.schemas.domain import (
     ProposalCreate,
     ProposalOut,
+    ProposalStatusUpdate,
     ProposalAIGenerateRequest,
     ProposalAIGenerateResponse,
 )
@@ -92,6 +94,19 @@ async def create_proposal(
     await db.commit()
     await db.refresh(proposal)
 
+    if proposal.status == "sent":
+        await emit(
+            "proposal.sent",
+            {
+                "proposal_id": proposal.id,
+                "title": proposal.title,
+                "budget": proposal.budget,
+                "workspace_id": proposal.workspace_id,
+                "client_id": proposal.client_id,
+                "token": proposal.token,
+            },
+        )
+
     return {
         "id": proposal.id,
         "workspace_id": proposal.workspace_id,
@@ -106,6 +121,50 @@ async def create_proposal(
         "token": proposal.token,
         "created_at": proposal.created_at
     }
+
+@router.patch("/{proposal_id}/status", response_model=ProposalOut)
+async def update_proposal_status(
+    proposal_id: str,
+    payload: ProposalStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Accept/decline/reopen a proposal. Without this the pipeline was a
+    one-way 'sent' and the report-card win rate could never move."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    res = await db.execute(
+        select(Proposal).where(Proposal.id == proposal_id, Proposal.workspace_id == workspace.id)
+    )
+    proposal = res.scalar_one_or_none()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    proposal.status = payload.status
+    await db.commit()
+    await db.refresh(proposal)
+
+    client_name = None
+    if proposal.client_id:
+        c_res = await db.execute(
+            select(Client.name).where(Client.id == proposal.client_id, Client.workspace_id == workspace.id)
+        )
+        client_name = c_res.scalars().first()
+
+    return {
+        "id": proposal.id,
+        "workspace_id": proposal.workspace_id,
+        "client_id": proposal.client_id,
+        "client_name": client_name,
+        "project_id": proposal.project_id,
+        "title": proposal.title,
+        "client_scope": proposal.client_scope,
+        "budget": proposal.budget,
+        "status": proposal.status,
+        "pitch_content": proposal.pitch_content,
+        "token": proposal.token,
+        "created_at": proposal.created_at,
+    }
+
 
 @router.delete("/{proposal_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_proposal(

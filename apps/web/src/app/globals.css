@@ -92,6 +92,18 @@ body {
   outline-offset: 2px;
 }
 
+/* The dashboard is a UI, not a document: clicking labels, cards and buttons
+   must never park a blinking text caret (the "straight slash") in the page —
+   the layout applies select-none. Real fields always stay fully selectable and
+   editable, no matter what ancestor selection rules exist. */
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Utility to hide scrollbars on horizontal scroll strips while keeping scrollable */
 .no-scrollbar {
   -ms-overflow-style: none;

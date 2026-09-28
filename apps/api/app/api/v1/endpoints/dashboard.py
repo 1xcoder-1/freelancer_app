@@ -13,7 +13,7 @@ from app.core.workspace import get_or_create_user_workspace
 from app.api.v1.endpoints.projects import calculate_progress
 from app.models.project import Project, Task
 from app.models.client import Client
-from app.models.finance import Invoice, TimeEntry, Expense
+from app.models.finance import Invoice, TimeEntry, Expense, TimerSession
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -98,10 +98,11 @@ async def get_dashboard_overview(
     _, workspace = await get_or_create_user_workspace(db, user)
     workspace_id = workspace.id
 
-    recent_projects, (recent_invoices, total_paid_revenue), (recent_time_entries, total_duration_sec) = await asyncio.gather(
+    recent_projects, (recent_invoices, total_paid_revenue), (recent_time_entries, total_duration_sec), active_focus_timer = await asyncio.gather(
         _overview_projects(workspace_id),
         _overview_invoices(workspace_id),
         _overview_time_entries(workspace_id),
+        _overview_active_timer(workspace_id),
     )
 
     billable_hours = round(total_duration_sec / 3600.0, 1)
@@ -116,21 +117,56 @@ async def get_dashboard_overview(
         "recent_projects": recent_projects,
         "recent_invoices": recent_invoices,
         "recent_time_entries": recent_time_entries,
-        "active_focus_timer": {
-            "is_running": False,
-            "project_name": "",
-            "task_name": "",
-            "elapsed_seconds": 0,
-            "started_at": datetime.utcnow().isoformat(),
-        }
+        "active_focus_timer": active_focus_timer,
     }
 
 
-async def _client_name_map(db: AsyncSession, client_ids: List[str]) -> Dict[str, str]:
-    """id -> name for the given clients (columns-only — no full ORM rows)."""
-    if not client_ids:
+async def _overview_active_timer(workspace_id: str) -> Dict[str, Any]:
+    """The real live stopwatch (if any) so the dashboard focus widget shows the
+    truth instead of a hardcoded idle state. Reads the same TimerSession row the
+    time-tracker page drives, computing elapsed from the server clock."""
+    from datetime import datetime as _dt
+    async with AsyncSessionLocal() as s:
+        res = await s.execute(
+            select(TimerSession)
+            .where(TimerSession.workspace_id == workspace_id, TimerSession.ended_at.is_(None))
+            .order_by(TimerSession.created_at.desc())
+            .limit(1)
+        )
+        session = res.scalars().first()
+        if not session:
+            return {
+                "is_running": False,
+                "session_id": None,
+                "project_name": "",
+                "task_name": "",
+                "elapsed_seconds": 0,
+                "started_at": _dt.utcnow().isoformat(),
+            }
+        title_res = await s.execute(select(Project.title).where(Project.id == session.project_id))
+        project_name = title_res.scalars().first() or ""
+        floor = session.paused_at or session.started_at
+        running = max(0, int((_dt.utcnow() - floor).total_seconds()))
+        elapsed = max(0, session.accumulated_seconds + running)
+        return {
+            "is_running": bool(session.is_running),
+            "session_id": session.id,
+            "project_name": project_name,
+            "task_name": session.description or "",
+            "elapsed_seconds": elapsed,
+            "started_at": session.started_at.isoformat(),
+        }
+
+
+async def _client_name_map(db: AsyncSession, workspace_id: str, client_ids: List[str]) -> Dict[str, str]:
+    """id -> name for the given clients, scoped to the workspace (columns-only).
+    Unscoped lookups would leak other tenants' client names on id collision."""
+    ids = [cid for cid in client_ids if cid]
+    if not ids:
         return {}
-    c_res = await db.execute(select(Client.id, Client.name).where(Client.id.in_(client_ids)))
+    c_res = await db.execute(
+        select(Client.id, Client.name).where(Client.id.in_(ids), Client.workspace_id == workspace_id)
+    )
     return {cid: name for cid, name in c_res.all()}
 
 
@@ -145,7 +181,7 @@ async def _overview_projects(workspace_id: str):
             .limit(5)
         )
         projects = proj_res.scalars().all()
-        clients_map = await _client_name_map(s, [p.client_id for p in projects if p.client_id])
+        clients_map = await _client_name_map(s, workspace_id, [p.client_id for p in projects])
 
         hours_map: Dict[str, float] = {}
         proj_ids = [p.id for p in projects]
@@ -182,7 +218,7 @@ async def _overview_invoices(workspace_id: str):
             .limit(5)
         )
         invoices = inv_res.scalars().all()
-        clients_map = await _client_name_map(s, [i.client_id for i in invoices])
+        clients_map = await _client_name_map(s, workspace_id, [i.client_id for i in invoices])
 
         recent_invoices = []
         total_paid_revenue = 0.0

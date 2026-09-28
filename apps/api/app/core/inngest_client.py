@@ -7,6 +7,8 @@ here. When INNGEST_ENABLED is false, emit() is a no-op and the serve routes
 are never registered, so the API behaves exactly as it did without Inngest.
 """
 
+import asyncio
+
 import sentry_sdk
 from inngest import Event, Inngest, Middleware, TransformOutputResult
 
@@ -53,17 +55,28 @@ inngest_client = Inngest(
 )
 
 
+# The SDK's send() retries against an unreachable event API for ~13s before
+# raising, which is long enough to push request handlers past the frontend's
+# 15s axios timeout (e.g. create invoice with status="sent"). Cap our wait so
+# a down Dev Server / network stall delays the response by at most this much.
+_EMIT_TIMEOUT_S = 3.0
+
+
 async def emit(short: str, data: dict) -> None:
     """Send an Inngest event without ever breaking the request path.
 
     Background-job infrastructure must not turn a successful invoice/booking
-    request into a 500: send failures are logged and reported to Sentry,
-    then swallowed. No-op while INNGEST_ENABLED is false.
+    request into a 500 (or a client-side timeout): send failures and slow
+    event APIs are logged, reported to Sentry, then swallowed. No-op while
+    INNGEST_ENABLED is false.
     """
     if not settings.INNGEST_ENABLED:
         return
     try:
-        await inngest_client.send(Event(name=event_name(short), data=data))
+        await asyncio.wait_for(
+            inngest_client.send(Event(name=event_name(short), data=data)),
+            timeout=_EMIT_TIMEOUT_S,
+        )
     except Exception as e:
         print(f"Inngest emit failed (event={event_name(short)}): {e}")
         if settings.SENTRY_DSN:

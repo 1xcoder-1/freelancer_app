@@ -5,16 +5,16 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
-  Command,
   X,
-  Layers,
+  Home,
   Users,
   Clock,
-  FileText,
+  Wallet,
+  LayoutGrid,
   Sparkles,
-  Cpu,
-  DollarSign,
-  Heart,
+  Calendar,
+  IdCard,
+  Settings,
   ArrowRight,
 } from "lucide-react";
 
@@ -23,18 +23,21 @@ export function CommandMenu() {
   const [query, setQuery] = useState("");
   const router = useRouter();
 
+  // Quick jumps to the app's own sections (matches the sidebar one-word names)
   const searchableItems = [
-    { title: "Client CRM & Lead Pipeline", href: "/features#crm", category: "Features", icon: Users },
-    { title: "Multi-View Projects (Kanban, Gantt)", href: "/features#projects", category: "Features", icon: Layers },
-    { title: "Time Tracking & Pomodoro", href: "/features#time", category: "Features", icon: Clock },
-    { title: "Invoices & PDF Generation", href: "/features#finance", category: "Features", icon: FileText },
-    { title: "Windows Quick Capture (Ctrl+Shift+F)", href: "/features#desktop", category: "Features", icon: Command },
-    { title: "System Architecture (FastAPI + D1)", href: "/architecture", category: "System", icon: Cpu },
-    { title: "Book AI Copilot Assistant", href: "/ai", category: "AI", icon: Sparkles },
-    { title: "Pricing & 100% Free Core Plan", href: "/pricing", category: "Pricing", icon: DollarSign },
-    { title: "About Our Story & Manifesto", href: "/about", category: "Company", icon: Heart },
-    { title: "Sign In to Your Workspace", href: "/sign-in", category: "Auth", icon: ArrowRight },
-    { title: "Create Free Account", href: "/sign-up", category: "Auth", icon: ArrowRight },
+    { title: "Home", href: "/dashboard", category: "Go to", icon: Home },
+    { title: "Clients", href: "/dashboard/clients", category: "Go to", icon: Users },
+    { title: "Leads", href: "/dashboard/clients?tab=leads", category: "Go to", icon: Users },
+    { title: "Forms", href: "/dashboard/clients?tab=forms", category: "Go to", icon: Users },
+    { title: "Time", href: "/dashboard/time-tracker", category: "Go to", icon: Clock },
+    { title: "Projects", href: "/dashboard/projects", category: "Go to", icon: LayoutGrid },
+    { title: "Invoices", href: "/dashboard/projects?tab=invoices", category: "Go to", icon: LayoutGrid },
+    { title: "Money", href: "/dashboard/cashflow", category: "Go to", icon: Wallet },
+    { title: "Expenses", href: "/dashboard/cashflow?tab=expenses", category: "Go to", icon: Wallet },
+    { title: "Proposals", href: "/dashboard/proposals", category: "Go to", icon: Sparkles },
+    { title: "Booking", href: "/dashboard/booking", category: "Go to", icon: Calendar },
+    { title: "Profile", href: "/dashboard/report-card", category: "Go to", icon: IdCard },
+    { title: "Settings", href: "/dashboard/settings", category: "Go to", icon: Settings },
   ];
 
   // Toggle on Ctrl+K / Cmd+K
@@ -114,7 +117,7 @@ export function CommandMenu() {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search modules, features, architecture..."
+                  placeholder="Search sections..."
                   className="w-full py-4 bg-transparent text-sm text-fg placeholder:text-faint border-none outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none ring-0"
                   autoFocus
                 />

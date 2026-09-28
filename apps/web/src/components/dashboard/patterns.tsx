@@ -37,40 +37,64 @@ export function StatCard({
   label,
   value,
   icon: Icon,
+  badge,
+  subtext,
   rows,
   className,
 }: {
   label: string;
   value: React.ReactNode;
   icon?: React.ElementType;
+  badge?: React.ReactNode;
+  subtext?: string;
   rows?: { text: string; dot?: "ok" | "danger" | "warn" | "info" }[];
+  tone?: string;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "bg-card border border-line rounded-xl p-5 flex flex-col min-h-[148px] shadow-sm",
+        "bg-card border border-line hover:border-line-strong rounded-2xl p-5 sm:p-6 flex flex-col justify-between min-h-[150px] shadow-xs hover:shadow-sm transition-all duration-200",
         className
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-[17px] font-medium text-fg leading-snug max-w-[80%]">
+      {/* Top Header Row */}
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[13px] sm:text-[14px] font-medium text-muted tracking-tight">
           {label}
         </span>
-        {Icon && <Icon className="w-5 h-5 text-fg shrink-0" />}
+        {Icon && (
+          <div className="p-2.5 rounded-xl bg-surface text-fg border border-line/70 shrink-0">
+            <Icon className="w-4 h-4" />
+          </div>
+        )}
       </div>
-      <div className="font-display text-[32px] font-semibold text-fg mt-1 leading-none">
-        {value}
+
+      {/* Primary Value */}
+      <div className="my-2.5">
+        <div className="font-sans text-[28px] sm:text-[32px] font-bold tracking-tight text-fg leading-none truncate">
+          {value}
+        </div>
       </div>
+
+      {/* Bottom Row: Subtext & Badge / Metadata */}
+      {(subtext || badge) && (
+        <div className="flex items-center justify-between gap-2 text-xs text-muted pt-2.5 border-t border-line/50">
+          <span className="truncate text-faint">{subtext}</span>
+          {badge && <div className="shrink-0">{badge}</div>}
+        </div>
+      )}
+
+      {/* Optional Legacy rows if passed */}
       {rows && rows.length > 0 && (
-        <div className="mt-auto pt-4 space-y-1">
+        <div className="mt-auto pt-3 border-t border-line/50 space-y-1">
           {rows.map((r) => (
-            <div key={r.text} className="flex items-center gap-1.5 text-xs text-muted">
-              <span className="font-mono">{r.text}</span>
+            <div key={r.text} className="flex items-center justify-between text-xs text-muted">
+              <span className="font-mono text-[11px] truncate">{r.text}</span>
               {r.dot && (
                 <span
                   className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
+                    "w-1.5 h-1.5 rounded-full shrink-0 ml-1.5",
                     r.dot === "ok" && "bg-ok",
                     r.dot === "danger" && "bg-danger",
                     r.dot === "warn" && "bg-warn",

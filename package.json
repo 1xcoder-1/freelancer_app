@@ -11,6 +11,7 @@
     "dev:jobs": "inngest dev -u http://127.0.0.1:8000/api/inngest",
     "build:web": "pnpm --filter web build",
     "build:desktop": "pnpm --filter desktop build",
+    "db:migrate": "apps\\api\\.venv\\Scripts\\python.exe -m app.core.migrate",
     "graphify": "graphify . --code-only"
   },
   "devDependencies": {

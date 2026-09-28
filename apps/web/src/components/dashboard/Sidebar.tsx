@@ -7,17 +7,15 @@ import { useUser } from "@clerk/nextjs";
 import { motion } from "framer-motion";
 import {
   Home,
-  Receipt,
   Clock,
   Users,
+  Wallet,
   LayoutGrid,
   Sparkles,
-  ClipboardList,
   Calendar,
-  Calculator,
   IdCard,
+  PenLine,
   Settings,
-  Zap,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -26,49 +24,71 @@ interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
-  betaTag?: string;
 }
 
+// One-word labels on purpose: the app was simplified so every freelancer
+// (even a first-timer) knows what each section is at a glance. Leads, forms,
+// invoices, expenses and automations now live inside Clients / Projects /
+// Money / Settings.
 const navItems: NavItem[] = [
-  { title: "Dashboard", href: "/dashboard", icon: Home },
-  { title: "Invoices & Escrow", href: "/dashboard/invoices", icon: Receipt },
-  { title: "Time Tracking", href: "/dashboard/time-tracker", icon: Clock },
-  { title: "Clients CRM", href: "/dashboard/clients", icon: Users },
-  { title: "Projects & Tasks", href: "/dashboard/projects", icon: LayoutGrid },
-  { title: "Proposals & AI", href: "/dashboard/proposals", icon: Sparkles, betaTag: "AI" },
-  { title: "Client Intake", href: "/dashboard/intake", icon: ClipboardList, betaTag: "BETA" },
-  { title: "Booking Calendar", href: "/dashboard/booking", icon: Calendar },
-  { title: "Smart Automations", href: "/dashboard/automations", icon: Zap, betaTag: "BETA" },
-  { title: "Expenses & Taxes", href: "/dashboard/taxes", icon: Calculator },
-  { title: "Report Card", href: "/dashboard/report-card", icon: IdCard },
+  { title: "Home", href: "/dashboard", icon: Home },
+  { title: "Clients", href: "/dashboard/clients", icon: Users },
+  { title: "Time", href: "/dashboard/time-tracker", icon: Clock },
+  { title: "Projects", href: "/dashboard/projects", icon: LayoutGrid },
+  { title: "Money", href: "/dashboard/cashflow", icon: Wallet },
+  { title: "Proposals", href: "/dashboard/proposals", icon: Sparkles },
+  { title: "Booking", href: "/dashboard/booking", icon: Calendar },
+  { title: "Planner", href: "/dashboard/planner", icon: PenLine },
+  { title: "Profile", href: "/dashboard/report-card", icon: IdCard },
   { title: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export function DashboardSidebar() {
   const pathname = usePathname();
   const { user } = useUser();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Auto-collapse on small screens
+  // Small screens: sidebar opens as an overlay ALWAYS in collapsed (icon-only)
+  // format so it never eats the dashboard content width. Expanding it on
+  // mobile floats it above the page with a dismiss backdrop.
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setIsCollapsed(true);
-      }
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const apply = () => {
+      setIsMobile(mq.matches);
+      // Mobile opens collapsed (icons only); desktop opens expanded
+      setIsCollapsed(mq.matches);
     };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, []);
+
+  // Collapse the mobile overlay whenever navigation happens
+  useEffect(() => {
+    if (isMobile) setIsCollapsed(true);
+  }, [pathname, isMobile]);
 
   const userName = user?.firstName || user?.fullName || "Freelancer";
 
   return (
-    <motion.aside
-      animate={{ width: isCollapsed ? 72 : 248 }}
-      transition={{ duration: 0.22, ease: "easeInOut" }}
-      className="relative flex flex-col h-screen border-r border-dashed border-line bg-card select-none z-40 shrink-0"
-    >
+    <>
+      {/* Dismiss backdrop for the expanded mobile overlay */}
+      {isMobile && !isCollapsed && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setIsCollapsed(true)}
+          aria-hidden
+        />
+      )}
+
+      <motion.aside
+        animate={{ width: isCollapsed ? 72 : 248 }}
+        transition={{ duration: 0.22, ease: "easeInOut" }}
+        className={`relative flex flex-col h-screen border-r border-dashed border-line bg-card select-none z-50 ${
+          isMobile ? "fixed inset-y-0 left-0 shadow-2xl shadow-black/50" : "shrink-0"
+        }`}
+      >
       {/* Brand Header — bold wordmark like the reference */}
       <div className="flex items-center h-16 px-5 border-b border-dashed border-line">
         <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
@@ -112,12 +132,6 @@ export function DashboardSidebar() {
                 {!isCollapsed && (
                   <div className="flex items-center justify-between flex-1 overflow-hidden">
                     <span className="truncate">{item.title}</span>
-                    {item.betaTag && (
-                      <span className="inline-flex items-center gap-1.5 text-[9px] font-bold text-muted font-mono tracking-wide ml-2 shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                        {item.betaTag}
-                      </span>
-                    )}
                   </div>
                 )}
               </div>
@@ -177,6 +191,7 @@ export function DashboardSidebar() {
           </div>
         )}
       </div>
-    </motion.aside>
+      </motion.aside>
+    </>
   );
 }

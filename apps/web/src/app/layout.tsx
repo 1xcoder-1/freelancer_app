@@ -7,6 +7,8 @@ import { CookieBanner } from "@/components/common/CookieBanner";
 import { FloatingContact } from "@/components/common/FloatingContact";
 import { UtmTracker } from "@/components/providers/UtmTracker";
 import { SentryProvider } from "@/components/providers/SentryProvider";
+import { AppToaster } from "@/components/common/AppToaster";
+import { ConfirmDialogHost } from "@/components/common/ConfirmDialog";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -103,10 +105,16 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
+      {/* The pre-paint theme script below mutates <html> classList before
+          hydration, which React can never see coming — suppressHydrationWarning
+          on this exact element is Next's documented pattern for theme classes
+          (it applies only to this element's own attributes, not children).
+          "dark" ships in the SSR class because dark is the default theme. */}
       <html
         lang="en"
         data-scroll-behavior="smooth"
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${schibsted.variable} ${caveat.variable} h-full antialiased`}
+        suppressHydrationWarning
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${schibsted.variable} ${caveat.variable} dark h-full antialiased`}
       >
         <head>
           {/* Apply saved theme before first paint (no flash). Default: dark. */}
@@ -149,6 +157,11 @@ export default function RootLayout({
 
             {/* GDPR Cookie Consent Banner */}
             <CookieBanner />
+
+            {/* App-wide toast notifications + centered in-app confirm dialog
+                (replaces all native browser alert/confirm popups) */}
+            <AppToaster />
+            <ConfirmDialogHost />
           </SentryProvider>
         </body>
       </html>

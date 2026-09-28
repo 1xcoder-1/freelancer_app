@@ -1,8 +1,9 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
 import {
   FolderKanban,
   Plus,
@@ -23,6 +24,10 @@ import {
   FileText,
   AlertCircle,
   Building2,
+  Receipt,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,17 +36,43 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   getProjects,
   createProject,
+  updateProject,
   getClients,
   deleteProject,
   getContracts,
   createContract,
   deleteContract,
+  createTask,
+  updateTask,
+  deleteTask,
+  updateMilestone,
   type Project,
   type Client,
   type Contract,
 } from "@/lib/api";
 import { reportLoadError } from "@/lib/report";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { confirmDialog } from "@/components/common/ConfirmDialog";
+import { InvoicesPanel } from "@/components/dashboard/panels/InvoicesPanel";
+import { toast } from "sonner";
+import { z } from "zod";
+import { validateOrToast, nameSchema, moneySchema, optionalTextSchema, optionalEmailSchema } from "@/lib/validation";
+
+const projectSchema = z.object({
+  title: nameSchema("Project title", 120),
+  budget: moneySchema("Budget"),
+  description: optionalTextSchema("Description", 4000),
+});
+
+const taskSchema = z.object({
+  title: nameSchema("Task", 200),
+});
+
+const contractSchema = z.object({
+  title: nameSchema("Contract title", 200),
+  content: z.string().trim().min(1, "Contract content is required"),
+  recipient_email: optionalEmailSchema,
+});
 
 const CONTRACT_TEMPLATES = [
   {
@@ -69,7 +100,7 @@ Either party may terminate this agreement with 14 calendar days written notice. 
   },
   {
     id: "fixed_scope",
-    name: "Fixed-Price Milestone & Escrow Contract",
+    name: "Fixed-Price Milestone Contract",
     description: "Milestone-backed contract requiring deposits before each sprint or deliverable.",
     content: `# FIXED-PRICE MILESTONE & DELIVERABLES AGREEMENT
 
@@ -114,15 +145,30 @@ Retainer fees are billed at the beginning of each monthly cycle and entitle the 
   },
 ];
 
-export default function ProjectsPage() {
+function ProjectsContent() {
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<"projects" | "contracts">("projects");
+  const [activeTab, setActiveTab] = useState<"projects" | "contracts" | "invoices">("projects");
+
+  // Deep links like /dashboard/projects?tab=invoices (used by the old
+  // invoices route redirect and dashboard links) open the matching tab.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "contracts" || tab === "invoices" || tab === "projects") {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   // Modals
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showCreateContractModal, setShowCreateContractModal] = useState(false);
   const [selectedProjectForContract, setSelectedProjectForContract] = useState<string>("");
   const [viewingContract, setViewingContract] = useState<Contract | null>(null);
+
+  // Task & milestone checklist (inline, persisted via /projects PATCH)
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // Project Form
   const [title, setTitle] = useState("");
@@ -169,6 +215,7 @@ export default function ProjectsPage() {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateOrToast(projectSchema, { title, budget: Number(budget), description })) return;
     try {
       const token = (await getToken()) || undefined;
       await createProject(
@@ -186,29 +233,113 @@ export default function ProjectsPage() {
       setDescription("");
       invalidateCache("dashboard:data");
       loadData();
+      toast.success("Project created");
     } catch (err) {
       console.error("Error creating project:", err);
+      toast.error("Could not create project");
     }
   };
 
   const handleDeleteProject = async (id: string) => {
-    if (!confirm("Delete this project and all attached contracts?")) return;
+    const ok = await confirmDialog({
+      title: "Delete project",
+      message: "This project and all its contracts, tasks and milestones will be removed permanently. Tracked time stays in your records.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const token = (await getToken()) || undefined;
       await deleteProject(id, token);
       invalidateCache("dashboard:data");
       loadData();
+      toast.success("Project deleted");
     } catch (err) {
       console.error("Error deleting project:", err);
+      toast.error("Could not delete project");
+    }
+  };
+
+  const afterProjectMutation = () => {
+    invalidateCache("dashboard:data");
+    loadData();
+  };
+
+  const handleAddTask = async (projectId: string) => {
+    if (!validateOrToast(taskSchema, { title: newTaskTitle })) return;
+    setBusyId("new");
+    try {
+      const token = (await getToken()) || undefined;
+      await createTask(projectId, { title: newTaskTitle.trim() }, token);
+      setNewTaskTitle("");
+      afterProjectMutation();
+    } catch (err) {
+      console.error("Error adding task:", err);
+      toast.error("Could not add task");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleToggleTask = async (projectId: string, taskId: string, current: string) => {
+    setBusyId(taskId);
+    try {
+      const token = (await getToken()) || undefined;
+      await updateTask(projectId, taskId, { status: current === "done" ? "todo" : "done" }, token);
+      afterProjectMutation();
+    } catch (err) {
+      console.error("Error updating task:", err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDeleteTask = async (projectId: string, taskId: string) => {
+    const ok = await confirmDialog({
+      title: "Delete task",
+      message: "This task will be removed from the project.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyId(taskId);
+    try {
+      const token = (await getToken()) || undefined;
+      await deleteTask(projectId, taskId, token);
+      afterProjectMutation();
+      toast.success("Task deleted");
+    } catch (err) {
+      console.error("Error deleting task:", err);
+      toast.error("Could not delete task");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleToggleMilestone = async (projectId: string, milestoneId: string, current: boolean) => {
+    setBusyId(milestoneId);
+    try {
+      const token = (await getToken()) || undefined;
+      await updateMilestone(projectId, milestoneId, { is_completed: !current }, token);
+      afterProjectMutation();
+    } catch (err) {
+      console.error("Error updating milestone:", err);
+    } finally {
+      setBusyId(null);
     }
   };
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contractProjectId) {
-      alert("Please select a project for this contract.");
+      toast.error("Please select a project for this contract");
       return;
     }
+    if (!validateOrToast(contractSchema, {
+      title: contractTitle,
+      content: contractContent,
+      recipient_email: contractRecipientEmail,
+    })) return;
     try {
       const token = (await getToken()) || undefined;
       await createContract(
@@ -226,20 +357,30 @@ export default function ProjectsPage() {
       invalidateCache("dashboard:data");
       loadData();
       setActiveTab("contracts");
+      toast.success("Contract created");
     } catch (err) {
       console.error("Error creating contract:", err);
+      toast.error("Could not create contract");
     }
   };
 
   const handleDeleteContract = async (id: string) => {
-    if (!confirm("Delete this contract?")) return;
+    const ok = await confirmDialog({
+      title: "Delete contract",
+      message: "This contract and its signature link will stop working for the client. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const token = (await getToken()) || undefined;
       await deleteContract(id, token);
       invalidateCache("dashboard:data");
       loadData();
+      toast.success("Contract deleted");
     } catch (err) {
       console.error("Error deleting contract:", err);
+      toast.error("Could not delete contract");
     }
   };
 
@@ -269,13 +410,13 @@ export default function ProjectsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Projects & Contracts Hub</h1>
+            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Projects</h1>
             <Badge className="bg-accent-soft text-info border-accent/20 font-mono text-xs">
               {loading ? "Syncing..." : `${projects.length} Projects • ${contracts.length} Contracts`}
             </Badge>
           </div>
           <p className="text-muted text-sm mt-1">
-            Track milestones, deliverables, and send signable contracts with live read-receipts.
+            Run each job in one place: tasks, milestones, invoices, and contracts the client can sign.
           </p>
         </div>
 
@@ -300,7 +441,7 @@ export default function ProjectsPage() {
               <Plus className="w-3.5 h-3.5 mr-1.5" />
               New Project
             </Button>
-          ) : (
+          ) : activeTab === "contracts" ? (
             <Button
               size="sm"
               onClick={() => setShowCreateContractModal(true)}
@@ -309,7 +450,7 @@ export default function ProjectsPage() {
               <FileSignature className="w-3.5 h-3.5 mr-1.5" />
               Create & Send Contract
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -341,7 +482,21 @@ export default function ProjectsPage() {
             </span>
           )}
         </button>
+
+        <button
+          onClick={() => setActiveTab("invoices")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === "invoices"
+            ? "bg-accent-soft text-info border border-accent/30"
+            : "text-muted hover:text-fg hover:bg-surface"
+            }`}
+        >
+          <Receipt className="w-4 h-4" />
+          Invoices
+        </button>
       </div>
+
+      {/* TAB 3: INVOICES */}
+      {activeTab === "invoices" && <InvoicesPanel />}
 
       {/* TAB 1: PROJECTS */}
       {activeTab === "projects" && (
@@ -392,8 +547,96 @@ export default function ProjectsPage() {
 
                       <div className="mt-4 flex items-center justify-between text-xs text-muted font-mono">
                         <span>Budget: ${p.budget}</span>
-                        <span>Tasks: {p.tasks?.length || 0}</span>
+                        <span>{p.tasks?.filter((t) => t.status === "done").length || 0}/{p.tasks?.length || 0} tasks done</span>
                       </div>
+
+                      <div className="w-full bg-surface rounded-full h-1.5 overflow-hidden mt-2">
+                        <div className="bg-accent h-full rounded-full transition-all" style={{ width: `${p.progress_pct ?? 0}%` }} />
+                      </div>
+
+                      {/* Expandable task & milestone checklist */}
+                      <button
+                        onClick={() => setExpandedProjectId((cur) => (cur === p.id ? null : p.id))}
+                        className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-info hover:underline"
+                      >
+                        {expandedProjectId === p.id ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        Tasks & Milestones
+                      </button>
+
+                      {expandedProjectId === p.id && (
+                        <div className="mt-3 pt-3 border-t border-line space-y-4 animate-in fade-in">
+                          {/* Milestones */}
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] uppercase tracking-wide text-faint font-semibold">Milestones</p>
+                            {(p.milestones?.length ?? 0) > 0 ? p.milestones.map((m) => (
+                              <label key={m.id} className="flex items-center gap-2 text-xs cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={m.is_completed}
+                                  onChange={() => handleToggleMilestone(p.id, m.id, m.is_completed)}
+                                  className="accent-[var(--accent)] w-4 h-4"
+                                />
+                                <span className={m.is_completed ? "line-through text-faint" : "text-fg"}>{m.title}</span>
+                                {m.amount > 0 && <span className="ml-auto text-muted font-mono">${m.amount}</span>}
+                              </label>
+                            )) : (
+                              <p className="text-xs text-faint">No milestones.</p>
+                            )}
+                          </div>
+
+                          {/* Tasks */}
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] uppercase tracking-wide text-faint font-semibold">Tasks</p>
+                            {(p.tasks?.length ?? 0) > 0 ? p.tasks.map((t) => (
+                              <div key={t.id} className="flex items-center gap-2 text-xs group">
+                                <button
+                                  onClick={() => handleToggleTask(p.id, t.id, t.status)}
+                                  className="shrink-0 disabled:opacity-50"
+                                  disabled={busyId === t.id}
+                                >
+                                  {busyId === t.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-muted" />
+                                  ) : t.status === "done" ? (
+                                    <CheckCircle2 className="w-4 h-4 text-accent" />
+                                  ) : (
+                                    <div className="w-4 h-4 rounded-full border border-line" />
+                                  )}
+                                </button>
+                                <span className={t.status === "done" ? "line-through text-faint" : "text-fg"}>{t.title}</span>
+                                <button
+                                  onClick={() => handleDeleteTask(p.id, t.id)}
+                                  className="ml-auto text-faint hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Delete task"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )) : (
+                              <p className="text-xs text-faint">No tasks yet.</p>
+                            )}
+
+                            <div className="flex items-center gap-2 pt-1">
+                              <input
+                                type="text"
+                                value={newTaskTitle}
+                                onChange={(e) => setNewTaskTitle(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTask(p.id); } }}
+                                placeholder="Add a task…"
+                                className="flex-1 px-2.5 py-1.5 rounded-lg bg-bg border border-line text-fg text-xs focus:outline-none focus:border-accent"
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleAddTask(p.id)}
+                                disabled={busyId === "new" || !newTaskTitle.trim()}
+                                className="border-line text-fg h-7 px-2"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Attached Contracts Indicator */}
                       <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
@@ -924,5 +1167,20 @@ export default function ProjectsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-96 w-full rounded-xl" />
+        </div>
+      }
+    >
+      <ProjectsContent />
+    </Suspense>
   );
 }

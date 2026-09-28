@@ -185,6 +185,104 @@ export const deleteClient = async (clientId: string, token?: string): Promise<vo
 };
 
 // ------------------------------------------------------------------------------
+// Lead Pipeline — client-acquisition CRM (stage board, follow-ups, insights)
+// ------------------------------------------------------------------------------
+export type LeadStage = 'new' | 'contacted' | 'proposal' | 'negotiation' | 'won' | 'lost';
+
+export interface Lead {
+  id: string;
+  workspace_id: string;
+  name: string;
+  company?: string | null;
+  email: string;
+  phone?: string | null;
+  source?: string | null;
+  stage: LeadStage;
+  estimated_value: number;
+  priority: 'low' | 'medium' | 'high';
+  last_contact_at?: string | null;
+  next_follow_up_at?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineInsights {
+  total_leads: number;
+  stage_counts: Record<string, number>;
+  open_pipeline_value: number;
+  weighted_pipeline_value: number;
+  win_rate_pct: number;
+  won_count: number;
+  lost_count: number;
+  due_follow_up_count: number;
+  stale_deal_count: number;
+  stale_after_days: number;
+  due_follow_ups: Array<{ id: string; name: string; company?: string | null; stage: string; estimated_value: number; priority: string }>;
+  stale_deals: Array<{ id: string; name: string; company?: string | null; stage: string; estimated_value: number; priority: string; days_since_contact: number }>;
+  currency: string;
+  timestamp: string;
+}
+
+export const getLeads = async (token?: string): Promise<Lead[]> => {
+  const response = await apiClient.get<Lead[]>('/leads', authHeaders(token));
+  return response.data;
+};
+
+export const createLead = async (payload: Partial<Lead>, token?: string): Promise<Lead> => {
+  const response = await apiClient.post<Lead>('/leads', payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateLead = async (leadId: string, payload: Partial<Lead>, token?: string): Promise<Lead> => {
+  const response = await apiClient.patch<Lead>(`/leads/${leadId}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const logLeadContact = async (
+  leadId: string,
+  payload: { note?: string; next_follow_up_at?: string },
+  token?: string
+): Promise<Lead> => {
+  const response = await apiClient.post<Lead>(`/leads/${leadId}/log-contact`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deleteLead = async (leadId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/leads/${leadId}`, authHeaders(token));
+};
+
+export const getPipelineInsights = async (token?: string): Promise<PipelineInsights> => {
+  const response = await apiClient.get<PipelineInsights>('/leads/insights', authHeaders(token));
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Cash Flow Guard — receivables aging, 90-day forecast, safe-to-spend
+// ------------------------------------------------------------------------------
+export interface CashflowSummary {
+  currency: string;
+  receivables_total: number;
+  at_risk_total: number;
+  aging: Record<'not_due_yet' | 'days_1_15' | 'days_16_30' | 'days_31_plus', { count: number; amount: number }>;
+  overdue_invoices: Array<{ id: string; invoice_number: string; amount: number; due_date: string; days_overdue: number }>;
+  history_6m: Array<{ month: string; collected: number; expenses: number; net: number }>;
+  avg_monthly_collected: number;
+  avg_monthly_expenses: number;
+  income_volatility_pct: number;
+  avg_days_to_payment: number | null;
+  forecast_90d: Array<{ month: string; expected_invoices: number; expected_new_work: number; total_expected: number }>;
+  weighted_pipeline_value: number;
+  safe_to_spend_next_30d: number;
+  timestamp: string;
+}
+
+export const getCashflowSummary = async (token?: string): Promise<CashflowSummary> => {
+  const response = await apiClient.get<CashflowSummary>('/cashflow/summary', authHeaders(token));
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
 // Projects & Tasks
 // ------------------------------------------------------------------------------
 export interface Task {
@@ -281,6 +379,61 @@ export const deleteProject = async (projectId: string, token?: string): Promise<
   await apiClient.delete(`/projects/${projectId}`, authHeaders(token));
 };
 
+export const updateProject = async (
+  projectId: string,
+  payload: Partial<Pick<Project, 'title' | 'client_id' | 'description' | 'status' | 'budget' | 'hourly_rate'>>,
+  token?: string
+): Promise<Project> => {
+  const response = await apiClient.patch<Project>(`/projects/${projectId}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const createTask = async (
+  projectId: string,
+  payload: { title: string; description?: string; priority?: string; estimated_hours?: number },
+  token?: string
+): Promise<Task> => {
+  const response = await apiClient.post<Task>(`/projects/${projectId}/tasks`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const createMilestone = async (
+  projectId: string,
+  payload: { title: string; description?: string; amount?: number; deliverable_note?: string },
+  token?: string
+): Promise<Milestone> => {
+  const response = await apiClient.post<Milestone>(`/projects/${projectId}/milestones`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateTask = async (
+  projectId: string,
+  taskId: string,
+  payload: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'estimated_hours'>>,
+  token?: string
+): Promise<Task> => {
+  const response = await apiClient.patch<Task>(`/projects/${projectId}/tasks/${taskId}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTask = async (projectId: string, taskId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/projects/${projectId}/tasks/${taskId}`, authHeaders(token));
+};
+
+export const updateMilestone = async (
+  projectId: string,
+  milestoneId: string,
+  payload: Partial<Pick<Milestone, 'title' | 'description' | 'amount' | 'is_completed' | 'deliverable_note'>>,
+  token?: string
+): Promise<Milestone> => {
+  const response = await apiClient.patch<Milestone>(`/projects/${projectId}/milestones/${milestoneId}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deleteMilestone = async (projectId: string, milestoneId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/projects/${projectId}/milestones/${milestoneId}`, authHeaders(token));
+};
+
 // ------------------------------------------------------------------------------
 // Invoices & Payments
 // ------------------------------------------------------------------------------
@@ -303,6 +456,7 @@ export interface Invoice {
   due_date?: string;
   total_amount: number;
   notes?: string;
+  paid_at?: string | null;
   items: InvoiceItem[];
   created_at: string;
 }
@@ -317,9 +471,15 @@ export const createInvoice = async (payload: Partial<Invoice>, token?: string): 
   return response.data;
 };
 
-export const updateInvoiceStatus = async (invoiceId: string, statusVal: string, token?: string) => {
-  const response = await apiClient.patch(`/invoices/${invoiceId}/status?status_val=${statusVal}`, {}, authHeaders(token));
+export const updateInvoiceStatus = async (invoiceId: string, statusVal: 'draft' | 'sent' | 'paid' | 'overdue', token?: string): Promise<{ id: string; status: string; paid_at?: string | null }> => {
+  // Status travels in a JSON body validated by the InvoiceStatusUpdate whitelist
+  // (a query string was silently ignored by the new endpoint).
+  const response = await apiClient.patch(`/invoices/${invoiceId}/status`, { status: statusVal }, authHeaders(token));
   return response.data;
+};
+
+export const deleteInvoice = async (invoiceId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/invoices/${invoiceId}`, authHeaders(token));
 };
 
 // ------------------------------------------------------------------------------
@@ -353,6 +513,85 @@ export const logTimeEntry = async (payload: Partial<TimeEntry>, token?: string):
 
 export const deleteTimeEntry = async (entryId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/time-entries/${entryId}`, authHeaders(token));
+};
+
+// ------------------------------------------------------------------------------
+// Live Timer Sessions — the stopwatch runs on the server clock, so a refresh,
+// a closed tab or a second device resumes the exact same run.
+// ------------------------------------------------------------------------------
+export interface TimerSession {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  project_title?: string;
+  description?: string;
+  is_billable: boolean;
+  is_running: boolean;
+  started_at: string;
+  paused_at?: string;
+  accumulated_seconds: number;
+  elapsed_seconds: number;
+  ended_at?: string;
+}
+
+export const getActiveTimer = async (token?: string): Promise<TimerSession | null> => {
+  const response = await apiClient.get<TimerSession | null>('/timer/active', authHeaders(token));
+  return response.data;
+};
+
+export const startTimer = async (
+  payload: { project_id: string; description?: string; is_billable?: boolean },
+  token?: string
+): Promise<TimerSession> => {
+  const response = await apiClient.post<TimerSession>('/timer/start', payload, authHeaders(token));
+  return response.data;
+};
+
+export const pauseTimer = async (sessionId: string, token?: string): Promise<TimerSession> => {
+  const response = await apiClient.post<TimerSession>(`/timer/${sessionId}/pause`, {}, authHeaders(token));
+  return response.data;
+};
+
+export const resumeTimer = async (sessionId: string, token?: string): Promise<TimerSession> => {
+  const response = await apiClient.post<TimerSession>(`/timer/${sessionId}/resume`, {}, authHeaders(token));
+  return response.data;
+};
+
+export const stopTimer = async (sessionId: string, token?: string): Promise<TimeEntry | null> => {
+  const response = await apiClient.post<TimeEntry | null>(`/timer/${sessionId}/stop`, {}, authHeaders(token));
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Workspace Settings — business profile + billing defaults (persisted on the
+// workspace row, shared across every device instead of browser localStorage).
+// ------------------------------------------------------------------------------
+export interface WorkspaceSettings {
+  id: string;
+  name: string;
+  slug: string;
+  business_name?: string;
+  professional_title?: string;
+  tax_id?: string;
+  currency: string;
+  default_hourly_rate: number;
+  invoice_prefix: string;
+  payment_terms?: string;
+  late_fee_policy?: string;
+  payment_notes?: string;
+}
+
+export const getWorkspaceSettings = async (token?: string): Promise<WorkspaceSettings> => {
+  const response = await apiClient.get<WorkspaceSettings>('/workspace', authHeaders(token));
+  return response.data;
+};
+
+export const updateWorkspaceSettings = async (
+  payload: Partial<Omit<WorkspaceSettings, 'id' | 'slug'>>,
+  token?: string
+): Promise<WorkspaceSettings> => {
+  const response = await apiClient.put<WorkspaceSettings>('/workspace', payload, authHeaders(token));
+  return response.data;
 };
 
 // ------------------------------------------------------------------------------
@@ -508,6 +747,15 @@ export const createProposal = async (payload: Partial<Proposal>, token?: string)
 
 export const deleteProposal = async (proposalId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/proposals/${proposalId}`, authHeaders(token));
+};
+
+export const updateProposalStatus = async (
+  proposalId: string,
+  statusVal: 'draft' | 'sent' | 'accepted' | 'declined',
+  token?: string
+): Promise<Proposal> => {
+  const response = await apiClient.patch<Proposal>(`/proposals/${proposalId}/status`, { status: statusVal }, authHeaders(token));
+  return response.data;
 };
 
 export const generateAIProposalPitch = async (
@@ -669,6 +917,122 @@ export const schedulePublicBooking = async (
 ): Promise<BookingAppointment> => {
   const response = await apiClient.post<BookingAppointment>(`/booking/public/${token}/schedule`, payload);
   return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Dashboard Calendar — live feed (DB), event CRUD, Google Calendar sync
+// ------------------------------------------------------------------------------
+export interface CalendarFeedItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  event_type: 'meeting' | 'client_work' | 'deadline' | 'personal';
+  start_time: string;
+  end_time: string;
+  is_all_day: boolean;
+  source: 'local' | 'google' | 'booking' | 'invoice';
+  client_name?: string | null;
+  meeting_link?: string | null;
+  status?: string | null;
+}
+
+export interface CalendarEventCreatePayload {
+  title: string;
+  description?: string;
+  event_type: string;
+  start_time: string;
+  end_time: string;
+  is_all_day?: boolean;
+  client_name?: string;
+  project_id?: string;
+  meeting_link?: string;
+}
+
+export interface CalendarEvent extends CalendarEventCreatePayload {
+  id: string;
+  workspace_id: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoogleConnectionStatus {
+  connected: boolean;
+  configured: boolean;
+  google_email?: string | null;
+  last_synced_at?: string | null;
+  sync_enabled: boolean;
+}
+
+export interface CalendarSyncResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  synced_at: string;
+}
+
+export const getCalendarEvents = async (
+  start: string,
+  end: string,
+  token?: string
+): Promise<CalendarFeedItem[]> => {
+  const response = await apiClient.get<CalendarFeedItem[]>(
+    `/calendar/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+    authHeaders(token)
+  );
+  return response.data;
+};
+
+export const createCalendarEvent = async (
+  payload: CalendarEventCreatePayload,
+  token?: string
+): Promise<CalendarEvent> => {
+  const response = await apiClient.post<CalendarEvent>('/calendar/events', payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateCalendarEvent = async (
+  eventId: string,
+  payload: Partial<CalendarEventCreatePayload>,
+  token?: string
+): Promise<CalendarEvent> => {
+  const response = await apiClient.patch<CalendarEvent>(`/calendar/events/${eventId}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deleteCalendarEvent = async (eventId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/calendar/events/${eventId}`, authHeaders(token));
+};
+
+export const getGoogleCalendarStatus = async (token?: string): Promise<GoogleConnectionStatus> => {
+  const response = await apiClient.get<GoogleConnectionStatus>('/calendar/google/status', authHeaders(token));
+  return response.data;
+};
+
+export const startGoogleCalendarConnect = async (
+  token?: string
+): Promise<{ auth_url: string; configured: boolean }> => {
+  const response = await apiClient.post<{ auth_url: string; configured: boolean }>(
+    '/calendar/google/connect', {}, authHeaders(token)
+  );
+  return response.data;
+};
+
+export const completeGoogleCalendarConnect = async (
+  payload: { code: string; state: string },
+  token?: string
+): Promise<GoogleConnectionStatus> => {
+  const response = await apiClient.post<GoogleConnectionStatus>('/calendar/google/callback', payload, authHeaders(token));
+  return response.data;
+};
+
+export const syncGoogleCalendar = async (token?: string): Promise<CalendarSyncResult> => {
+  const response = await apiClient.post<CalendarSyncResult>('/calendar/google/sync', {}, authHeaders(token));
+  return response.data;
+};
+
+export const disconnectGoogleCalendar = async (token?: string): Promise<void> => {
+  await apiClient.delete('/calendar/google/disconnect', authHeaders(token));
 };
 
 // ------------------------------------------------------------------------------
@@ -845,6 +1209,123 @@ export interface AutomationState {
 export const getAutomationState = async (token?: string): Promise<AutomationState> => {
   const response = await apiClient.get<AutomationState>('/automations/state', authHeaders(token));
   return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Planner — todo list + Excalidraw sketch board, saved as "files" (boards).
+// Real-time: tabs poll getPlannerBoardHead (cheap: revision + todos only) and
+// only re-download the scene when the revision moved. savePlannerBoard sends
+// the last known revision so a stale whole-scene write is rejected (409) rather
+// than clobbering another session. The Excalidraw scene is opaque JSON.
+// ------------------------------------------------------------------------------
+export interface PlannerTodo {
+  id: string;
+  text: string;
+  is_done: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlannerBoardSummary {
+  id: string;
+  name: string;
+  revision: number;
+  todos_count: number;
+  done_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlannerBoardFull {
+  id: string;
+  name: string;
+  revision: number;
+  elements: Record<string, unknown>[];
+  files: Record<string, Record<string, unknown>>;
+  todos: PlannerTodo[];
+}
+
+export interface PlannerBoardHead {
+  revision: number;
+  todos: PlannerTodo[];
+}
+
+export const listPlannerBoards = async (token?: string): Promise<PlannerBoardSummary[]> => {
+  const response = await apiClient.get<PlannerBoardSummary[]>('/planner/boards', authHeaders(token));
+  return response.data;
+};
+
+export const createPlannerBoard = async (
+  name: string,
+  token?: string
+): Promise<PlannerBoardSummary> => {
+  const response = await apiClient.post<PlannerBoardSummary>('/planner/boards', { name }, authHeaders(token));
+  return response.data;
+};
+
+// Full scene load + save get a longer timeout: on a cold Neon branch the very
+// first round trip can outrun the 15s global default and surface as a
+// "timeout of 15000ms exceeded" error mid-edit.
+export const getPlannerBoard = async (boardId: string, token?: string): Promise<PlannerBoardFull> => {
+  const response = await apiClient.get<PlannerBoardFull>(`/planner/boards/${boardId}`, {
+    ...authHeaders(token),
+    timeout: 30000,
+  });
+  return response.data;
+};
+
+export const getPlannerBoardHead = async (boardId: string, token?: string): Promise<PlannerBoardHead> => {
+  const response = await apiClient.get<PlannerBoardHead>(`/planner/boards/${boardId}/head`, authHeaders(token));
+  return response.data;
+};
+
+export const savePlannerBoard = async (
+  boardId: string,
+  scene: { elements: Record<string, unknown>[]; files: Record<string, Record<string, unknown>> },
+  rev: number,
+  token?: string
+): Promise<{ revision: number }> => {
+  const response = await apiClient.put<{ revision: number }>(
+    `/planner/boards/${boardId}?rev=${rev}`,
+    scene,
+    { ...authHeaders(token), timeout: 30000 }
+  );
+  return response.data;
+};
+
+export const renamePlannerBoard = async (
+  boardId: string,
+  name: string,
+  token?: string
+): Promise<PlannerBoardSummary> => {
+  const response = await apiClient.patch<PlannerBoardSummary>(`/planner/boards/${boardId}`, { name }, authHeaders(token));
+  return response.data;
+};
+
+export const deletePlannerBoard = async (boardId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/planner/boards/${boardId}`, authHeaders(token));
+};
+
+export const createPlannerTodo = async (
+  boardId: string,
+  text: string,
+  token?: string
+): Promise<PlannerTodo> => {
+  const response = await apiClient.post<PlannerTodo>(`/planner/boards/${boardId}/todos`, { text }, authHeaders(token));
+  return response.data;
+};
+
+export const updatePlannerTodo = async (
+  todoId: string,
+  payload: { text?: string; is_done?: boolean },
+  token?: string
+): Promise<PlannerTodo> => {
+  const response = await apiClient.patch<PlannerTodo>(`/planner/todos/${todoId}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deletePlannerTodo = async (todoId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/planner/todos/${todoId}`, authHeaders(token));
 };
 
 

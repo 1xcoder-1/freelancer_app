@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPublicProjectPortal, approvePublicMilestone, type PublicProjectPortal } from "@/lib/api";
+import { toast } from "sonner";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -61,7 +62,7 @@ export default function ClientPortalPage({ params }: PageProps) {
       setTimeout(() => setJustApprovedId(null), 3000);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
-      alert(axiosErr?.response?.data?.detail || "Failed to approve deliverable.");
+      toast.error(axiosErr?.response?.data?.detail || "Failed to approve deliverable.");
     } finally {
       setApprovingId(null);
     }

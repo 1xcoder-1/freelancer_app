@@ -1,69 +1,36 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  ClipboardList,
   Plus,
-  Copy,
-  CheckCircle2,
-  ExternalLink,
-  Trash2,
-  Eye,
-  MessageSquare,
-  FileText,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  getIntakeForms,
-  createIntakeForm,
-  deleteIntakeForm,
-  getIntakeSubmissions,
-  IntakeForm,
-  IntakeSubmission
-} from "@/lib/api";
+import { getIntakeForms, type IntakeForm } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
-import { toast } from "sonner";
-import { z } from "zod";
-import { validateOrToast, nameSchema, optionalTextSchema } from "@/lib/validation";
+import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
-const intakeFormSchema = z.object({
-  title: nameSchema("Form title", 150),
-  description: optionalTextSchema("Description", 1000),
-});
+const DEFAULT_CATEGORIES = [
+  "Featured",
+  "Client Onboarding",
+  "Project Discovery",
+  "Feedback & Reviews",
+  "Design Sprints",
+];
+
+const CARDS_PER_PAGE = 20;
 
 export function IntakePanel() {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const router = useRouter();
+  const [catPages, setCatPages] = useState<Record<string, number>>({});
 
-  // Modal states
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [viewSubmissionsOpen, setViewSubmissionsOpen] = useState(false);
-  const [selectedForm, setSelectedForm] = useState<IntakeForm | null>(null);
-  const [submissions, setSubmissions] = useState<IntakeSubmission[]>([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
-
-  // Form creation inputs
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [questions, setQuestions] = useState<Array<{ id: string; label: string; type: string; required: boolean }>>([
-    { id: "q1", label: "What is your project goal and target audience?", type: "textarea", required: true },
-    { id: "q2", label: "What is your estimated timeline or launch target?", type: "text", required: true },
-    { id: "q3", label: "Please share links to inspiration or existing brand assets:", type: "textarea", required: false },
-  ]);
-  const [creating, setCreating] = useState(false);
-
-  const { data: formsData, loading, refresh: fetchForms, mutate } = useApiData<IntakeForm[]>(
+  const { data: formsData, loading, refresh: fetchForms } = useApiData<IntakeForm[]>(
     "intake:forms",
     async (token) => {
       return await getIntakeForms(token);
@@ -73,101 +40,55 @@ export function IntakePanel() {
 
   const forms = formsData ?? [];
 
-  const handleCopy = (token: string, id: string) => {
-    const url = `${window.location.origin}/intake/${token}`;
-    navigator.clipboard.writeText(url);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2500);
-  };
-
-  const handleAddQuestion = () => {
-    setQuestions([
-      ...questions,
-      {
-        id: `q${Date.now()}`,
-        label: "",
-        type: "text",
-        required: false,
-      },
-    ]);
-  };
-
-  const handleRemoveQuestion = (index: number) => {
-    setQuestions(questions.filter((_, i) => i !== index));
-  };
-
-  const handleQuestionChange = (index: number, field: string, value: any) => {
-    const updated = [...questions];
-    updated[index] = { ...updated[index], [field]: value };
-    setQuestions(updated);
-  };
-
-  const handleCreateForm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateOrToast(intakeFormSchema, { title, description })) return;
-
-    setCreating(true);
-    try {
-      await createIntakeForm({
-        title,
-        description,
-        questions,
-      });
-      setTitle("");
-      setDescription("");
-      setCreateModalOpen(false);
-      await fetchForms();
-      toast.success("Form created");
-    } catch (err) {
-      console.error("Failed to create form:", err);
-      toast.error("Could not create form");
-    } finally {
-      setCreating(false);
+  const getFormCategory = (f: IntakeForm): string => {
+    if (!f) return "Featured";
+    if (f.description && typeof f.description === "string") {
+      const match = f.description.match(/\[category:\s*([^\]]+)\]/i);
+      if (match && match[1]) {
+        const parsed = match[1].trim();
+        if (parsed && parsed !== "[object Object]" && !parsed.includes("[object Object]")) {
+          return parsed;
+        }
+      }
     }
+    return "Featured";
   };
 
-  const handleDeleteForm = async (id: string) => {
-    const ok = await confirmDialog({
-      title: "Delete form",
-      message: "This intake form and all the answers clients submitted through it will be removed permanently.",
-      confirmLabel: "Delete",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await deleteIntakeForm(id);
-      mutate((prev) => (prev ?? []).filter((f) => f.id !== id));
-      toast.success("Form deleted");
-    } catch (err) {
-      console.error("Failed to delete form:", err);
-      toast.error("Could not delete form");
-    }
+  const handleOpenCreate = () => {
+    router.push("/dashboard/intake/new");
   };
 
-  const handleOpenSubmissions = async (form: IntakeForm) => {
-    setSelectedForm(form);
-    setViewSubmissionsOpen(true);
-    setLoadingSubmissions(true);
-    try {
-      const subs = await getIntakeSubmissions(form.id);
-      setSubmissions(subs);
-    } catch (err) {
-      console.error("Failed to load submissions:", err);
-    } finally {
-      setLoadingSubmissions(false);
-    }
+  const handleOpenDetail = (form: IntakeForm) => {
+    router.push(`/dashboard/intake/${form.id}`);
   };
+
+  // Group forms by category (only categories that actually contain forms)
+  const categoriesPresent = Array.from(
+    new Set(
+      forms
+        .map((f) => getFormCategory(f))
+        .filter((cat) => Boolean(cat) && typeof cat === "string" && cat !== "[object Object]")
+    )
+  );
+  if (categoriesPresent.length === 0 && forms.length > 0) {
+    categoriesPresent.push("Featured");
+  }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-lg font-bold tracking-tight text-fg">Intake forms</h2>
+            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+              Intake Questionnaires
+            </h2>
+            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+              {loading ? "Loading..." : `${forms.length} Total`}
+            </Badge>
           </div>
           <p className="text-muted text-sm mt-1">
-            Send clients a short questionnaire to collect project details before you start.
+            Categorized intake flows to collect project scope, goals, and assets from clients.
           </p>
         </div>
 
@@ -177,333 +98,176 @@ export function IntakePanel() {
             size="sm"
             onClick={() => fetchForms(true)}
             disabled={loading}
-            className="border-line text-fg"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => setCreateModalOpen(true)}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+          <button
+            onClick={() => handleOpenCreate()}
+            className="relative group overflow-hidden rounded-xl p-[1px] font-semibold text-xs transition-all duration-300 shadow-sm hover:shadow-accent/25 hover:shadow-md active:scale-[0.98]"
           >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Create Intake Form
-          </Button>
+            <span className="absolute inset-0 bg-gradient-to-r from-accent via-amber-400 to-accent rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
+            <span className="relative flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-accent group-hover:bg-accent-hi text-accent-fg transition-colors duration-200 font-bold">
+              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
+              <span>Add Questionnaire</span>
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* Forms List */}
-      {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="bg-card border-line p-6 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Skeleton className="w-12 h-12 rounded-xl" />
-                <div className="space-y-2">
-                  <Skeleton className="h-5 w-64" />
-                  <Skeleton className="h-3 w-40" />
-                </div>
+      {/* Loading Skeleton */}
+      {loading && forms.length === 0 ? (
+        <div className="space-y-8">
+          {[1, 2].map((group) => (
+            <div key={group} className="space-y-3">
+              <Skeleton className="h-6 w-36 rounded-md" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-36 w-full rounded-2xl" />
+                ))}
               </div>
-              <Skeleton className="h-9 w-32 rounded-lg" />
-            </Card>
+            </div>
           ))}
         </div>
       ) : forms.length === 0 ? (
-        <Card className="bg-card border-dashed border-line p-12 text-center">
-          <ClipboardList className="w-12 h-12 text-faint mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-fg mb-1">No forms yet</h3>
-          <p className="text-muted text-sm max-w-md mx-auto mb-6">
-            Build a simple questionnaire so new clients give you everything you need up front.
+        <Card className="bg-card border-dashed border-line p-12 text-center rounded-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
+            <ChaiCupIcon className="w-7 h-7" />
+          </div>
+          <h3 className="text-lg font-bold text-fg">No questionnaires yet</h3>
+          <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+            Build customized client questionnaires to collect requirements before kicking off projects.
           </p>
           <Button
-            onClick={() => setCreateModalOpen(true)}
-            className="bg-accent hover:bg-accent-hi text-accent-fg"
+            onClick={() => handleOpenCreate()}
+            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
           >
             <Plus className="w-4 h-4 mr-1.5" />
-            Create Your First Intake Form
+            Create First Questionnaire
           </Button>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {forms.map((form) => {
-            const questionList = Array.isArray(form.questions) ? form.questions : [];
-            const formToken = form.token || form.id;
+        /* Categorized Cards with Sliding Pagination (20 cards per page) */
+        <div className="space-y-10">
+          {categoriesPresent.map((cat) => {
+            const catForms = forms.filter((f) => getFormCategory(f) === cat);
+            if (catForms.length === 0) return null;
+
+            const totalPages = Math.ceil(catForms.length / CARDS_PER_PAGE);
+            const currentPage = Math.min(catPages[cat] || 1, totalPages || 1);
+            const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+            const endIndex = Math.min(startIndex + CARDS_PER_PAGE, catForms.length);
+            const visibleForms = catForms.slice(startIndex, endIndex);
+
+            const handlePrevPage = () => {
+              setCatPages((prev) => ({
+                ...prev,
+                [cat]: Math.max(1, currentPage - 1),
+              }));
+            };
+
+            const handleNextPage = () => {
+              setCatPages((prev) => ({
+                ...prev,
+                [cat]: Math.min(totalPages, currentPage + 1),
+              }));
+            };
+
             return (
-              <Card
-                key={form.id}
-                className="bg-card border-line p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-md hover:border-line-strong transition-all"
-              >
-                <div className="flex items-start sm:items-center gap-4">
-                  <div className="p-3 rounded-xl bg-accent-soft text-info shrink-0">
-                    <ClipboardList className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-semibold text-fg">{form.title}</h3>
-                    {form.description && (
-                      <p className="text-xs text-muted line-clamp-1 mb-1">{form.description}</p>
-                    )}
-                    <div className="flex items-center gap-3 text-xs text-muted font-mono">
-                      <span>{questionList.length} Questions</span>
-                      <span>•</span>
-                      <span>{form.submissions_count || 0} Submissions</span>
-                      <span>•</span>
-                      <span className="text-faint">Created {new Date(form.created_at).toLocaleDateString()}</span>
+              <div key={cat} className="space-y-4">
+                {/* Category Header with Title, Count, Underline & Sliding Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div className="inline-flex flex-col items-start space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">
+                        {cat}
+                      </h3>
+                      <span className="text-xs font-mono font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-md border border-accent/20">
+                        {catForms.length}
+                      </span>
                     </div>
+                    {/* Straight orange line under category title */}
+                    <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
                   </div>
+
+                  {/* Sliding Pagination Controls (Shown when category has > 20 cards or multi-page) */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2 self-start sm:self-auto bg-card/90 backdrop-blur-md border border-line/80 px-3 py-1.5 rounded-2xl shadow-sm">
+                      <span className="text-xs font-mono text-muted hidden sm:inline mr-1">
+                        Showing <strong className="text-fg">{startIndex + 1}–{endIndex}</strong> of {catForms.length}
+                      </span>
+
+                      {/* Slider Navigation Buttons */}
+                      <div className="flex items-center gap-1 bg-surface/90 p-0.5 rounded-xl border border-line/70">
+                        <button
+                          onClick={handlePrevPage}
+                          disabled={currentPage <= 1}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                          title="Previous 20 Cards"
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <div className="px-2.5 py-0.5 text-xs font-mono font-bold text-accent bg-accent/10 rounded-md">
+                          {currentPage} / {totalPages}
+                        </div>
+
+                        <button
+                          onClick={handleNextPage}
+                          disabled={currentPage >= totalPages}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                          title="Next 20 Cards"
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleOpenSubmissions(form)}
-                    className="border-line bg-bg hover:bg-surface text-fg"
-                  >
-                    <Eye className="w-3.5 h-3.5 mr-1 text-info dark:text-info" />
-                    Submissions ({form.submissions_count || 0})
-                  </Button>
+                {/* Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
+                  {visibleForms.map((form) => {
+                    const questionsList = Array.isArray(form.questions) ? form.questions : [];
+                    const submissionsCount = form.submissions_count || 0;
 
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleCopy(formToken, form.id)}
-                    className="border-line bg-bg hover:bg-surface text-fg hover:text-fg"
-                  >
-                    {copiedId === form.id ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-accent" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5 mr-1 text-info" />
-                    )}
-                    {copiedId === form.id ? "Copied Link!" : "Copy Link"}
-                  </Button>
-
-                  <a
-                    href={`/intake/${formToken}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center p-2 rounded-lg border border-line bg-bg hover:bg-surface text-muted hover:text-fg text-xs transition-colors"
-                    title="Open Live Public Form"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDeleteForm(form.id)}
-                    className="text-faint hover:text-danger hover:bg-danger/10 p-2"
-                    title="Delete Form"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                    return (
+                      <CategoryVisualCard
+                        key={form.id}
+                        title={form.title}
+                        currentCount={submissionsCount}
+                        totalCount={questionsList.length || 1}
+                        subtitle={`By ${cat}`}
+                        category={cat}
+                        onClick={() => handleOpenDetail(form)}
+                        tags={
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/15 text-sky-400 border-sky-500/25 capitalize">
+                              {cat}
+                            </span>
+                            <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                              {questionsList.length} Question{questionsList.length === 1 ? "" : "s"}
+                            </span>
+                            {submissionsCount > 0 && (
+                              <span className="text-[11px] font-mono font-medium text-emerald-400 bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/25">
+                                {submissionsCount} Answer{submissionsCount === 1 ? "" : "s"}
+                              </span>
+                            )}
+                          </div>
+                        }
+                      />
+                    );
+                  })}
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
       )}
-
-      {/* Modal: Create Intake Form */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-2xl bg-bg border-line text-fg max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <h3 className="text-lg font-bold text-fg">New intake form</h3>
-              <button onClick={() => setCreateModalOpen(false)} className="text-muted hover:text-fg text-sm">✕</button>
-            </div>
-
-          <form onSubmit={handleCreateForm} className="space-y-5 py-2">
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-fg block mb-1">
-                  Form Title <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Website Discovery & Scope Questionnaire"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-card border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-fg block mb-1">
-                  Description / Welcome Message
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Please fill out this brief questionnaire so we can hit the ground running with your project scope."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-card border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-            </div>
-
-            {/* Questions Builder */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-fg uppercase tracking-wider">
-                  Questions ({questions.length})
-                </label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddQuestion}
-                  className="text-xs border-accent/30 text-info hover:bg-accent-soft"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Add Question
-                </Button>
-              </div>
-
-              <div className="space-y-3">
-                {questions.map((q, idx) => (
-                  <div
-                    key={q.id || idx}
-                    className="p-3.5 rounded-xl bg-card border border-line space-y-2.5"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-faint font-bold">#{idx + 1}</span>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter your question label..."
-                        value={q.label}
-                        onChange={(e) => handleQuestionChange(idx, "label", e.target.value)}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-                      />
-                      {questions.length > 1 && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleRemoveQuestion(idx)}
-                          className="text-faint hover:text-danger p-1 h-auto"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted">Response Type:</span>
-                        <select
-                          value={q.type}
-                          onChange={(e) => handleQuestionChange(idx, "type", e.target.value)}
-                          className="px-2 py-1 rounded bg-bg border border-line text-fg text-xs focus:outline-none"
-                        >
-                          <option value="text">Short Text</option>
-                          <option value="textarea">Long Text / Paragraph</option>
-                          <option value="number">Number</option>
-                        </select>
-                      </div>
-
-                      <label className="flex items-center gap-1.5 text-muted cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={q.required}
-                          onChange={(e) => handleQuestionChange(idx, "required", e.target.checked)}
-                          className="rounded bg-bg border-line-strong text-info focus:ring-0"
-                        />
-                        Required
-                      </label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <DialogFooter className="pt-4 border-t border-line">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setCreateModalOpen(false)}
-                className="text-muted"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={creating}
-                className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
-              >
-                {creating ? "Saving..." : "Create form & get link"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: View Submissions */}
-      <Dialog open={viewSubmissionsOpen} onOpenChange={setViewSubmissionsOpen}>
-        <DialogContent className="max-w-3xl bg-bg border-line text-fg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-info dark:text-info" />
-              Client Submissions: {selectedForm?.title}
-            </DialogTitle>
-            <DialogDescription className="text-muted text-xs">
-              Live responses submitted by clients through the public intake questionnaire link.
-            </DialogDescription>
-          </DialogHeader>
-
-          {loadingSubmissions ? (
-            <div className="space-y-4 py-4">
-              <Skeleton className="h-24 w-full rounded-xl" />
-              <Skeleton className="h-24 w-full rounded-xl" />
-            </div>
-          ) : submissions.length === 0 ? (
-            <div className="p-8 text-center bg-card rounded-xl border border-line my-4">
-              <FileText className="w-10 h-10 text-faint mx-auto mb-2" />
-              <p className="text-fg font-semibold text-sm">No answers yet</p>
-              <p className="text-faint text-xs mt-1">
-                Share the form link with your client — their answers will show up here.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4 py-4">
-              {submissions.map((sub) => (
-                <Card key={sub.id} className="bg-card border-line p-5 space-y-3">
-                  <div className="flex items-center justify-between border-b border-line pb-3">
-                    <div>
-                      <h4 className="text-sm font-bold text-fg">{sub.client_name || "Anonymous Client"}</h4>
-                      <p className="text-xs text-info font-mono">{sub.client_email || "No email provided"}</p>
-                    </div>
-                    <span className="text-[11px] text-muted font-mono">
-                      {new Date(sub.created_at).toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5 text-xs">
-                    {Object.entries(sub.answers || {}).map(([key, val]) => (
-                      <div key={key} className="bg-bg p-2.5 rounded-lg border border-line">
-                        <span className="text-muted font-semibold block mb-1">{key}:</span>
-                        <span className="text-fg whitespace-pre-wrap">{String(val)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setViewSubmissionsOpen(false)}
-              className="border-line text-fg"
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

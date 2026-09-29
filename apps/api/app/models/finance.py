@@ -77,3 +77,6 @@ class Expense(Base, TimestampMixin):
     amount: Mapped[float] = mapped_column(Float, default=0.0)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     receipt_cloudinary_url: Mapped[str] = mapped_column(String(512), nullable=True)
+    # Subscriptions (Netflix of work tools): flagged once, then grouped on the
+    # Expenses ▸ Subscriptions page so the monthly total is always visible.
+    is_recurring: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

@@ -11,17 +11,48 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
+function formatApiErrorMessage(error: any): string {
+  if (!error) return 'An unexpected network error occurred. Please try again.';
+
+  const data = error?.response?.data;
+  if (data) {
+    if (typeof data.detail === 'string' && data.detail.trim() && data.detail !== '[object Object]') {
+      return data.detail.trim();
+    }
+    if (Array.isArray(data.detail)) {
+      const messages = data.detail
+        .map((d: any) => {
+          if (typeof d === 'string' && d !== '[object Object]') return d;
+          if (d && typeof d === 'object') {
+            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : '';
+            const msg = d.msg || d.message || '';
+            if (field && msg && field !== 'body') return `${field}: ${msg}`;
+            if (msg) return msg;
+          }
+          return null;
+        })
+        .filter(Boolean);
+      if (messages.length > 0) return messages.join(' • ');
+    }
+    if (typeof data.message === 'string' && data.message.trim() && data.message !== '[object Object]') {
+      return data.message.trim();
+    }
+  }
+
+  if (typeof error.message === 'string' && error.message.trim() && error.message !== '[object Object]') {
+    return error.message;
+  }
+
+  return 'Unable to complete request. Please check your connection and try again.';
+}
+
 // Response interceptor for unified error formatting and resilience.
 // The HTTP status is copied onto the thrown Error so callers can branch on
 // 403/404/410 (e.g. revoked / expired share links) instead of parsing text.
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const customMessage =
-      error?.response?.data?.detail ||
-      error?.response?.data?.message ||
-      error?.message ||
-      'An unexpected network error occurred. Please try again.';
+    const customMessage = formatApiErrorMessage(error);
     const wrapped = new Error(customMessage) as Error & {
       status?: number;
       response?: unknown;
@@ -167,6 +198,10 @@ export interface Client {
   status: string;
   notes?: string;
   health_score: number;
+  // Revenue tracking (computed server-side from this client's invoices):
+  // total_billed = non-draft invoices, total_paid = the settled subset.
+  total_billed?: number;
+  total_paid?: number;
   created_at: string;
 }
 
@@ -175,8 +210,18 @@ export const getClients = async (token?: string): Promise<Client[]> => {
   return response.data;
 };
 
+export const getClient = async (clientId: string, token?: string): Promise<Client> => {
+  const response = await apiClient.get<Client>(`/clients/${clientId}`, authHeaders(token));
+  return response.data;
+};
+
 export const createClient = async (payload: Partial<Client>, token?: string): Promise<Client> => {
   const response = await apiClient.post<Client>('/clients', payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateClient = async (clientId: string, payload: Partial<Client>, token?: string): Promise<Client> => {
+  const response = await apiClient.patch<Client>(`/clients/${clientId}`, payload, authHeaders(token));
   return response.data;
 };
 
@@ -229,6 +274,11 @@ export const getLeads = async (token?: string): Promise<Lead[]> => {
   return response.data;
 };
 
+export const getLead = async (leadId: string, token?: string): Promise<Lead> => {
+  const response = await apiClient.get<Lead>(`/leads/${leadId}`, authHeaders(token));
+  return response.data;
+};
+
 export const createLead = async (payload: Partial<Lead>, token?: string): Promise<Lead> => {
   const response = await apiClient.post<Lead>('/leads', payload, authHeaders(token));
   return response.data;
@@ -252,6 +302,13 @@ export const deleteLead = async (leadId: string, token?: string): Promise<void> 
   await apiClient.delete(`/leads/${leadId}`, authHeaders(token));
 };
 
+// One action turns a prospect into a roster client (idempotent by email —
+// re-converting returns the existing client, never a duplicate).
+export const convertLeadToClient = async (leadId: string, token?: string): Promise<Client> => {
+  const response = await apiClient.post<Client>(`/leads/${leadId}/convert-to-client`, {}, authHeaders(token));
+  return response.data;
+};
+
 export const getPipelineInsights = async (token?: string): Promise<PipelineInsights> => {
   const response = await apiClient.get<PipelineInsights>('/leads/insights', authHeaders(token));
   return response.data;
@@ -262,13 +319,24 @@ export const getPipelineInsights = async (token?: string): Promise<PipelineInsig
 // ------------------------------------------------------------------------------
 export interface CashflowSummary {
   currency: string;
+  bank_balance: number;
+  bank_balance_updated_at: string | null;
   receivables_total: number;
   at_risk_total: number;
   aging: Record<'not_due_yet' | 'days_1_15' | 'days_16_30' | 'days_31_plus', { count: number; amount: number }>;
   overdue_invoices: Array<{ id: string; invoice_number: string; amount: number; due_date: string; days_overdue: number }>;
-  history_6m: Array<{ month: string; collected: number; expenses: number; net: number }>;
+  // Cumulative cash expected within 14 / 30 / 60 days (not-yet-due invoices).
+  expected_cash: { days_14: number; days_30: number; days_60: number };
+  history_6m: Array<{ month: string; collected: number; expenses: number; net: number; invoiced: number }>;
   avg_monthly_collected: number;
   avg_monthly_expenses: number;
+  monthly_burn_rate: number;
+  weekly_burn_rate: number;
+  // null = burn unknown (no expenses recorded yet), not "infinite".
+  runway_weeks: number | null;
+  runway_weeks_with_incoming: number | null;
+  vacation_reserve_target: number;
+  vacation_reserve_progress_pct: number | null;
   income_volatility_pct: number;
   avg_days_to_payment: number | null;
   forecast_90d: Array<{ month: string; expected_invoices: number; expected_new_work: number; total_expected: number }>;
@@ -458,11 +526,33 @@ export interface Invoice {
   notes?: string;
   paid_at?: string | null;
   items: InvoiceItem[];
+  // Tracked-time entry ids imported as line items; the server stamps them
+  // invoiced so the same hours can never be billed twice.
+  time_entry_ids?: string[];
   created_at: string;
 }
 
 export const getInvoices = async (token?: string): Promise<Invoice[]> => {
   const response = await apiClient.get<Invoice[]>('/invoices', authHeaders(token));
+  return response.data;
+};
+
+export interface UnbilledTimeEntry {
+  id: string;
+  project_id: string;
+  project_title: string;
+  client_id?: string | null;
+  description?: string | null;
+  start_time: string;
+  duration_seconds: number;
+  hours: number;
+  hourly_rate: number;
+  amount: number;
+}
+
+// Billable tracked time that has never been invoiced ("ready to bill").
+export const getUnbilledTimeEntries = async (token?: string): Promise<UnbilledTimeEntry[]> => {
+  const response = await apiClient.get<UnbilledTimeEntry[]>('/invoices/unbilled-time', authHeaders(token));
   return response.data;
 };
 
@@ -579,6 +669,8 @@ export interface WorkspaceSettings {
   payment_terms?: string;
   late_fee_policy?: string;
   payment_notes?: string;
+  bank_balance: number;
+  bank_balance_updated_at?: string | null;
 }
 
 export const getWorkspaceSettings = async (token?: string): Promise<WorkspaceSettings> => {
@@ -605,6 +697,7 @@ export interface Expense {
   amount: number;
   description?: string;
   receipt_cloudinary_url?: string;
+  is_recurring?: boolean;
   created_at: string;
 }
 
@@ -615,6 +708,15 @@ export const getExpenses = async (token?: string): Promise<Expense[]> => {
 
 export const createExpense = async (payload: Partial<Expense>, token?: string): Promise<Expense> => {
   const response = await apiClient.post<Expense>('/expenses', payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateExpense = async (
+  expenseId: string,
+  payload: Partial<Pick<Expense, 'category' | 'amount' | 'description' | 'is_recurring'>>,
+  token?: string
+): Promise<Expense> => {
+  const response = await apiClient.patch<Expense>(`/expenses/${expenseId}`, payload, authHeaders(token));
   return response.data;
 };
 
@@ -819,8 +921,22 @@ export const getIntakeForms = async (token?: string): Promise<IntakeForm[]> => {
   return response.data;
 };
 
+export const getIntakeForm = async (formId: string, token?: string): Promise<IntakeForm> => {
+  const response = await apiClient.get<IntakeForm>(`/intake/${formId}`, authHeaders(token));
+  return response.data;
+};
+
 export const createIntakeForm = async (payload: Partial<IntakeForm>, token?: string): Promise<IntakeForm> => {
   const response = await apiClient.post<IntakeForm>('/intake', payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateIntakeForm = async (
+  formId: string,
+  payload: Partial<IntakeForm>,
+  token?: string
+): Promise<IntakeForm> => {
+  const response = await apiClient.patch<IntakeForm>(`/intake/${formId}`, payload, authHeaders(token));
   return response.data;
 };
 
@@ -843,6 +959,12 @@ export const submitPublicIntakeForm = async (
 
 export const getIntakeSubmissions = async (formId: string, token?: string): Promise<IntakeSubmission[]> => {
   const response = await apiClient.get<IntakeSubmission[]>(`/intake/${formId}/submissions`, authHeaders(token));
+  return response.data;
+};
+
+// Turn a live intake response into a pipeline lead in one click.
+export const convertIntakeSubmissionToLead = async (submissionId: string, token?: string): Promise<Lead> => {
+  const response = await apiClient.post<Lead>(`/intake/submissions/${submissionId}/convert-to-lead`, {}, authHeaders(token));
   return response.data;
 };
 
@@ -1326,6 +1448,78 @@ export const updatePlannerTodo = async (
 
 export const deletePlannerTodo = async (todoId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/planner/todos/${todoId}`, authHeaders(token));
+};
+
+// ------------------------------------------------------------------------------
+// Storage & Cloudinary Uploads
+// ------------------------------------------------------------------------------
+export interface UploadSignatureResponse {
+  provider: string;
+  upload_url: string;
+  upload_params?: Record<string, unknown>;
+}
+
+export const getUploadSignature = async (
+  payload: { file_key: string; content_type: string; category?: string },
+  token?: string
+): Promise<UploadSignatureResponse> => {
+  const response = await apiClient.post<UploadSignatureResponse>(
+    '/storage/upload-signature',
+    payload,
+    authHeaders(token)
+  );
+  return response.data;
+};
+
+export const uploadFileToCloudinary = async (
+  file: File,
+  category = "documents",
+  token?: string
+): Promise<{ url: string; name: string; size: number; type: string }> => {
+  try {
+    const signatureRes = await getUploadSignature(
+      {
+        file_key: file.name.replace(/[^a-zA-Z0-9_\-\.]/g, '_'),
+        content_type: file.type || 'application/octet-stream',
+        category,
+      },
+      token
+    );
+
+    if (signatureRes.upload_url && signatureRes.upload_params) {
+      const formData = new FormData();
+      formData.append('file', file);
+      Object.entries(signatureRes.upload_params).forEach(([k, v]) => {
+        formData.append(k, String(v));
+      });
+
+      const uploadRes = await fetch(signatureRes.upload_url, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (uploadRes.ok) {
+        const json = await uploadRes.json();
+        return {
+          url: json.secure_url || json.url,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Cloudinary direct upload fallback:", e);
+  }
+
+  // Fallback object URL
+  const fallbackUrl = URL.createObjectURL(file);
+  return {
+    url: fallbackUrl,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+  };
 };
 
 

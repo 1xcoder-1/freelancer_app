@@ -23,7 +23,7 @@ from app.core.database import get_db
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.lead import Lead, STAGE_PROBABILITY
-from app.schemas.domain import LeadCreate, LeadUpdate, LeadContactLog, LeadOut
+from app.schemas.domain import ClientOut, LeadCreate, LeadUpdate, LeadContactLog, LeadOut
 
 router = APIRouter(prefix="/leads", tags=["Lead Pipeline"])
 
@@ -95,6 +95,16 @@ async def create_lead(
     return lead
 
 
+@router.get("/{lead_id}", response_model=LeadOut)
+async def get_lead(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    return await _get_workspace_lead(db, workspace.id, lead_id)
+
+
 @router.patch("/{lead_id}", response_model=LeadOut)
 async def update_lead(
     lead_id: str,
@@ -155,6 +165,56 @@ async def log_contact(
     await db.commit()
     await db.refresh(lead)
     return lead
+
+
+@router.post("/{lead_id}/convert-to-client", response_model=ClientOut)
+async def convert_lead_to_client(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """One action turns a prospect into a roster client — no re-typing.
+
+    Idempotent by email: if the client already exists (manual add or the
+    won-stage auto-create), the existing row is returned instead of a
+    duplicate. Converting also marks the deal won so pipeline stats stay true.
+    """
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    lead = await _get_workspace_lead(db, workspace.id, lead_id)
+    
+    email = (lead.email or "").strip()
+    clean_name = "".join(c for c in lead.name if c.isalnum()).lower() or "client"
+    import uuid
+    uid_suffix = uuid.uuid4().hex[:6]
+    safe_email = email if email else f"{clean_name}_{uid_suffix}@client.local"
+
+    client_notes = (lead.notes or "").strip()
+    val = lead.estimated_value or 0
+    if val > 0 and "[rate:" not in client_notes:
+        import re
+        curr_match = re.search(r'\[currency:\s*([^\]]+)\]', client_notes, re.IGNORECASE)
+        lead_curr = curr_match.group(1).strip() if curr_match else (workspace.currency or "USD")
+        formatted_val = f"{int(val):,}" if val == int(val) else f"{val:,.2f}"
+        rate_tag = f"[rate: {lead_curr} {formatted_val}]"
+        client_notes = f"{rate_tag}\n{client_notes}".strip() if client_notes else rate_tag
+
+    # Always create a new dedicated client record
+    client = Client(
+        workspace_id=workspace.id,
+        name=lead.name,
+        company_name=lead.company,
+        email=safe_email,
+        phone=lead.phone,
+        status="active",
+        notes=client_notes,
+    )
+    db.add(client)
+
+    # Remove the converted lead from the leads table
+    await db.delete(lead)
+    await db.commit()
+    await db.refresh(client)
+    return client
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)

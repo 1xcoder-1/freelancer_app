@@ -163,10 +163,10 @@ export default function ProposalsPage() {
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="border-line text-fg hover:text-fg"
+            className="border-line text-fg hover:text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>

@@ -2,9 +2,9 @@
 
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExpensesPanel } from "@/components/dashboard/panels/ExpensesPanel";
+import { LeadsPanel } from "@/components/dashboard/panels/LeadsPanel";
 
-export default function MoneyPage() {
+export default function LeadsPage() {
   return (
     <Suspense
       fallback={
@@ -14,7 +14,7 @@ export default function MoneyPage() {
         </div>
       }
     >
-      <ExpensesPanel />
+      <LeadsPanel />
     </Suspense>
   );
 }

@@ -23,14 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   getBookings,
@@ -159,10 +151,10 @@ export default function BookingPage() {
             size="sm"
             onClick={() => fetchData(true)}
             disabled={loading}
-            className="border-line text-fg"
+            className="border-line text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
           <Button
@@ -176,6 +168,89 @@ export default function BookingPage() {
         </div>
       </div>
 
+      {createModalOpen ? (
+        /* Create screen — a full page inside this tab, never a popup. */
+        <Card className="bg-card border-line p-6 max-w-xl space-y-4 animate-in fade-in duration-300">
+          <div className="border-b border-line pb-3">
+            <h3 className="text-lg font-bold text-fg">New Consultation Service</h3>
+            <p className="text-muted text-xs mt-0.5">
+              Set a duration and price — clients get a booking link, you get the appointment.
+            </p>
+          </div>
+
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-fg block mb-1">
+                Session Title <span className="text-danger">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. 30-Minute Architecture & Code Review"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-fg block mb-1">Description</label>
+              <textarea
+                rows={2}
+                placeholder="e.g. In-depth technical breakdown and roadmap discussion."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-fg block mb-1">Duration (Minutes)</label>
+                <select
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none"
+                >
+                  <option value={15}>15 Minutes</option>
+                  <option value={30}>30 Minutes</option>
+                  <option value={45}>45 Minutes</option>
+                  <option value={60}>60 Minutes (1 Hour)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-fg block mb-1">Price ($ USD)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={price}
+                  onChange={(e) => setPrice(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-line flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateModalOpen(false)}
+                className="border-line text-fg"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={creating}
+                className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
+              >
+                {creating ? "Saving..." : "Create Service"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : (
       <Tabs defaultValue="consultations" className="space-y-6">
         <TabsList className="bg-card border border-line p-1 rounded-xl">
           <TabsTrigger value="consultations" className="flex items-center gap-2">
@@ -357,99 +432,7 @@ export default function BookingPage() {
           )}
         </TabsContent>
       </Tabs>
-
-      {/* Modal: Create Consultation */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg bg-bg border-line text-fg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-info dark:text-info" />
-              New Consultation Service
-            </DialogTitle>
-            <DialogDescription className="text-muted text-xs">
-              Configure session duration, pricing, and automated booking options.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCreate} className="space-y-4 py-2">
-            <div>
-              <label className="text-xs font-semibold text-fg block mb-1">
-                Session Title <span className="text-danger">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. 30-Minute Architecture & Code Review"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-card border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-fg block mb-1">
-                Description
-              </label>
-              <textarea
-                rows={2}
-                placeholder="e.g. In-depth technical breakdown and roadmap discussion."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-card border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-fg block mb-1">
-                  Duration (Minutes)
-                </label>
-                <select
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-card border border-line text-fg text-sm focus:outline-none"
-                >
-                  <option value={15}>15 Minutes</option>
-                  <option value={30}>30 Minutes</option>
-                  <option value={45}>45 Minutes</option>
-                  <option value={60}>60 Minutes (1 Hour)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-fg block mb-1">
-                  Price ($ USD)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={price}
-                  onChange={(e) => setPrice(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-card border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="pt-4 border-t border-line">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setCreateModalOpen(false)}
-                className="text-muted"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={creating}
-                className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
-              >
-                {creating ? "Saving..." : "Create Consultation Service"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      )}
     </div>
   );
 }

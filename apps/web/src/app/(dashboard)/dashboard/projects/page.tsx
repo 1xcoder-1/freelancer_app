@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
 import {
@@ -9,30 +9,28 @@ import {
   Plus,
   CheckCircle2,
   Clock,
-  ListTodo,
   RefreshCw,
   Trash2,
-  Calendar,
   FileSignature,
   Eye,
   Send,
   Copy,
   ExternalLink,
   ShieldCheck,
-  Smartphone,
   Check,
   FileText,
-  AlertCircle,
-  Building2,
-  Receipt,
   ChevronDown,
   ChevronRight,
   Loader2,
+  Archive,
+  RotateCcw,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SubTabs } from "@/components/dashboard/SubTabs";
 import {
   getProjects,
   createProject,
@@ -50,7 +48,6 @@ import {
   type Client,
   type Contract,
 } from "@/lib/api";
-import { reportLoadError } from "@/lib/report";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { InvoicesPanel } from "@/components/dashboard/panels/InvoicesPanel";
@@ -73,6 +70,17 @@ const contractSchema = z.object({
   content: z.string().trim().min(1, "Contract content is required"),
   recipient_email: optionalEmailSchema,
 });
+
+const moneyShort = (n: number) => `$${Math.round(n).toLocaleString(undefined)}`;
+
+// Shared filter for the Projects sub-pages: "Now" shows active jobs,
+// "Archive" shows finished/paused ones.
+const filterByStatus = (list: Project[], group: "now" | "archive") =>
+  list.filter((p) =>
+    group === "now"
+      ? p.status === "planning" || p.status === "in_progress"
+      : p.status === "completed" || p.status === "paused"
+  );
 
 const CONTRACT_TEMPLATES = [
   {
@@ -145,24 +153,90 @@ Retainer fees are billed at the beginning of each monthly cycle and entitle the 
   },
 ];
 
+// Money sub-page for Projects: a plain-English view of what you agreed to
+// charge vs. what the tracked time is actually worth so far, plus task
+// progress. Read-only — everything is computed from the one live fetch.
+const MoneySubPage = ({
+  projects,
+  stats,
+}: {
+  projects: Project[];
+  stats: { budgetTotal: number; trackedValueTotal: number; tasksTotal: number; tasksDone: number };
+}) => {
+  if (projects.length === 0) {
+    return (
+      <Card className="bg-card border-dashed border-line p-12 text-center">
+        <Wallet className="w-12 h-12 text-faint mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-fg">No money to show yet</h3>
+        <p className="text-sm text-faint mt-1">Create a project and this page fills up by itself.</p>
+      </Card>
+    );
+  }
+
+  const cards = [
+    { label: "Total budgeted", value: moneyShort(stats.budgetTotal), tone: "text-fg" },
+    { label: "Work value so far", value: moneyShort(stats.trackedValueTotal), tone: "text-info" },
+    { label: "Tasks done", value: `${stats.tasksDone}/${stats.tasksTotal}`, tone: "text-accent" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {cards.map((c) => (
+          <Card key={c.label} className="bg-card border-line p-5 space-y-1">
+            <span className="text-xs text-muted font-mono uppercase">{c.label}</span>
+            <p className={`text-2xl font-bold ${c.tone}`}>{c.value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="bg-card border-line p-5 space-y-4">
+        <h3 className="text-sm font-bold text-fg">Budget vs. work done</h3>
+        <div className="space-y-4">
+          {projects.map((p) => {
+            const value = (p.tracked_hours || 0) * (p.hourly_rate || 0);
+            const pct = p.budget > 0 ? Math.min(100, Math.round((value / p.budget) * 100)) : 0;
+            const doneTasks = p.tasks?.filter((t) => t.status === "done").length ?? 0;
+            return (
+              <div key={p.id} className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-fg truncate">{p.title}</span>
+                  <span className="text-muted font-mono shrink-0 ml-2">
+                    {moneyShort(value)} / {moneyShort(p.budget || 0)}
+                  </span>
+                </div>
+                <div className="w-full bg-surface rounded-full h-2 overflow-hidden">
+                  <div className="bg-info h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-[11px] text-faint">
+                  {doneTasks}/{p.tasks?.length ?? 0} tasks done • {p.status}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 function ProjectsContent() {
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<"projects" | "contracts" | "invoices">("projects");
-
   // Deep links like /dashboard/projects?tab=invoices (used by the old
-  // invoices route redirect and dashboard links) open the matching tab.
+  // invoices route redirect and dashboard links) open the matching tab. Read
+  // it once at init so there is no setState-in-effect cascade.
   const searchParams = useSearchParams();
-  useEffect(() => {
+  const [activeTab, setActiveTab] = useState<"projects" | "contracts" | "invoices">(() => {
     const tab = searchParams.get("tab");
-    if (tab === "contracts" || tab === "invoices" || tab === "projects") {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
+    return tab === "contracts" || tab === "invoices" || tab === "projects" ? tab : "projects";
+  });
+  // Sub-pages within each big tab — one small job per page.
+  const [projectsSub, setProjectsSub] = useState<"now" | "money" | "archive">("now");
+  const [contractsSub, setContractsSub] = useState<"waiting" | "signed" | "templates">("waiting");
 
-  // Modals
-  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
-  const [showCreateContractModal, setShowCreateContractModal] = useState(false);
-  const [selectedProjectForContract, setSelectedProjectForContract] = useState<string>("");
+  // Create screens — full pages inside the tab, never popups.
+  const [showCreateProjectPage, setShowCreateProjectPage] = useState(false);
+  const [showCreateContractPage, setShowCreateContractPage] = useState(false);
   const [viewingContract, setViewingContract] = useState<Contract | null>(null);
 
   // Task & milestone checklist (inline, persisted via /projects PATCH)
@@ -201,6 +275,9 @@ function ProjectsContent() {
     },
     {
       reportContext: "projects",
+      // Live signing: re-fetch so "Link Sent" flips to "Opened"/"Signed" on
+      // this screen by itself while the client signs on their device.
+      pollMs: 15_000,
       onSuccess: (data) => {
         if (data.projects.length > 0 && !contractProjectId) {
           setContractProjectId(data.projects[0].id);
@@ -212,6 +289,28 @@ function ProjectsContent() {
   const projects = pageData?.projects ?? [];
   const clients = pageData?.clients ?? [];
   const contracts = pageData?.contracts ?? [];
+
+  // Derived groups for the sub-pages — all from the one live fetch, so there
+  // is nothing extra to keep in sync by hand.
+  const activeProjects = filterByStatus(projects, "now");
+  const archivedProjects = filterByStatus(projects, "archive");
+  const currentProjectList = projectsSub === "archive" ? archivedProjects : activeProjects;
+  const waitingContracts = contracts.filter((c) => c.status !== "signed");
+  const signedContractList = contracts.filter((c) => c.status === "signed");
+  const currentContractList = contractsSub === "signed" ? signedContractList : waitingContracts;
+
+  const moneyStats = {
+    budgetTotal: projects.reduce((acc, p) => acc + (p.budget || 0), 0),
+    trackedValueTotal: projects.reduce(
+      (acc, p) => acc + (p.tracked_hours || 0) * (p.hourly_rate || 0),
+      0
+    ),
+    tasksTotal: projects.reduce((acc, p) => acc + (p.tasks?.length ?? 0), 0),
+    tasksDone: projects.reduce(
+      (acc, p) => acc + (p.tasks?.filter((t) => t.status === "done").length ?? 0),
+      0
+    ),
+  };
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,9 +327,10 @@ function ProjectsContent() {
         },
         token
       );
-      setShowCreateProjectModal(false);
+      setShowCreateProjectPage(false);
       setTitle("");
       setDescription("");
+      invalidateCache("projects:data");
       invalidateCache("dashboard:data");
       loadData();
       toast.success("Project created");
@@ -251,6 +351,7 @@ function ProjectsContent() {
     try {
       const token = (await getToken()) || undefined;
       await deleteProject(id, token);
+      invalidateCache("projects:data");
       invalidateCache("dashboard:data");
       loadData();
       toast.success("Project deleted");
@@ -261,8 +362,41 @@ function ProjectsContent() {
   };
 
   const afterProjectMutation = () => {
+    invalidateCache("projects:data");
     invalidateCache("dashboard:data");
     loadData();
+  };
+
+  // Archive-page undo: bring a finished/paused job back into "Now".
+  const handleRestoreProject = async (id: string) => {
+    setBusyId(id);
+    try {
+      const token = (await getToken()) || undefined;
+      await updateProject(id, { status: "in_progress" }, token);
+      afterProjectMutation();
+      toast.success("Project is active again");
+    } catch (err) {
+      console.error("Error restoring project:", err);
+      toast.error("Could not restore project");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Now-page finish: tuck a completed job into the Archive with one tap.
+  const handleArchiveProject = async (id: string) => {
+    setBusyId(id);
+    try {
+      const token = (await getToken()) || undefined;
+      await updateProject(id, { status: "completed" }, token);
+      afterProjectMutation();
+      toast.success("Moved to Archive");
+    } catch (err) {
+      console.error("Error archiving project:", err);
+      toast.error("Could not archive project");
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const handleAddTask = async (projectId: string) => {
@@ -353,7 +487,8 @@ function ProjectsContent() {
         },
         token
       );
-      setShowCreateContractModal(false);
+      setShowCreateContractPage(false);
+      invalidateCache("projects:data");
       invalidateCache("dashboard:data");
       loadData();
       setActiveTab("contracts");
@@ -375,6 +510,7 @@ function ProjectsContent() {
     try {
       const token = (await getToken()) || undefined;
       await deleteContract(id, token);
+      invalidateCache("projects:data");
       invalidateCache("dashboard:data");
       loadData();
       toast.success("Contract deleted");
@@ -395,7 +531,7 @@ function ProjectsContent() {
   const openNewContractForProject = (projId: string, clId?: string) => {
     setContractProjectId(projId);
     if (clId) setContractClientId(clId);
-    setShowCreateContractModal(true);
+    setShowCreateContractPage(true);
   };
 
   // Metrics
@@ -426,16 +562,16 @@ function ProjectsContent() {
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="border-line text-fg"
+            className="border-line text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
           {activeTab === "projects" ? (
             <Button
               size="sm"
-              onClick={() => setShowCreateProjectModal(true)}
+              onClick={() => setShowCreateProjectPage(true)}
               className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
             >
               <Plus className="w-3.5 h-3.5 mr-1.5" />
@@ -444,7 +580,7 @@ function ProjectsContent() {
           ) : activeTab === "contracts" ? (
             <Button
               size="sm"
-              onClick={() => setShowCreateContractModal(true)}
+              onClick={() => setShowCreateContractPage(true)}
               className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
             >
               <FileSignature className="w-3.5 h-3.5 mr-1.5" />
@@ -454,53 +590,40 @@ function ProjectsContent() {
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex items-center gap-3 border-b border-line pb-2">
-        <button
-          onClick={() => setActiveTab("projects")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === "projects"
-            ? "bg-accent-soft text-info border border-accent/30"
-            : "text-muted hover:text-fg hover:bg-surface"
-            }`}
-        >
-          <FolderKanban className="w-4 h-4" />
-          Projects & Milestones ({projects.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab("contracts")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === "contracts"
-            ? "bg-accent-soft text-info border border-accent/30"
-            : "text-muted hover:text-fg hover:bg-surface"
-            }`}
-        >
-          <FileSignature className="w-4 h-4" />
-          Contracts & E-Sign Tracker ({contracts.length})
-          {viewedContracts > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-warn/20 text-warn border border-warn/30 animate-pulse">
-              {viewedContracts} Opened
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("invoices")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === "invoices"
-            ? "bg-accent-soft text-info border border-accent/30"
-            : "text-muted hover:text-fg hover:bg-surface"
-            }`}
-        >
-          <Receipt className="w-4 h-4" />
-          Invoices
-        </button>
-      </div>
+      {/* The tab list steps aside while a create page is open */}
+      {!showCreateProjectPage && !showCreateContractPage && (
+      <>
+      {/* Main Tabs */}
+      <SubTabs
+        tabs={[
+          { value: "projects", label: "Projects", count: projects.length },
+          { value: "contracts", label: "Contracts", count: contracts.length },
+          { value: "invoices", label: "Invoices" },
+        ] as const}
+        value={activeTab}
+        onChange={(v) => setActiveTab(v as "projects" | "contracts" | "invoices")}
+      />
 
       {/* TAB 3: INVOICES */}
       {activeTab === "invoices" && <InvoicesPanel />}
 
-      {/* TAB 1: PROJECTS */}
+      {/* TAB 1: PROJECTS — sub-pages Now / Money / Archive */}
       {activeTab === "projects" && (
         <div className="space-y-6">
+          <SubTabs
+            tabs={[
+              { value: "now", label: "Now", count: activeProjects.length },
+              { value: "money", label: "Money" },
+              { value: "archive", label: "Archive", count: archivedProjects.length },
+            ] as const}
+            value={projectsSub}
+            onChange={(v) => setProjectsSub(v as "now" | "money" | "archive")}
+          />
+
+          {projectsSub === "money" ? (
+            <MoneySubPage projects={projects} stats={moneyStats} />
+          ) : (
+          <div className="space-y-6">
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[1, 2, 3, 4].map((i) => (
@@ -521,9 +644,9 @@ function ProjectsContent() {
                 </Card>
               ))}
             </div>
-          ) : projects.length > 0 ? (
+          ) : currentProjectList.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {projects.map((p) => {
+              {currentProjectList.map((p) => {
                 const projectContracts = contracts.filter((c) => c.project_id === p.id);
                 return (
                   <Card
@@ -661,13 +784,40 @@ function ProjectsContent() {
 
                     <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
                       <span className="text-xs text-faint">Created: {p.created_at?.slice(0, 10)}</span>
-                      <button
-                        onClick={() => handleDeleteProject(p.id)}
-                        className="text-faint hover:text-danger transition-colors"
-                        title="Delete project"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {projectsSub === "archive" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRestoreProject(p.id)}
+                            disabled={busyId === p.id}
+                            className="border-line text-fg h-7 px-2.5 text-xs"
+                            title="Move this project back to Now"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                            Restore
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleArchiveProject(p.id)}
+                            disabled={busyId === p.id}
+                            className="border-line text-fg h-7 px-2.5 text-xs"
+                            title="Mark done and move to Archive"
+                          >
+                            <Archive className="w-3.5 h-3.5 mr-1" />
+                            Done
+                          </Button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteProject(p.id)}
+                          className="text-faint hover:text-danger transition-colors"
+                          title="Delete project"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </Card>
                 );
@@ -676,12 +826,16 @@ function ProjectsContent() {
           ) : (
             <Card className="bg-card border-dashed border-line p-12 text-center">
               <FolderKanban className="w-12 h-12 text-faint mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-fg">No Projects Found</h3>
+              <h3 className="text-lg font-semibold text-fg">
+                {projectsSub === "archive" ? "Nothing in the archive" : "No active projects"}
+              </h3>
               <p className="text-sm text-faint mt-1 max-w-md mx-auto">
-                Create a project to manage milestones, attach e-signature contracts, and track time.
+                {projectsSub === "archive"
+                  ? "Finished or paused jobs land here — nothing gets lost."
+                  : "Create a project to manage milestones, attach e-signature contracts, and track time."}
               </p>
               <Button
-                onClick={() => setShowCreateProjectModal(true)}
+                onClick={() => setShowCreateProjectPage(true)}
                 className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg"
               >
                 <Plus className="w-4 h-4 mr-1.5" />
@@ -689,13 +843,26 @@ function ProjectsContent() {
               </Button>
             </Card>
           )}
+          </div>
+          )}
         </div>
       )}
 
-      {/* TAB 2: CONTRACTS & E-SIGN TRACKER */}
+      {/* TAB 2: CONTRACTS — sub-pages Waiting / Signed / Templates */}
       {activeTab === "contracts" && (
         <div className="space-y-6">
-          {/* Contracts Status Scoreboard */}
+          <SubTabs
+            tabs={[
+              { value: "waiting", label: "Waiting", count: waitingContracts.length },
+              { value: "signed", label: "Signed", count: signedContractList.length },
+              { value: "templates", label: "Templates" },
+            ] as const}
+            value={contractsSub}
+            onChange={(v) => setContractsSub(v as "waiting" | "signed" | "templates")}
+          />
+
+          {/* Contracts Status Scoreboard (hidden on the Templates page) */}
+          {contractsSub !== "templates" && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card className="bg-card border-line p-4 space-y-1">
               <span className="text-xs text-muted font-mono uppercase">Total Contracts</span>
@@ -714,14 +881,37 @@ function ProjectsContent() {
               <p className="text-2xl font-bold text-accent">{signedContracts}</p>
             </Card>
           </div>
+          )}
 
-          {/* Contracts Listing */}
-          {contracts.length > 0 ? (
+          {/* Contracts Listing / Templates gallery */}
+          {contractsSub === "templates" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {CONTRACT_TEMPLATES.map((tmpl) => (
+                <Card key={tmpl.id} className="bg-card border-line p-5 space-y-2 flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-info" />
+                    <h3 className="text-sm font-bold text-fg">{tmpl.name}</h3>
+                  </div>
+                  <p className="text-xs text-muted flex-1">{tmpl.description}</p>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setContractTitle(tmpl.name);
+                      setContractContent(tmpl.content);
+                      setShowCreateContractPage(true);
+                    }}
+                    className="bg-accent hover:bg-accent-hi text-accent-fg self-start"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Use this template
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          ) : currentContractList.length > 0 ? (
             <div className="space-y-4">
-              {contracts.map((c) => {
+              {currentContractList.map((c) => {
                 const isViewed = c.status === "viewed";
                 const isSigned = c.status === "signed";
-                const isSent = c.status === "sent" || c.status === "draft";
 
                 return (
                   <Card
@@ -850,12 +1040,16 @@ function ProjectsContent() {
           ) : (
             <Card className="bg-card border-dashed border-line p-12 text-center">
               <FileSignature className="w-12 h-12 text-faint mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-fg">No Contracts Sent Yet</h3>
+              <h3 className="text-lg font-semibold text-fg">
+                {contractsSub === "signed" ? "Nothing signed yet" : "No contracts waiting"}
+              </h3>
               <p className="text-sm text-faint mt-1 max-w-md mx-auto">
-                Send professional agreements with instant mobile e-signing, read receipts, and automatic project archiving.
+                {contractsSub === "signed"
+                  ? "Contracts flip into this page the moment a client signs — no refresh needed."
+                  : "Send an agreement and it shows up here with a live read/signature status."}
               </p>
               <Button
-                onClick={() => setShowCreateContractModal(true)}
+                onClick={() => setShowCreateContractPage(true)}
                 className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg"
               >
                 <FileSignature className="w-4 h-4 mr-1.5" />
@@ -865,19 +1059,16 @@ function ProjectsContent() {
           )}
         </div>
       )}
+      </>
+      )}
 
-      {/* CREATE PROJECT MODAL */}
-      {showCreateProjectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <Card className="w-full max-w-md bg-card border-line p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
+      {/* CREATE PROJECT — in-page screen, replaces the list (no popup) */}
+      {showCreateProjectPage && (
+        <div className="animate-in fade-in duration-300">
+          <Card className="w-full max-w-xl bg-card border-line p-6 space-y-4">
+            <div className="border-b border-line pb-3">
               <h3 className="text-lg font-bold text-fg">Create Project</h3>
-              <button
-                onClick={() => setShowCreateProjectModal(false)}
-                className="text-muted hover:text-fg text-sm"
-              >
-                ✕
-              </button>
+              <p className="text-muted text-xs mt-0.5">One job, one home — tasks, contracts, time and invoices attach to it.</p>
             </div>
 
             <form onSubmit={handleCreateProject} className="space-y-3">
@@ -934,7 +1125,7 @@ function ProjectsContent() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowCreateProjectModal(false)}
+                  onClick={() => setShowCreateProjectPage(false)}
                   className="border-line text-fg"
                 >
                   Cancel
@@ -948,21 +1139,16 @@ function ProjectsContent() {
         </div>
       )}
 
-      {/* CREATE CONTRACT MODAL */}
-      {showCreateContractModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <Card className="w-full max-w-2xl bg-card border-line p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2">
-                <FileSignature className="w-5 h-5 text-info" />
+      {/* CREATE CONTRACT — in-page screen, replaces the list (no popup) */}
+      {showCreateContractPage && (
+        <div className="animate-in fade-in duration-300">
+          <Card className="w-full max-w-2xl bg-card border-line p-6 space-y-4">
+            <div className="flex items-center gap-2 border-b border-line pb-3">
+              <FileSignature className="w-5 h-5 text-info" />
+              <div>
                 <h3 className="text-lg font-bold text-fg">Create & Send E-Signature Contract</h3>
+                <p className="text-muted text-xs mt-0.5">Pick a template, adjust the terms, get a signable link.</p>
               </div>
-              <button
-                onClick={() => setShowCreateContractModal(false)}
-                className="text-muted hover:text-fg text-sm"
-              >
-                ✕
-              </button>
             </div>
 
             <form onSubmit={handleCreateContract} className="space-y-4">
@@ -1059,7 +1245,7 @@ function ProjectsContent() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowCreateContractModal(false)}
+                  onClick={() => setShowCreateContractPage(false)}
                   className="border-line text-fg"
                 >
                   Cancel

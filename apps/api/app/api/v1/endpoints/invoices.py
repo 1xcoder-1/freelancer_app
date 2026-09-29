@@ -8,8 +8,9 @@ from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.inngest_client import emit
 from app.core.workspace import get_or_create_user_workspace
-from app.models.finance import Invoice, InvoiceItem
+from app.models.finance import Invoice, InvoiceItem, TimeEntry
 from app.models.client import Client
+from app.models.project import Project
 from app.schemas.domain import InvoiceCreate, InvoiceOut, InvoiceStatusUpdate
 
 router = APIRouter(prefix="/invoices", tags=["Invoices & Payments"])
@@ -55,6 +56,44 @@ async def list_invoices(
         })
     return out
 
+@router.get("/unbilled-time", response_model=List[Dict[str, Any]])
+async def list_unbilled_time(
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Billable tracked time that has never been invoiced — the raw material
+    for "bill exactly what you worked". Each row carries the client its
+    project belongs to (so the UI can only offer entries matching the
+    invoice's client) and the money the hours are worth."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    rows = (await db.execute(
+        select(TimeEntry, Project.client_id, Project.title)
+        .join(Project, TimeEntry.project_id == Project.id)
+        .where(
+            TimeEntry.workspace_id == workspace.id,
+            TimeEntry.is_billable.is_(True),
+            TimeEntry.is_invoiced.is_(False),
+        )
+        .order_by(TimeEntry.start_time.desc())
+    )).all()
+
+    out = []
+    for entry, project_client_id, project_title in rows:
+        hours = round(entry.duration_seconds / 3600, 2)
+        out.append({
+            "id": entry.id,
+            "project_id": entry.project_id,
+            "project_title": project_title,
+            "client_id": project_client_id,
+            "description": entry.description,
+            "start_time": entry.start_time,
+            "duration_seconds": entry.duration_seconds,
+            "hours": hours,
+            "hourly_rate": entry.hourly_rate,
+            "amount": round(hours * entry.hourly_rate, 2),
+        })
+    return out
+
 @router.post("", response_model=InvoiceOut, status_code=status.HTTP_201_CREATED)
 async def create_invoice(
     payload: InvoiceCreate,
@@ -75,6 +114,30 @@ async def create_invoice(
             raise HTTPException(status_code=400, detail="Specified client does not exist in your workspace")
         client_name = client.name
         client_email = client.email
+
+    # Tracked time being billed on this invoice: re-validate server-side —
+    # the ids must exist in this workspace, be billable, never invoiced, and
+    # belong to the same client as the invoice. Anything else is a 422, so a
+    # stale tab can never double-bill an hour.
+    if payload.time_entry_ids:
+        ids = list(set(payload.time_entry_ids))
+        entries = (await db.execute(
+            select(TimeEntry).where(TimeEntry.id.in_(ids), TimeEntry.workspace_id == workspace.id)
+        )).scalars().all()
+        if len(entries) != len(ids):
+            raise HTTPException(status_code=422, detail="One or more time entries were not found in your workspace")
+        proj_ids = {e.project_id for e in entries}
+        projects = (await db.execute(
+            select(Project).where(Project.id.in_(proj_ids), Project.workspace_id == workspace.id)
+        )).scalars().all()
+        project_client_map = {p.id: p.client_id for p in projects}
+        for e in entries:
+            if not e.is_billable or e.is_invoiced:
+                raise HTTPException(status_code=422, detail="One or more time entries are already invoiced or not billable")
+            if project_client_map.get(e.project_id) != payload.client_id:
+                raise HTTPException(status_code=422, detail="One or more time entries belong to a different client")
+        for e in entries:
+            e.is_invoiced = True
 
     total = 0.0
     items_to_create = []

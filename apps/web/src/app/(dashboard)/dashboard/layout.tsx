@@ -25,7 +25,11 @@ export default function DashboardLayout({
       <DashboardSidebar />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative bg-bg">
+      <main
+        className={`flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative bg-bg ${
+          pathname?.startsWith("/dashboard/clients") ? "no-scrollbar" : ""
+        }`}
+      >
         {/* Top utility bar: command palette + real-time theme toggle (matches sidebar background & dashed border, aligned to right) */}
         {!isPlannerBoard && (
           <div className="sticky top-0 z-30 flex items-center justify-end gap-3 px-6 md:px-8 h-16 shrink-0 bg-card border-b border-dashed border-line">

@@ -7,7 +7,7 @@ from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
 from app.models.finance import Expense
 from app.models.project import Project
-from app.schemas.domain import ExpenseCreate, ExpenseOut
+from app.schemas.domain import ExpenseCreate, ExpenseOut, ExpenseUpdate
 
 router = APIRouter(prefix="/expenses", tags=["Expenses & Taxes"])
 
@@ -29,6 +29,7 @@ async def list_expenses(
             "amount": exp.amount,
             "description": exp.description,
             "receipt_cloudinary_url": exp.receipt_cloudinary_url,
+            "is_recurring": bool(exp.is_recurring),
             "created_at": exp.created_at
         }
         for exp in expenses
@@ -55,7 +56,8 @@ async def create_expense(
         category=payload.category,
         amount=payload.amount,
         description=payload.description,
-        receipt_cloudinary_url=payload.receipt_cloudinary_url
+        receipt_cloudinary_url=payload.receipt_cloudinary_url,
+        is_recurring=payload.is_recurring
     )
     db.add(expense)
     await db.commit()
@@ -68,8 +70,34 @@ async def create_expense(
         "amount": expense.amount,
         "description": expense.description,
         "receipt_cloudinary_url": expense.receipt_cloudinary_url,
+        "is_recurring": bool(expense.is_recurring),
         "created_at": expense.created_at
     }
+
+@router.patch("/{expense_id}", response_model=ExpenseOut)
+async def update_expense(
+    expense_id: str,
+    payload: ExpenseUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Edit one expense (used for the subscription toggle). Fields come from
+    the closed ExpenseUpdate whitelist and only sent keys are written, so a
+    crafted payload can never touch workspace_id or anything else."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    res = await db.execute(
+        select(Expense).where(Expense.id == expense_id, Expense.workspace_id == workspace.id)
+    )
+    expense = res.scalar_one_or_none()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(expense, key, value)
+    await db.commit()
+    await db.refresh(expense)
+    return expense
 
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_expense(

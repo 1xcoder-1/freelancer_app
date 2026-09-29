@@ -1,45 +1,32 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import {
   Users,
   Plus,
-  Mail,
-  Phone,
-  Globe,
-  Trash2,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getClients, createClient, deleteClient, type Client } from "@/lib/api";
-import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
-import { toast } from "sonner";
-import { z } from "zod";
-import { validateOrToast, nameSchema, optionalEmailSchema, phoneSchema, optionalUrlSchema } from "@/lib/validation";
+import { getClients, type Client } from "@/lib/api";
+import { useApiData } from "@/hooks/use-api-data";
+import { invalidateCache } from "@/lib/cache";
+import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
-const clientSchema = z.object({
-  name: nameSchema("Client name"),
-  email: optionalEmailSchema,
-  phone: z.union([z.literal(""), phoneSchema]),
-  website: optionalUrlSchema,
-});
+const DEFAULT_CATEGORIES = ["Featured", "VIP & Enterprise", "Active Retainers", "General Clients"];
+const CARDS_PER_PAGE = 20;
 
 export function ClientsPanel() {
+  const router = useRouter();
   const { getToken } = useAuth();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-
-  // Form
-  const [name, setName] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [website, setWebsite] = useState("");
-  const [notes, setNotes] = useState("");
+  const [catPages, setCatPages] = useState<Record<string, number>>({});
 
   const { data: clientsData, loading, refresh: loadData } = useApiData<Client[]>(
     "clients:data",
@@ -51,263 +38,283 @@ export function ClientsPanel() {
 
   const clients = clientsData ?? [];
 
-  const handleCreateClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateOrToast(clientSchema, { name, email, phone, website })) return;
-    try {
-      const token = (await getToken()) || undefined;
-      await createClient({
-        name,
-        company_name: companyName,
-        email,
-        phone,
-        website,
-        notes,
-        status: "active"
-      }, token);
-      setShowCreateModal(false);
-      setName("");
-      setCompanyName("");
-      setEmail("");
-      setPhone("");
-      setWebsite("");
-      setNotes("");
-      invalidateCache("dashboard:data");
-      invalidateCache("invoices:data");
-      loadData();
-      toast.success("Client added");
-    } catch (err) {
-      console.error("Error creating client:", err);
-      toast.error("Could not add client");
+  // Helper to get effective category for a client
+  const getClientCategory = (c: Client): string => {
+    if (!c) return "Featured";
+    // Check if notes has [category: ...]
+    if (c.notes && typeof c.notes === "string") {
+      const match = c.notes.match(/\[category:\s*([^\]]+)\]/i);
+      if (match && match[1]) {
+        const val = match[1].trim();
+        if (val && val !== "[object Object]" && !val.includes("[object Object]")) {
+          return val;
+        }
+      }
     }
+    return "Featured";
   };
 
-  const handleDelete = async (id: string) => {
-    const ok = await confirmDialog({
-      title: "Delete client",
-      message: "This client will be removed. Their leads and notes go with them — this cannot be undone.",
-      confirmLabel: "Delete",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      const token = (await getToken()) || undefined;
-      await deleteClient(id, token);
-      invalidateCache("dashboard:data");
-      invalidateCache("invoices:data");
-      loadData();
-      toast.success("Client deleted");
-    } catch (err) {
-      console.error("Error deleting client:", err);
-      toast.error("Could not delete client");
+  const handleOpenCreate = () => {
+    router.push("/dashboard/clients/new");
+  };
+
+  const handleOpenDetail = (client: Client) => {
+    router.push(`/dashboard/clients/${client.id}`);
+  };
+
+  // Group clients by category (only categories that actually contain clients)
+  const categoriesPresent = Array.from(
+    new Set(
+      clients
+        .map((c) => getClientCategory(c))
+        .filter((cat) => Boolean(cat) && typeof cat === "string" && cat !== "[object Object]")
+    )
+  );
+  if (categoriesPresent.length === 0 && clients.length > 0) {
+    categoriesPresent.push("Featured");
+  }
+
+  // Helper to format price numbers with commas (e.g. 50000 -> 50,000)
+  const formatPriceWithCommas = (val: string): string => {
+    if (!val) return "";
+    const suffixMatch = val.match(/\s*(\/.*|[a-zA-Z]+)$/);
+    const suffix = suffixMatch ? suffixMatch[0] : "";
+    const numericOnly = suffixMatch ? val.slice(0, suffixMatch.index) : val;
+
+    const clean = numericOnly.replace(/,/g, "").replace(/[^\d.]/g, "");
+    if (!clean) return val;
+
+    const parts = clean.split(".");
+    const intStr = parts[0];
+    const formattedInt = intStr ? Number(intStr).toLocaleString("en-US") : "0";
+
+    if (parts.length > 1) {
+      return `${formattedInt}.${parts[1]}${suffix}`;
     }
+
+    return `${formattedInt}${suffix}`;
+  };
+
+  // Helper to parse client card metadata
+  const parseClientCardInfo = (client: Client) => {
+    let roleTitle = "";
+    let rateDisplay = "";
+    let clientCurrency = "USD";
+    const rawNotes = client.notes || "";
+    const isVip = client.status === "vip";
+
+    if (rawNotes) {
+      const roleMatch = rawNotes.match(/\[role:\s*([^\]]+)\]/i);
+      if (roleMatch && roleMatch[1] && roleMatch[1] !== "[object Object]" && !roleMatch[1].includes("[object Object]")) {
+        roleTitle = roleMatch[1].trim();
+      }
+
+      const rateMatch = rawNotes.match(/\[rate:\s*([A-Z]{3})?\s*([^\]]+)\]/i);
+      if (rateMatch) {
+        if (rateMatch[1] && rateMatch[1] !== "[object Object]") clientCurrency = rateMatch[1].trim();
+        if (rateMatch[2] && rateMatch[2] !== "[object Object]" && !rateMatch[2].includes("[object Object]")) {
+          rateDisplay = formatPriceWithCommas(rateMatch[2].trim());
+        }
+      }
+    }
+
+    return { roleTitle, rateDisplay, clientCurrency, isVip };
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-lg font-bold tracking-tight text-fg">Clients</h2>
-            <Badge className="bg-accent-soft text-info border-accent/20 font-mono text-xs">
-              {loading ? "Loading..." : `${clients.length} clients`}
+            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Clients Roster</h2>
+            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+              {loading ? "Loading..." : `${clients.length} Total`}
             </Badge>
           </div>
           <p className="text-muted text-sm mt-1">
-            Everyone you work for, in one place.
+            Categorized roster of clients, retainers, and enterprise accounts.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => loadData(true)} disabled={loading} className="border-line text-fg">
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadData(true)}
+            disabled={loading}
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => setShowCreateModal(true)}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+          <button
+            onClick={() => handleOpenCreate()}
+            className="relative group overflow-hidden rounded-xl p-[1px] font-semibold text-xs transition-all duration-300 shadow-sm hover:shadow-accent/25 hover:shadow-md active:scale-[0.98]"
           >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Client
-          </Button>
+            <span className="absolute inset-0 bg-gradient-to-r from-accent via-amber-400 to-accent rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
+            <span className="relative flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-accent group-hover:bg-accent-hi text-accent-fg transition-colors duration-200 font-bold">
+              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
+              <span>Add Client</span>
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* Clients Grid with Skeleton Loading */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Card key={i} className="bg-card border-line p-5 space-y-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <Skeleton className="h-5 w-32" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-                <Skeleton className="h-5 w-16 rounded-full" />
+      {/* Loading Skeleton */}
+      {loading && clients.length === 0 ? (
+        <div className="space-y-8">
+          {[1, 2].map((group) => (
+            <div key={group} className="space-y-3">
+              <Skeleton className="h-6 w-36 rounded-md" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-36 w-full rounded-2xl" />
+                ))}
               </div>
-              <div className="space-y-2 pt-2">
-                <Skeleton className="h-3 w-44" />
-                <Skeleton className="h-3 w-36" />
-                <Skeleton className="h-3 w-40" />
-              </div>
-              <div className="pt-3 border-t border-line flex justify-between">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-4 w-4 rounded" />
-              </div>
-            </Card>
+            </div>
           ))}
         </div>
-      ) : clients.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {clients.map((c) => (
-            <Card key={c.id} className="bg-card border-line hover:border-accent/30 transition-all p-5 flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-base font-bold text-fg">{c.name}</h3>
-                    {c.company_name && <p className="text-xs text-info font-medium">{c.company_name}</p>}
-                  </div>
-                  <Badge variant="outline" className="text-[10px] bg-accent-soft text-accent border-accent/20">
-                    {c.status}
-                  </Badge>
-                </div>
-
-                <div className="mt-4 space-y-1.5 text-xs text-muted">
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-faint shrink-0" />
-                    <span className="truncate text-fg">{c.email}</span>
-                  </div>
-                  {c.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-faint shrink-0" />
-                      <span className="text-fg">{c.phone}</span>
-                    </div>
-                  )}
-                  {c.website && (
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-3.5 h-3.5 text-faint shrink-0" />
-                      <span className="truncate text-fg">{c.website}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-line flex items-center justify-between text-xs text-faint">
-                <button
-                  onClick={() => handleDelete(c.id)}
-                  className="text-faint hover:text-danger transition-colors"
-                  title="Delete Client"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <Card className="bg-card border-dashed border-line p-12 text-center">
-          <Users className="w-12 h-12 text-faint mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-fg">No clients yet</h3>
-          <p className="text-sm text-faint mt-1 max-w-md mx-auto">
-            Add the people you work with to send them invoices, proposals and contracts.
+      ) : clients.length === 0 ? (
+        <Card className="bg-card border-dashed border-line p-12 text-center rounded-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
+            <ChaiCupIcon className="w-7 h-7" />
+          </div>
+          <h3 className="text-lg font-bold text-fg">No clients yet</h3>
+          <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+            Organize clients by category and track invoices, retainers, and contact details seamlessly.
           </p>
           <Button
-            onClick={() => setShowCreateModal(true)}
-            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg"
+            onClick={() => handleOpenCreate()}
+            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add First Client
           </Button>
         </Card>
-      )}
+      ) : (
+        /* Categorized Cards with Sliding Pagination (20 cards per page) */
+        <div className="space-y-10">
+          {categoriesPresent.map((cat) => {
+            const catClients = clients.filter((c) => getClientCategory(c) === cat);
+            if (catClients.length === 0) return null;
 
-      {/* Add Client Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <Card className="w-full max-w-md bg-card border-line p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <h3 className="text-lg font-bold text-fg">Add a client</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-muted hover:text-fg text-sm">
-                ✕
-              </button>
-            </div>
+            const totalPages = Math.ceil(catClients.length / CARDS_PER_PAGE);
+            const currentPage = Math.min(catPages[cat] || 1, totalPages || 1);
+            const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+            const endIndex = Math.min(startIndex + CARDS_PER_PAGE, catClients.length);
+            const visibleClients = catClients.slice(startIndex, endIndex);
 
-            <form onSubmit={handleCreateClient} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted">Client Name *</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Sarah Jenkins"
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent"
-                  required
-                />
-              </div>
+            const handlePrevPage = () => {
+              setCatPages((prev) => ({
+                ...prev,
+                [cat]: Math.max(1, currentPage - 1),
+              }));
+            };
 
-              <div>
-                <label className="text-xs font-semibold text-muted">Company Name</label>
-                <input
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. Acme Tech Labs"
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent"
-                />
-              </div>
+            const handleNextPage = () => {
+              setCatPages((prev) => ({
+                ...prev,
+                [cat]: Math.min(totalPages, currentPage + 1),
+              }));
+            };
 
-              <div>
-                <label className="text-xs font-semibold text-muted">Email Address *</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="sarah@acmelabs.com"
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent"
-                  required
-                />
-              </div>
+            return (
+              <div key={cat} className="space-y-4">
+                {/* Category Header with Title, Count, Underline & Sliding Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div className="inline-flex flex-col items-start space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">
+                        {cat}
+                      </h3>
+                      <span className="text-xs font-mono font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-md border border-accent/20">
+                        {catClients.length}
+                      </span>
+                    </div>
+                    {/* Straight orange line under category title */}
+                    <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted">Phone</label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 555-0192"
-                    className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent"
-                  />
+                  {/* Sliding Pagination Controls (Shown when category has > 20 cards or multi-page) */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2 self-start sm:self-auto bg-card/90 backdrop-blur-md border border-line/80 px-3 py-1.5 rounded-2xl shadow-sm">
+                      <span className="text-xs font-mono text-muted hidden sm:inline mr-1">
+                        Showing <strong className="text-fg">{startIndex + 1}–{endIndex}</strong> of {catClients.length}
+                      </span>
+
+                      {/* Slider Navigation Buttons */}
+                      <div className="flex items-center gap-1 bg-surface/90 p-0.5 rounded-xl border border-line/70">
+                        <button
+                          onClick={handlePrevPage}
+                          disabled={currentPage <= 1}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                          title="Previous 20 Cards"
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <div className="px-2.5 py-0.5 text-xs font-mono font-bold text-accent bg-accent/10 rounded-md">
+                          {currentPage} / {totalPages}
+                        </div>
+
+                        <button
+                          onClick={handleNextPage}
+                          disabled={currentPage >= totalPages}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                          title="Next 20 Cards"
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted">Website</label>
-                  <input
-                    type="text"
-                    value={website}
-                    onChange={(e) => setWebsite(e.target.value)}
-                    placeholder="https://acme.com"
-                    className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent"
-                  />
+
+                {/* Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
+                  {visibleClients.map((client) => {
+                    const { roleTitle, rateDisplay, clientCurrency, isVip } = parseClientCardInfo(client);
+                    const paidMilestones = client.total_paid ? Math.round(client.total_paid / 100) : (isVip ? "★" : "0");
+                    const totalMilestones = client.total_billed ? Math.max(Number(paidMilestones) || 1, Math.round(client.total_billed / 100)) : (isVip ? "VIP" : "10");
+
+                    return (
+                      <CategoryVisualCard
+                        key={client.id}
+                        title={client.name}
+                        currentCount={paidMilestones}
+                        totalCount={totalMilestones}
+                        subtitle={client.company_name || roleTitle || "Direct Client"}
+                        category={cat}
+                        onClick={() => handleOpenDetail(client)}
+                        tags={
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border capitalize ${
+                                isVip || client.status === "vip"
+                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/25 font-semibold"
+                                  : "bg-sky-500/15 text-sky-400 border-sky-500/25"
+                              }`}
+                            >
+                              {isVip || client.status === "vip" ? "★ VIP" : client.status || "Active"}
+                            </span>
+                            {rateDisplay && (
+                              <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                                {clientCurrency} {rateDisplay}
+                              </span>
+                            )}
+                          </div>
+                        }
+                      />
+                    );
+                  })}
                 </div>
               </div>
-
-              <div className="pt-3 border-t border-line flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateModal(false)}
-                  className="border-line text-fg"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="bg-accent hover:bg-accent-hi text-accent-fg">
-                  Save Client
-                </Button>
-              </div>
-            </form>
-          </Card>
+            );
+          })}
         </div>
       )}
     </div>

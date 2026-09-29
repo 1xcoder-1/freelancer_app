@@ -9,14 +9,17 @@ from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
 from app.models.intake import IntakeForm, IntakeSubmission
 from app.models.client import Client
+from app.models.lead import Lead
 from app.models.workspace import Workspace
 from app.schemas.domain import (
     IntakeFormCreate,
+    IntakeFormUpdate,
     IntakeFormOut,
     PublicIntakeFormOut,
     IntakeSubmissionCreate,
     IntakeSubmissionOut,
     IntakeQuestion,
+    LeadOut,
 )
 
 router = APIRouter(prefix="/intake", tags=["Client Intake Forms"])
@@ -97,6 +100,92 @@ async def create_intake_form(
         "created_at": form.created_at
     }
 
+@router.get("/{form_id}", response_model=IntakeFormOut)
+async def get_intake_form(
+    form_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    stmt = select(IntakeForm).where(IntakeForm.id == form_id, IntakeForm.workspace_id == workspace.id)
+    result = await db.execute(stmt)
+    form = result.scalar_one_or_none()
+    if not form:
+        raise HTTPException(status_code=404, detail="Intake form not found")
+
+    try:
+        raw_questions = json.loads(form.questions_json)
+    except Exception:
+        raw_questions = []
+
+    sub_stmt = select(func.count(IntakeSubmission.id)).where(IntakeSubmission.form_id == form.id)
+    sub_res = await db.execute(sub_stmt)
+    count = sub_res.scalar_one() or 0
+
+    return {
+        "id": form.id,
+        "workspace_id": form.workspace_id,
+        "client_id": form.client_id,
+        "title": form.title,
+        "description": form.description,
+        "questions": raw_questions,
+        "status": form.status,
+        "token": form.token,
+        "submissions_count": count,
+        "created_at": form.created_at
+    }
+
+@router.patch("/{form_id}", response_model=IntakeFormOut)
+async def update_intake_form(
+    form_id: str,
+    payload: IntakeFormUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    stmt = select(IntakeForm).where(IntakeForm.id == form_id, IntakeForm.workspace_id == workspace.id)
+    result = await db.execute(stmt)
+    form = result.scalar_one_or_none()
+    if not form:
+        raise HTTPException(status_code=404, detail="Intake form not found")
+
+    if payload.title is not None:
+        form.title = payload.title
+    if payload.description is not None:
+        form.description = payload.description
+    if payload.status is not None:
+        form.status = payload.status
+    if payload.client_id is not None:
+        form.client_id = payload.client_id
+    if payload.questions is not None:
+        questions_data = [q.model_dump() for q in payload.questions]
+        form.questions_json = json.dumps(questions_data)
+
+    await db.commit()
+    await db.refresh(form)
+
+    try:
+        raw_questions = json.loads(form.questions_json)
+    except Exception:
+        raw_questions = []
+
+    sub_stmt = select(func.count(IntakeSubmission.id)).where(IntakeSubmission.form_id == form.id)
+    sub_res = await db.execute(sub_stmt)
+    count = sub_res.scalar_one() or 0
+
+    return {
+        "id": form.id,
+        "workspace_id": form.workspace_id,
+        "client_id": form.client_id,
+        "title": form.title,
+        "description": form.description,
+        "questions": raw_questions,
+        "status": form.status,
+        "token": form.token,
+        "submissions_count": count,
+        "created_at": form.created_at
+    }
+
 @router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_intake_form(
     form_id: str,
@@ -173,6 +262,60 @@ async def submit_public_intake_form(
         "answers": payload.answers,
         "created_at": submission.created_at
     }
+
+@router.post("/submissions/{submission_id}/convert-to-lead", response_model=LeadOut)
+async def convert_submission_to_lead(
+    submission_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Turn a live intake response into a pipeline lead in one click.
+
+    The submission's form must belong to the caller's workspace (verified via
+    join) before anything is created, and dedup by email means converting
+    twice never spawns a duplicate lead.
+    """
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    sub_res = await db.execute(
+        select(IntakeSubmission, IntakeForm)
+        .join(IntakeForm, IntakeSubmission.form_id == IntakeForm.id)
+        .where(IntakeSubmission.id == submission_id, IntakeForm.workspace_id == workspace.id)
+    )
+    row = sub_res.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    submission, form = row
+
+    email = (submission.client_email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Submission has no email to convert")
+
+    existing = await db.execute(
+        select(Lead).where(Lead.workspace_id == workspace.id, func.lower(Lead.email) == email.lower())
+    )
+    lead = existing.scalars().first()
+    if lead:
+        return lead
+
+    try:
+        answers = json.loads(submission.answers_json) if submission.answers_json else {}
+    except Exception:
+        answers = {}
+    summary = "; ".join(f"{k}: {v}" for k, v in list(answers.items())[:3])
+    lead = Lead(
+        workspace_id=workspace.id,
+        name=(submission.client_name or email).strip(),
+        company=form.title,
+        email=email,
+        source="Intake form",
+        stage="new",
+        notes=summary[:20_000] if summary else None,
+        last_contact_at=submission.created_at,
+    )
+    db.add(lead)
+    await db.commit()
+    await db.refresh(lead)
+    return lead
 
 @router.get("/{form_id}/submissions", response_model=List[IntakeSubmissionOut])
 async def list_form_submissions(

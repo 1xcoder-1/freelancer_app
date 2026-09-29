@@ -1,83 +1,51 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import {
   Target,
   Plus,
   RefreshCw,
-  PhoneCall,
-  Trash2,
-  AlertTriangle,
-  CalendarClock,
-  Trophy,
   DollarSign,
-  ChevronRight,
+  Trophy,
+  CalendarClock,
+  AlertTriangle,
   ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getLeads,
   getPipelineInsights,
-  createLead,
-  updateLead,
-  logLeadContact,
-  deleteLead,
   type Lead,
   type LeadStage,
   type PipelineInsights,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
-import { toast } from "sonner";
-import { z } from "zod";
-import { validateOrToast, nameSchema, emailSchema, moneySchema } from "@/lib/validation";
+import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
-const leadSchema = z.object({
-  name: nameSchema("Lead name"),
-  email: emailSchema,
-  estimatedValue: moneySchema("Estimated value"),
-});
+const CARDS_PER_PAGE = 20;
 
-const STAGES: Array<{ key: LeadStage; label: string; tone: string }> = [
-  { key: "new", label: "New", tone: "bg-surface text-muted" },
-  { key: "contacted", label: "Contacted", tone: "bg-info/10 text-info" },
-  { key: "proposal", label: "Proposal", tone: "bg-accent-soft text-accent" },
-  { key: "negotiation", label: "Talking price", tone: "bg-warn/10 text-warn" },
-  { key: "won", label: "Won", tone: "bg-ok/10 text-ok" },
-  { key: "lost", label: "Lost", tone: "bg-danger/10 text-danger" },
+const STAGES: Array<{ key: LeadStage; label: string; step: number; tone: string }> = [
+  { key: "new", label: "New Lead", step: 1, tone: "bg-surface text-muted" },
+  { key: "contacted", label: "Contacted", step: 2, tone: "bg-info/10 text-info" },
+  { key: "proposal", label: "Proposal", step: 3, tone: "bg-accent-soft text-accent" },
+  { key: "negotiation", label: "Talking Price", step: 4, tone: "bg-warn/10 text-warn" },
+  { key: "won", label: "Won", step: 5, tone: "bg-ok/10 text-ok" },
+  { key: "lost", label: "Lost", step: 0, tone: "bg-danger/10 text-danger" },
 ];
-
-const SOURCES = ["Referral", "Platform", "Outreach", "Website", "Social", "Other"];
 
 const money = (n: number, currency: string) =>
   `${currency === "USD" ? "$" : `${currency} `}${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
-const daysSince = (iso?: string | null): number | null => {
-  if (!iso) return null;
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return null;
-  return Math.floor((Date.now() - then) / 86_400_000);
-};
-
 export function LeadsPanel() {
+  const router = useRouter();
   const { getToken } = useAuth();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [busyLeadId, setBusyLeadId] = useState<string | null>(null);
-
-  // Create form
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [source, setSource] = useState("Referral");
-  const [estimatedValue, setEstimatedValue] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
-  const [followUpDays, setFollowUpDays] = useState("3");
+  const [catPages, setCatPages] = useState<Record<string, number>>({});
 
   const { data: leadsData, loading, refresh: loadLeads } = useApiData<Lead[]>(
     "leads:data",
@@ -102,435 +70,273 @@ export function LeadsPanel() {
     loadInsights();
   };
 
-  const handleCreateLead = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateOrToast(leadSchema, { name, email, estimatedValue: parseFloat(estimatedValue || "0") || 0 })) return;
-    setSaving(true);
-    setFormError(null);
-    try {
-      const token = (await getToken()) || undefined;
-      const days = Math.min(90, Math.max(0, parseInt(followUpDays || "3", 10) || 3));
-      const nextFollowUp = new Date(Date.now() + days * 86_400_000).toISOString();
-      await createLead(
-        {
-          name,
-          company: company || undefined,
-          email,
-          source,
-          priority,
-          estimated_value: parseFloat(estimatedValue || "0") || 0,
-          next_follow_up_at: nextFollowUp,
-        },
-        token
-      );
-      setShowCreateModal(false);
-      setName("");
-      setCompany("");
-      setEmail("");
-      setEstimatedValue("");
-      reloadBoth();
-      toast.success("Lead saved");
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Could not save the lead. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const moveStage = async (lead: Lead, direction: 1 | -1) => {
-    setBusyLeadId(lead.id);
-    try {
-      const token = (await getToken()) || undefined;
-      const idx = STAGES.findIndex((s) => s.key === lead.stage);
-      // Lost is a dead-end column reachable only via its own button; advancing
-      // past "won" and going before "new" are no-ops.
-      const nextIdx = Math.min(STAGES.length - 2, Math.max(0, idx + direction));
-      if (nextIdx !== idx) {
-        await updateLead(lead.id, { stage: STAGES[nextIdx].key }, token);
-        reloadBoth();
+  const getLeadCategory = (l: Lead): string => {
+    if (!l) return "Featured";
+    if (l.notes && typeof l.notes === "string") {
+      const match = l.notes.match(/\[category:\s*([^\]]+)\]/i);
+      if (match && match[1]) {
+        const parsed = match[1].trim();
+        if (parsed && parsed !== "[object Object]" && !parsed.includes("[object Object]")) {
+          return parsed;
+        }
       }
-    } catch (err) {
-      console.error("Error moving lead:", err);
-    } finally {
-      setBusyLeadId(null);
     }
+    return "Featured";
   };
 
-  const setStage = async (lead: Lead, stage: LeadStage) => {
-    setBusyLeadId(lead.id);
-    try {
-      const token = (await getToken()) || undefined;
-      await updateLead(lead.id, { stage }, token);
-      reloadBoth();
-    } catch (err) {
-      console.error("Error updating lead:", err);
-    } finally {
-      setBusyLeadId(null);
-    }
+  const handleOpenCreate = () => {
+    router.push("/dashboard/leads/new");
   };
 
-  const handleLogContact = async (lead: Lead) => {
-    setBusyLeadId(lead.id);
-    try {
-      const token = (await getToken()) || undefined;
-      const days = 3;
-      await logLeadContact(
-        lead.id,
-        { next_follow_up_at: new Date(Date.now() + days * 86_400_000).toISOString() },
-        token
-      );
-      reloadBoth();
-    } catch (err) {
-      console.error("Error logging contact:", err);
-    } finally {
-      setBusyLeadId(null);
-    }
+  const handleOpenDetail = (lead: Lead) => {
+    router.push(`/dashboard/leads/${lead.id}`);
   };
 
-  const handleDelete = async (lead: Lead) => {
-    const ok = await confirmDialog({
-      title: "Delete lead",
-      message: `Delete the lead for ${lead.name}? This cannot be undone.`,
-      confirmLabel: "Delete",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      const token = (await getToken()) || undefined;
-      await deleteLead(lead.id, token);
-      reloadBoth();
-      toast.success("Lead deleted");
-    } catch (err) {
-      console.error("Error deleting lead:", err);
-      toast.error("Could not delete lead");
-    }
-  };
-
-  const inputCls =
-    "w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent";
+  // Group leads by category (only categories that actually contain leads)
+  const categoriesPresent = Array.from(
+    new Set(
+      leads
+        .map((l) => getLeadCategory(l))
+        .filter((cat) => Boolean(cat) && typeof cat === "string" && cat !== "[object Object]")
+    )
+  );
+  if (categoriesPresent.length === 0 && leads.length > 0) {
+    categoriesPresent.push("Featured");
+  }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-lg font-bold tracking-tight text-fg">Leads</h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs">
-              {loading ? "Loading..." : `${leads.length} deals`}
+            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Lead Pipeline</h2>
+            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+              {loading ? "Loading..." : `${leads.length} Active Deals`}
             </Badge>
           </div>
           <p className="text-muted text-sm mt-1">
-            Track every potential client until they say yes or no.
+            Categorized sales pipeline, client acquisition, and follow-up tracker.
           </p>
         </div>
+
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => { loadLeads(true); loadInsights(true); }} disabled={loading} className="border-line text-fg">
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
           <Button
+            variant="outline"
             size="sm"
-            onClick={() => setShowCreateModal(true)}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+            onClick={() => {
+              loadLeads(true);
+              loadInsights(true);
+            }}
+            disabled={loading}
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            title="Refresh"
           >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Lead
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
+
+          <button
+            onClick={() => handleOpenCreate()}
+            className="relative group overflow-hidden rounded-xl p-[1px] font-semibold text-xs transition-all duration-300 shadow-sm hover:shadow-accent/25 hover:shadow-md active:scale-[0.98]"
+          >
+            <span className="absolute inset-0 bg-gradient-to-r from-accent via-amber-400 to-accent rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
+            <span className="relative flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-accent group-hover:bg-accent-hi text-accent-fg transition-colors duration-200 font-bold">
+              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
+              <span>Add Lead</span>
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* Pipeline health strip */}
+      {/* Pipeline Health Insights Strip */}
       {insights ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Card className="bg-card border-line p-4">
+          <Card className="bg-card border-line p-4 rounded-2xl">
             <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-              <DollarSign className="w-3.5 h-3.5 text-accent" /> Possible money
+              <DollarSign className="w-3.5 h-3.5 text-accent" /> Pipeline Value
             </div>
-            <p className="text-xl font-bold text-fg mt-1.5">{money(insights.open_pipeline_value, currency)}</p>
+            <p className="text-xl font-bold font-mono text-fg mt-1.5">{money(insights.open_pipeline_value, currency)}</p>
             <p className="text-[11px] text-muted mt-0.5">Realistic: {money(insights.weighted_pipeline_value, currency)}</p>
           </Card>
-          <Card className="bg-card border-line p-4">
+          <Card className="bg-card border-line p-4 rounded-2xl">
             <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-              <Trophy className="w-3.5 h-3.5 text-ok" /> Win rate
+              <Trophy className="w-3.5 h-3.5 text-ok" /> Win Rate
             </div>
-            <p className="text-xl font-bold text-fg mt-1.5">{insights.win_rate_pct}%</p>
+            <p className="text-xl font-bold font-mono text-fg mt-1.5">{insights.win_rate_pct}%</p>
             <p className="text-[11px] text-muted mt-0.5">{insights.won_count} won · {insights.lost_count} lost</p>
           </Card>
-          <Card className={`bg-card border-line p-4 ${insights.due_follow_up_count > 0 ? "border-warn/40" : ""}`}>
+          <Card className={`bg-card border-line p-4 rounded-2xl ${insights.due_follow_up_count > 0 ? "border-warn/40" : ""}`}>
             <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-              <CalendarClock className="w-3.5 h-3.5 text-warn" /> Follow up today
+              <CalendarClock className="w-3.5 h-3.5 text-warn" /> Follow Ups Due
             </div>
-            <p className="text-xl font-bold text-fg mt-1.5">{insights.due_follow_up_count}</p>
-            <p className="text-[11px] text-muted mt-0.5">waiting on you</p>
+            <p className="text-xl font-bold font-mono text-fg mt-1.5">{insights.due_follow_up_count}</p>
+            <p className="text-[11px] text-muted mt-0.5">waiting on outreach</p>
           </Card>
-          <Card className={`bg-card border-line p-4 ${insights.stale_deal_count > 0 ? "border-danger/40" : ""}`}>
+          <Card className={`bg-card border-line p-4 rounded-2xl ${insights.stale_deal_count > 0 ? "border-danger/40" : ""}`}>
             <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-              <AlertTriangle className="w-3.5 h-3.5 text-danger" /> Going cold
+              <AlertTriangle className="w-3.5 h-3.5 text-danger" /> Going Cold
             </div>
-            <p className="text-xl font-bold text-fg mt-1.5">{insights.stale_deal_count}</p>
-            <p className="text-[11px] text-muted mt-0.5">untouched for {insights.stale_after_days}+ days</p>
+            <p className="text-xl font-bold font-mono text-fg mt-1.5">{insights.stale_deal_count}</p>
+            <p className="text-[11px] text-muted mt-0.5">untouched {insights.stale_after_days}+ days</p>
           </Card>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="bg-card border-line p-4 space-y-2">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-6 w-20" />
-            </Card>
-          ))}
-        </div>
-      )}
+      ) : null}
 
-      {/* Pipeline board — stacks vertically on mobile, no horizontal scroll */}
+      {/* Cards Display Grouped by Category with Sliding Pagination */}
       {loading && leads.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="bg-card border-line p-4 space-y-3">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </Card>
+        <div className="space-y-8">
+          {[1, 2].map((group) => (
+            <div key={group} className="space-y-3">
+              <Skeleton className="h-6 w-36 rounded-md" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-36 w-full rounded-2xl" />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       ) : leads.length === 0 ? (
-        <Card className="bg-card border-line p-10 text-center">
-          <Target className="w-10 h-10 text-accent mx-auto mb-3" />
-          <h3 className="font-display text-lg font-bold text-fg">No leads yet</h3>
-          <p className="text-muted text-sm mt-1 mb-4 max-w-md mx-auto">
-            Add anyone you might work with — even a &quot;maybe later&quot; is worth tracking.
+        <Card className="bg-card border-dashed border-line p-12 text-center rounded-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
+            <ChaiCupIcon className="w-7 h-7" />
+          </div>
+          <h3 className="text-lg font-bold text-fg">No leads yet</h3>
+          <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+            Track every prospective project by category and move them through deal stages.
           </p>
-          <Button onClick={() => setShowCreateModal(true)} className="bg-accent hover:bg-accent-hi text-accent-fg">
+          <Button
+            onClick={() => handleOpenCreate()}
+            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
+          >
             <Plus className="w-4 h-4 mr-1.5" />
-            Add Your First Lead
+            Add First Lead
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-          {STAGES.map((stage) => {
-            const stageLeads = leads.filter((l) => l.stage === stage.key);
-            const stageValue = stageLeads.reduce((sum, l) => sum + (l.estimated_value || 0), 0);
+        <div className="space-y-10">
+          {categoriesPresent.map((cat) => {
+            const catLeads = leads.filter((l) => getLeadCategory(l) === cat);
+            if (catLeads.length === 0) return null;
+
+            const totalPages = Math.ceil(catLeads.length / CARDS_PER_PAGE);
+            const currentPage = Math.min(catPages[cat] || 1, totalPages || 1);
+            const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+            const endIndex = Math.min(startIndex + CARDS_PER_PAGE, catLeads.length);
+            const visibleLeads = catLeads.slice(startIndex, endIndex);
+
+            const handlePrevPage = () => {
+              setCatPages((prev) => ({
+                ...prev,
+                [cat]: Math.max(1, currentPage - 1),
+              }));
+            };
+
+            const handleNextPage = () => {
+              setCatPages((prev) => ({
+                ...prev,
+                [cat]: Math.min(totalPages, currentPage + 1),
+              }));
+            };
+
             return (
-              <Card key={stage.key} className="bg-card border-line p-3">
-                <div className="flex items-center justify-between px-1 pb-2 border-b border-dashed border-line">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stage.tone}`}>{stage.label}</span>
-                  <span className="text-[11px] text-muted font-mono">
-                    {stageLeads.length} · {money(stageValue, currency)}
-                  </span>
-                </div>
-                <div className="space-y-2 pt-2 min-h-[40px]">
-                  {stageLeads.length === 0 && (
-                    <p className="text-[11px] text-muted/70 italic px-1 py-2">No deals here yet.</p>
-                  )}
-                  {stageLeads.map((lead) => {
-                    const sinceTouch = daysSince(lead.last_contact_at);
-                    const isStale = sinceTouch !== null && insights && sinceTouch > insights.stale_after_days && stage.key !== "won" && stage.key !== "lost";
-                    const isDueFollowUp = lead.next_follow_up_at ? new Date(lead.next_follow_up_at).getTime() <= Date.now() : false;
-                    const busy = busyLeadId === lead.id;
-                    return (
-                      <div
-                        key={lead.id}
-                        className={`rounded-xl border p-3 space-y-2 transition-colors ${
-                          isStale ? "border-danger/40 bg-danger/5" : "border-line bg-bg"
-                        } ${busy ? "opacity-60 pointer-events-none" : ""}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-fg truncate">{lead.name}</p>
-                            {lead.company && <p className="text-[11px] text-info truncate">{lead.company}</p>}
-                          </div>
-                          <span className="text-xs font-mono font-bold text-accent shrink-0">
-                            {money(lead.estimated_value || 0, currency)}
-                          </span>
+              <div key={cat} className="space-y-4">
+                {/* Category Header with Title, Count, Underline & Sliding Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div className="inline-flex flex-col items-start space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">
+                        {cat}
+                      </h3>
+                      <span className="text-xs font-mono font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-md border border-accent/20">
+                        {catLeads.length}
+                      </span>
+                    </div>
+                    {/* Straight orange line under category title */}
+                    <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
+                  </div>
+
+                  {/* Sliding Pagination Controls (Shown when category has > 20 cards or multi-page) */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2 self-start sm:self-auto bg-card/90 backdrop-blur-md border border-line/80 px-3 py-1.5 rounded-2xl shadow-sm">
+                      <span className="text-xs font-mono text-muted hidden sm:inline mr-1">
+                        Showing <strong className="text-fg">{startIndex + 1}–{endIndex}</strong> of {catLeads.length}
+                      </span>
+
+                      {/* Slider Navigation Buttons */}
+                      <div className="flex items-center gap-1 bg-surface/90 p-0.5 rounded-xl border border-line/70">
+                        <button
+                          onClick={handlePrevPage}
+                          disabled={currentPage <= 1}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                          title="Previous 20 Cards"
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <div className="px-2.5 py-0.5 text-xs font-mono font-bold text-accent bg-accent/10 rounded-md">
+                          {currentPage} / {totalPages}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                          <Badge variant="outline" className="border-line text-muted font-mono">{lead.source || "Referral"}</Badge>
-                          {lead.priority === "high" && (
-                            <Badge className="bg-danger/10 text-danger border-transparent font-mono">HIGH</Badge>
-                          )}
-                          {isDueFollowUp && (
-                            <Badge className="bg-warn/10 text-warn border-transparent font-mono">DUE</Badge>
-                          )}
-                          {isStale && (
-                            <Badge className="bg-danger/10 text-danger border-transparent font-mono">
-                              COLD {sinceTouch}d
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1 border-t border-dashed border-line">
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => moveStage(lead, -1)}
-                              disabled={stage.key === "new"}
-                              className="p-1 rounded-md text-muted hover:text-fg hover:bg-surface disabled:opacity-30"
-                              title="Move back a stage"
-                            >
-                              <ChevronLeft className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => moveStage(lead, 1)}
-                              disabled={stage.key === "won" || stage.key === "lost"}
-                              className="p-1 rounded-md text-muted hover:text-fg hover:bg-surface disabled:opacity-30"
-                              title="Advance a stage"
-                            >
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleLogContact(lead)}
-                              className="p-1 rounded-md text-muted hover:text-accent hover:bg-surface"
-                              title="I reached out today"
-                            >
-                              <PhoneCall className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {stage.key !== "won" && stage.key !== "lost" && (
-                              <button
-                                onClick={() => setStage(lead, "lost")}
-                                className="text-[10px] font-semibold text-muted hover:text-danger px-1.5 py-0.5 rounded-md hover:bg-danger/10"
-                                title="Mark as lost"
-                              >
-                                Lost
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDelete(lead)}
-                              className="p-1 rounded-md text-muted hover:text-danger hover:bg-surface"
-                              title="Delete lead"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
+                        <button
+                          onClick={handleNextPage}
+                          disabled={currentPage >= totalPages}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                          title="Next 20 Cards"
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
+                  {visibleLeads.map((lead) => {
+                    const stageObj = STAGES.find((s) => s.key === lead.stage) || STAGES[0];
+                    const totalSteps = 5;
+
+                    return (
+                      <CategoryVisualCard
+                        key={lead.id}
+                        title={lead.name}
+                        currentCount={stageObj.step}
+                        totalCount={totalSteps}
+                        subtitle={lead.company || lead.source || "Referral"}
+                        category={cat}
+                        onClick={() => handleOpenDetail(lead)}
+                        tags={
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${
+                                lead.stage === "won"
+                                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+                                  : lead.stage === "negotiation"
+                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/25"
+                                  : lead.stage === "proposal"
+                                  ? "bg-purple-500/15 text-purple-400 border-purple-500/25"
+                                  : lead.stage === "contacted"
+                                  ? "bg-sky-500/15 text-sky-400 border-sky-500/25"
+                                  : "bg-slate-500/15 text-slate-400 border-slate-500/25"
+                              }`}
+                            >
+                              {stageObj.label}
+                            </span>
+                            <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                              {money(lead.estimated_value || 0, currency)}
+                            </span>
+                          </div>
+                        }
+                      />
                     );
                   })}
                 </div>
-              </Card>
+              </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Add Lead Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <Card className="w-full max-w-md bg-card border-line p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <h3 className="text-lg font-bold text-fg">Add New Lead</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-muted hover:text-fg text-sm">
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateLead} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted">Contact Name *</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Dana from Pixel Studio"
-                  maxLength={255}
-                  className={inputCls}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-muted">Company</label>
-                <input
-                  type="text"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Pixel Studio"
-                  maxLength={255}
-                  className={inputCls}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-muted">Email *</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="dana@pixelstudio.com"
-                  maxLength={255}
-                  className={inputCls}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted">Expected Value</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10"
-                    value={estimatedValue}
-                    onChange={(e) => setEstimatedValue(e.target.value)}
-                    placeholder="2500"
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted">Source</label>
-                  <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
-                    {SOURCES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted">Priority</label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
-                    className={inputCls}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted">Follow up in (days)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="90"
-                    value={followUpDays}
-                    onChange={(e) => setFollowUpDays(e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-
-              {formError && <p className="text-xs text-danger">{formError}</p>}
-
-              <div className="pt-3 border-t border-line flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateModal(false)}
-                  className="border-line text-fg"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving} className="bg-accent hover:bg-accent-hi text-accent-fg">
-                  {saving ? "Saving..." : "Save Lead"}
-                </Button>
-              </div>
-            </form>
-          </Card>
         </div>
       )}
     </div>

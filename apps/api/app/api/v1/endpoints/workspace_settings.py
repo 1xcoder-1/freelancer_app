@@ -11,6 +11,7 @@ the DB — the cache must never be the source for the settings fields.
 """
 
 import re
+from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
@@ -68,6 +69,15 @@ async def update_workspace(
 
     for key, value in changes.items():
         setattr(row, key, value)
+
+    # Cash Runway: an explicit null clears the balance back to 0 instead of
+    # crashing on the NOT NULL column, and any write stamps the freshness
+    # timestamp the dashboard shows next to the figure.
+    if "bank_balance" in changes:
+        if row.bank_balance is None:
+            row.bank_balance = 0.0
+        row.bank_balance_updated_at = datetime.utcnow()
+
     await db.commit()
     await db.refresh(row)
 

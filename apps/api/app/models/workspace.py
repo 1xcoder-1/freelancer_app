@@ -1,5 +1,6 @@
-from sqlalchemy import String, Text, Float, ForeignKey
+from sqlalchemy import String, Text, Float, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime
 from app.models.base import Base, TimestampMixin
 
 class User(Base, TimestampMixin):
@@ -37,6 +38,13 @@ class Workspace(Base, TimestampMixin):
     payment_terms: Mapped[str] = mapped_column(String(120), nullable=True)
     late_fee_policy: Mapped[str] = mapped_column(String(200), nullable=True)
     payment_notes: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Cash Runway inputs: the freelancer's real money-in-bank, kept on the
+    # workspace row so every device and the cash-flow analytics read the same
+    # figure. A companion timestamp tracks when it was last touched so the
+    # dashboard can show how fresh the number is.
+    bank_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    bank_balance_updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     memberships: Mapped[list["Membership"]] = relationship("Membership", back_populates="workspace")
 

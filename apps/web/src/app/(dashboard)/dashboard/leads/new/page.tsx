@@ -1,0 +1,531 @@
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import {
+  ArrowLeft,
+  Loader2,
+  ChevronDown,
+  AlertCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { createLead, type LeadStage } from "@/lib/api";
+import { invalidateCache } from "@/hooks/use-api-data";
+import { z } from "zod";
+import { toast } from "sonner";
+import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+
+const leadFormSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Contact name must be at least 2 characters")
+    .max(100, "Contact name cannot exceed 100 characters"),
+  company: z
+    .string()
+    .trim()
+    .max(100, "Company name cannot exceed 100 characters")
+    .optional(),
+  email: z.union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .email("Please enter a valid email address"),
+  ]),
+  phone: z.union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .min(6, "Phone number must be at least 6 digits")
+      .max(25, "Phone number cannot exceed 25 characters"),
+  ]),
+  estimatedValue: z.string().optional(),
+});
+
+const DEFAULT_CATEGORIES = [
+  "Featured",
+  "High Value Deals",
+  "In Discussion",
+  "Referrals & Inbound",
+  "Design & Dev Sprints",
+];
+
+const SOURCES = [
+  "Referral",
+  "Platform / Upwork",
+  "Outreach & Cold Email",
+  "Website Inbound",
+  "Social Media",
+  "Past Client",
+  "Other",
+];
+
+const STAGES: Array<{ key: LeadStage; label: string; step: number; tone: string }> = [
+  { key: "new", label: "New", step: 1, tone: "bg-surface text-muted" },
+  { key: "contacted", label: "Contacted", step: 2, tone: "bg-info/10 text-info" },
+  { key: "proposal", label: "Proposal", step: 3, tone: "bg-accent-soft text-accent" },
+  { key: "negotiation", label: "Negotiating", step: 4, tone: "bg-warn/10 text-warn" },
+  { key: "won", label: "Won", step: 5, tone: "bg-ok/10 text-ok" },
+];
+
+const formatAmountWithCommas = (val: string): string => {
+  if (!val) return "";
+  const suffixMatch = val.match(/\s*(\/.*|[a-zA-Z]+)$/);
+  const suffix = suffixMatch ? suffixMatch[0] : "";
+  const numericOnly = suffixMatch ? val.slice(0, suffixMatch.index) : val;
+
+  const clean = numericOnly.replace(/,/g, "").replace(/[^\d.]/g, "");
+  if (!clean) return suffix.trim();
+
+  const parts = clean.split(".");
+  const intStr = parts[0];
+  const formattedInt = intStr ? Number(intStr).toLocaleString("en-US") : "0";
+
+  if (parts.length > 1) {
+    const decStr = parts[1].slice(0, 2);
+    return `${formattedInt}.${decStr}${suffix}`;
+  }
+
+  return `${formattedInt}${suffix}`;
+};
+
+export default function NewLeadPage() {
+  const router = useRouter();
+  const { getToken } = useAuth();
+
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Form State
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [source, setSource] = useState("Referral");
+  const [estimatedValue, setEstimatedValue] = useState("2,500");
+  const [currency, setCurrency] = useState("USD");
+  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  const [stage, setStage] = useState<LeadStage>("new");
+  const [followUpDays, setFollowUpDays] = useState("3");
+  const [category, setCategory] = useState("Featured");
+  const [customCategory, setCustomCategory] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const effectiveCategory = customCategory.trim() || category || "Featured";
+
+  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatAmountWithCommas(e.target.value);
+    setEstimatedValue(formatted);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+
+    const result = leadFormSchema.safeParse({
+      name,
+      company,
+      email,
+      phone,
+      estimatedValue,
+    });
+
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      result.error.issues.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[String(err.path[0])] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast.error(result.error.issues[0]?.message || "Please check required fields");
+      return;
+    }
+
+    setSaving(true);
+    const chosenCategory = customCategory.trim() || category;
+    const cleanUserNotes = notes.trim();
+    const finalNotes = cleanUserNotes
+      ? `[category: ${chosenCategory}][currency: ${currency}]\n${cleanUserNotes}`
+      : `[category: ${chosenCategory}][currency: ${currency}]`;
+
+    const numericVal = parseFloat(estimatedValue.replace(/,/g, "") || "0") || 0;
+    const days = Math.min(90, Math.max(0, parseInt(followUpDays || "3", 10) || 3));
+    const nextFollowUp = new Date(Date.now() + days * 86_400_000).toISOString();
+
+    try {
+      const token = (await getToken()) || undefined;
+      const created = await createLead(
+        {
+          name: name.trim(),
+          company: company.trim() || undefined,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
+          source,
+          stage,
+          priority,
+          estimated_value: numericVal,
+          next_follow_up_at: nextFollowUp,
+          notes: finalNotes,
+        },
+        token
+      );
+
+      invalidateCache("leads:data");
+      invalidateCache("leads:insights");
+      invalidateCache("dashboard:data");
+
+      toast.success("Lead created successfully");
+      router.push(`/dashboard/leads/${created.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create lead");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const stageObj = STAGES.find((s) => s.key === stage) || STAGES[0];
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
+        <div>
+          <Link
+            href="/dashboard/leads"
+            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors mb-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Leads</span>
+          </Link>
+          <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-fg">
+            Add New Lead
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push("/dashboard/leads")}
+            disabled={saving}
+            className="text-xs rounded-xl h-9 px-4 border-line"
+          >
+            Cancel
+          </Button>
+
+          <Button
+            type="submit"
+            form="lead-form"
+            disabled={saving || !name.trim()}
+            className="bg-accent hover:bg-accent-hi text-accent-fg font-medium text-xs rounded-xl h-9 px-5 shadow-xs"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                <span>Saving...</span>
+              </>
+            ) : (
+              <span>Save Lead</span>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Form Layout */}
+      <form id="lead-form" onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Form Fields (7 cols) */}
+        <div className="lg:col-span-7 space-y-5">
+          {/* 1. Contact Information */}
+          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
+            <h2 className="text-sm font-medium text-fg">
+              Contact & Company
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-xs font-medium text-fg block">
+                  Lead Name <span className="text-accent">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
+                  }}
+                  placeholder="e.g. Alex Morgan"
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
+                    errors.name ? "border-danger" : "border-line"
+                  }`}
+                />
+                {errors.name && (
+                  <p className="text-[11px] text-danger flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {errors.name}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-fg block">
+                  Company / Organization
+                </label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="e.g. Acme Studio"
+                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-fg block">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
+                  }}
+                  placeholder="alex@acme.com"
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
+                    errors.email ? "border-danger" : "border-line"
+                  }`}
+                />
+                {errors.email && (
+                  <p className="text-[11px] text-danger flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {errors.email}
+                  </p>
+                )}
+              </div>
+
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-xs font-medium text-fg block">
+                  Phone / WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
+                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* 2. Pipeline & Deal Setup */}
+          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-5">
+            <h2 className="text-sm font-medium text-fg">
+              Deal Details & Stage
+            </h2>
+
+            {/* Category Pills */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-fg block">
+                Pipeline Category
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_CATEGORIES.map((c) => {
+                  const active = category === c && !customCategory;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setCategory(c);
+                        setCustomCategory("");
+                      }}
+                      className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all ${
+                        active
+                          ? "bg-accent text-accent-fg border-accent shadow-xs"
+                          : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <input
+                type="text"
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                placeholder="Or enter custom category name..."
+                className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-xs placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all mt-2"
+              />
+            </div>
+
+            {/* Stage Selector */}
+            <div className="space-y-2 pt-3 border-t border-line/60">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-fg block">
+                  Pipeline Stage
+                </label>
+                <span className="text-xs font-mono font-medium text-accent">
+                  Step {stageObj.step} of 5
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {STAGES.map((s) => {
+                  const active = stage === s.key;
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => setStage(s.key)}
+                      className={`h-10 rounded-xl border text-center text-xs font-medium transition-all flex items-center justify-center ${
+                        active
+                          ? "bg-accent text-accent-fg border-accent shadow-xs font-semibold"
+                          : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Value, Priority, Source, Follow-Up */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-line/60">
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-xs font-medium text-fg block">
+                  Estimated Deal Value
+                </label>
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    type="text"
+                    value={estimatedValue}
+                    onChange={handleRateChange}
+                    placeholder="2,500"
+                    className="flex-1 min-w-0 w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all"
+                  />
+                  <div className="relative w-24 sm:w-28 shrink-0">
+                    <select
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value)}
+                      className="w-full h-10 appearance-none px-2.5 sm:px-3 pr-7 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
+                    >
+                      <option value="USD">USD ($)</option>
+                      <option value="PKR">PKR (₨)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="GBP">GBP (£)</option>
+                      <option value="AED">AED (د.إ)</option>
+                      <option value="CAD">CAD ($)</option>
+                      <option value="AUD">AUD ($)</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-xs font-medium text-fg block">
+                  Priority Level
+                </label>
+                <div className="relative w-full">
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
+                    className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all capitalize"
+                  >
+                    <option value="low">Low Priority</option>
+                    <option value="medium">Medium Priority</option>
+                    <option value="high">High Priority</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-xs font-medium text-fg block">
+                  Source Channel
+                </label>
+                <div className="relative w-full">
+                  <select
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
+                  >
+                    {SOURCES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-xs font-medium text-fg block">
+                  Follow-Up Reminder (Days)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={followUpDays}
+                  onChange={(e) => setFollowUpDays(e.target.value)}
+                  placeholder="3"
+                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* 3. Notes */}
+          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-3">
+            <h2 className="text-sm font-medium text-fg">
+              Notes & Background (Optional)
+            </h2>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Scope details, discussion summary, or follow-up reminders..."
+              className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+            />
+          </Card>
+        </div>
+
+        {/* Right Column: Clean Sticky Card Preview (5 cols) */}
+        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-medium text-muted">Card Preview</span>
+            <span className="text-[11px] font-mono text-muted">{effectiveCategory}</span>
+          </div>
+
+          <CategoryVisualCard
+            title={name.trim() || "Lead Contact"}
+            subtitle={company.trim() || source || "Referral"}
+            currentCount={stageObj.step}
+            totalCount={5}
+            category={effectiveCategory}
+            tags={
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${stageObj.tone}`}>
+                  {stageObj.label}
+                </span>
+                {estimatedValue && (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-orange-500/15 text-white border border-orange-500/25 font-mono">
+                    {currency} {formatAmountWithCommas(estimatedValue)}
+                  </span>
+                )}
+              </div>
+            }
+          />
+        </div>
+      </form>
+    </div>
+  );
+}

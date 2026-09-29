@@ -1,15 +1,18 @@
-"""Cash Flow Guard — receivables aging, income history, and a 90-day forecast.
+"""Cash Flow & Financial Runway dashboard.
 
 Income uncertainty is the #2 freelancer pain point (and late payments #3):
 the money a freelancer has *earned* often arrives months after the work.
-This endpoint reads only real persisted data (invoices, expenses, leads) and
-answers the three questions a freelancer actually asks:
+This endpoint reads only real persisted data (invoices, expenses, leads,
+the workspace's tracked bank balance) and answers the questions a
+freelancer actually asks:
 
-  1. Who owes me money and how late is it?        (aging buckets)
-  2. What does the next 90 days realistically look like?  (forecast)
-  3. How much can I safely commit/spend now?      (safe-to-spend)
+  1. Who owes me money and how late is it?               (aging buckets)
+  2. What cash lands in the next 14 / 30 / 60 days?      (expected cash)
+  3. How many weeks can I survive on what's in the bank?(burn + runway)
+  4. Did what I invoice actually clear?                  (billed vs landed)
+  5. What can I safely spend — and keep aside as a vacation reserve?
 
-Pure aggregation — no new tables, no writes, workspace-scoped, auth-required.
+Pure aggregation — no extra tables, no writes, workspace-scoped, auth-required.
 """
 
 import statistics
@@ -25,6 +28,7 @@ from app.core.database import get_db
 from app.core.workspace import get_or_create_user_workspace
 from app.models.finance import Expense, Invoice
 from app.models.lead import STAGE_PROBABILITY, Lead
+from app.models.workspace import Workspace
 
 router = APIRouter(prefix="/cashflow", tags=["Cash Flow"])
 
@@ -72,6 +76,11 @@ async def cashflow_summary(
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    # The identity cache only carries id/name/slug/currency — the runway
+    # fields must come from a fresh row (same rule as the settings endpoints).
+    workspace = (await db.execute(
+        select(Workspace).where(Workspace.id == workspace.id)
+    )).scalar_one()
     now = datetime.utcnow()
 
     # --- one pass over unpaid (sent/overdue) invoices: aging + forecast ------
@@ -98,11 +107,14 @@ async def cashflow_summary(
         # conservative bucket than silently drop real receivables.
         return inv.due_date or (inv.issue_date + timedelta(days=30))
 
+    due_pairs: list[tuple[datetime, float]] = []
+
     for inv in open_invoices:
         due = _due(inv)
         days_past = (now - due).days
         amount = inv.total_amount or 0.0
         receivables_total += amount
+        due_pairs.append((due, amount))
         if days_past <= 0:
             aging["not_due_yet"]["count"] += 1
             aging["not_due_yet"]["amount"] += amount
@@ -128,6 +140,11 @@ async def cashflow_summary(
 
     overdue_rows.sort(key=lambda r: r["days_overdue"], reverse=True)
 
+    # --- 14 / 30 / 60-day expected cash (cumulative windows, not overdue) ---
+    def _expected_within(days: int) -> float:
+        horizon = now + timedelta(days=days)
+        return round(sum(a for d, a in due_pairs if now < d <= horizon), 2)
+
     # --- collection history: paid invoices in the last 6 months -------------
     collected_rows = (await db.execute(
         select(_EFFECTIVE_PAID_AT, Invoice.total_amount).where(
@@ -146,10 +163,27 @@ async def cashflow_summary(
     )).all()
 
     history = []
+    # Invoiced (sent/overdue/paid, issued that month) vs collected — the
+    # "did the money actually land?" tracker (roadmap 1.3).
+    invoiced_rows = (await db.execute(
+        select(Invoice.issue_date, Invoice.total_amount).where(
+            Invoice.workspace_id == workspace.id,
+            Invoice.status != "draft",
+            Invoice.issue_date >= now - timedelta(days=185),
+        )
+    )).all()
+
     for label, start, end in _months_back(now, 6):
         earned = round(sum(a for paid_at, a in collected_rows if start <= paid_at < end), 2)
         spent = round(sum(a for created, a in expense_rows if start <= created < end), 2)
-        history.append({"month": label, "collected": earned, "expenses": spent, "net": round(earned - spent, 2)})
+        invoiced = round(sum(a for issued, a in invoiced_rows if start <= issued < end), 2)
+        history.append({
+            "month": label,
+            "collected": earned,
+            "expenses": spent,
+            "net": round(earned - spent, 2),
+            "invoiced": invoiced,
+        })
 
     monthly_collected = [h["collected"] for h in history]
     avg_income_6m = round(sum(monthly_collected) / len(monthly_collected), 2)
@@ -200,15 +234,50 @@ async def cashflow_summary(
     # norm, not the exception) minus the average monthly burn. Floor at 0.
     safe_to_spend_30d = round(max(0.0, expected_30d * 0.8 - avg_expenses_6m), 2)
 
+    # --- cash runway: bank balance vs burn (roadmap 1.1 / 1.2 / 1.4) ---------
+    # Runway counts only real money in the bank; the *_with_incoming variant
+    # adds 80% of 60-day receivables so the gauge can show "today" vs
+    # "if everything arrives on time".
+    bank_balance = round(workspace.bank_balance or 0.0, 2)
+    weekly_burn = round(avg_expenses_6m * 12 / 52, 2)
+    expected_60d = _expected_within(60)
+    if weekly_burn > 0:
+        runway_weeks = round(max(0.0, bank_balance) / weekly_burn, 1)
+        runway_weeks_with_incoming = round(
+            (max(0.0, bank_balance) + expected_60d * 0.8) / weekly_burn, 1
+        )
+    else:
+        # No recorded expenses → burn is unknown, not infinite. The UI shows
+        # "add expenses to unlock" instead of a fake full gauge.
+        runway_weeks = None
+        runway_weeks_with_incoming = None
+
+    # Vacation reserve: three months of average burn kept aside (12 weeks of
+    # no invoicing without touching operating cash).
+    vacation_reserve_target = round(avg_expenses_6m * 3, 2)
+    reserve_progress_pct = (
+        round(min(100.0, max(0.0, bank_balance) / vacation_reserve_target * 100), 1)
+        if vacation_reserve_target > 0 else None
+    )
+
     return {
         "currency": workspace.currency or "USD",
+        "bank_balance": bank_balance,
+        "bank_balance_updated_at": workspace.bank_balance_updated_at.isoformat() if workspace.bank_balance_updated_at else None,
         "receivables_total": round(receivables_total, 2),
         "at_risk_total": round(at_risk_total, 2),
         "aging": {k: {"count": v["count"], "amount": round(v["amount"], 2)} for k, v in aging.items()},
         "overdue_invoices": overdue_rows[:20],
+        "expected_cash": {"days_14": _expected_within(14), "days_30": _expected_within(30), "days_60": expected_60d},
         "history_6m": history,
         "avg_monthly_collected": avg_income_6m,
         "avg_monthly_expenses": avg_expenses_6m,
+        "monthly_burn_rate": avg_expenses_6m,
+        "weekly_burn_rate": weekly_burn,
+        "runway_weeks": runway_weeks,
+        "runway_weeks_with_incoming": runway_weeks_with_incoming,
+        "vacation_reserve_target": vacation_reserve_target,
+        "vacation_reserve_progress_pct": reserve_progress_pct,
         "income_volatility_pct": volatility_pct,
         "avg_days_to_payment": avg_days_to_payment,
         "forecast_90d": forecast,

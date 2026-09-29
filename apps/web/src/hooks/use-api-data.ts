@@ -16,6 +16,13 @@ interface UseApiDataOptions<T> {
   enabled?: boolean;
   ttlMs?: number;
   reportContext?: string;
+  /**
+   * Live-refresh interval in ms. While the tab is visible the fetcher re-runs
+   * on this cadence through the shared dedup cache, so every mounted consumer
+   * of the key shares one request. Hidden tabs skip ticks and re-sync the
+   * moment they become visible again.
+   */
+  pollMs?: number;
   onSuccess?: (data: T) => void;
   onError?: (err: unknown) => void;
 }
@@ -39,6 +46,7 @@ export function useApiData<T>(
     enabled = true,
     ttlMs,
     reportContext,
+    pollMs,
     onSuccess,
     onError,
   } = options;
@@ -48,6 +56,20 @@ export function useApiData<T>(
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
+
+  // Keep the latest fetcher/callbacks in refs so loadData (and therefore the
+  // poll interval that depends on it) stays referentially stable across
+  // renders. Consumers pass inline arrow fetchers, which would otherwise
+  // recreate loadData every render and reset the timer — live refresh would
+  // never fire while the screen is actively re-rendering.
+  const fetcherRef = useRef(fetcher);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [fetcher, onSuccess, onError]);
 
   // Synchronous cache lookup for 0ms initial render
   const cached = key ? getCachedData<T>(key) : null;
@@ -72,16 +94,6 @@ export function useApiData<T>(
 
   const [error, setError] = useState<Error | null>(null);
 
-  // Subscribe to external cache updates
-  useEffect(() => {
-    if (!key) return;
-    return subscribeToCache<T>(key, (updatedData) => {
-      setData(updatedData);
-      setLoading(false);
-      setIsValidating(false);
-    });
-  }, [key]);
-
   const loadData = useCallback(
     async (isManualRefresh: boolean = false): Promise<T | null> => {
       if (!key || !enabled) return null;
@@ -96,12 +108,12 @@ export function useApiData<T>(
         const token = (await getTokenRef.current()) || undefined;
         const freshData = await fetchWithDeduplication(
           key,
-          () => fetcher(token),
+          () => fetcherRef.current(token),
           ttlMs
         );
 
         setData(freshData);
-        if (onSuccess) onSuccess(freshData);
+        if (onSuccessRef.current) onSuccessRef.current(freshData);
         return freshData;
       } catch (err) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
@@ -109,15 +121,29 @@ export function useApiData<T>(
         if (reportContext) {
           reportLoadError(err, reportContext);
         }
-        if (onError) onError(err);
+        if (onErrorRef.current) onErrorRef.current(err);
         return null;
       } finally {
         setLoading(false);
         setIsValidating(false);
       }
     },
-    [key, enabled, ttlMs, fetcher, reportContext, onSuccess, onError]
+    [key, enabled, ttlMs, reportContext]
   );
+
+  // Subscribe to external cache updates
+  useEffect(() => {
+    if (!key) return;
+    return subscribeToCache<T>(key, (updatedData, isInvalidated) => {
+      if (isInvalidated) {
+        loadData(false);
+      } else {
+        setData(updatedData);
+        setLoading(false);
+        setIsValidating(false);
+      }
+    });
+  }, [key, loadData]);
 
   // Trigger load on mount or key change if needed
   useEffect(() => {
@@ -128,6 +154,24 @@ export function useApiData<T>(
       void loadData(false);
     }
   }, [key, enabled, loadData]);
+
+  // Live refresh: quiet background revalidation on an interval (no loading
+  // flicker — loadData(false) keeps the current data on screen while the
+  // deduped fetch runs). Pauses with the tab and catches up on visibility.
+  useEffect(() => {
+    if (!enabled || !key || !pollMs || pollMs <= 0) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void loadData(false);
+    }, pollMs);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadData(false);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [key, enabled, pollMs, loadData]);
 
   const mutate = useCallback(
     (

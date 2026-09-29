@@ -54,27 +54,41 @@ export function setCachedData<T>(key: string, data: T, ttlMs: number = DEFAULT_T
 export function invalidateCache(keyOrPattern?: string | RegExp): void {
   if (!keyOrPattern) {
     cacheStore.clear();
+    inFlightRequests.clear();
+    for (const [k, set] of listeners.entries()) {
+      set.forEach((listener) => listener(undefined, true));
+    }
     return;
   }
 
   if (typeof keyOrPattern === 'string') {
     cacheStore.delete(keyOrPattern);
+    inFlightRequests.delete(keyOrPattern);
+    const keyListeners = listeners.get(keyOrPattern);
+    if (keyListeners) {
+      keyListeners.forEach((listener) => listener(undefined, true));
+    }
     return;
   }
 
-  for (const key of cacheStore.keys()) {
+  for (const key of Array.from(cacheStore.keys())) {
     if (keyOrPattern.test(key)) {
       cacheStore.delete(key);
+      inFlightRequests.delete(key);
+      const keyListeners = listeners.get(key);
+      if (keyListeners) {
+        keyListeners.forEach((listener) => listener(undefined, true));
+      }
     }
   }
 }
 
-export function subscribeToCache<T>(key: string, callback: (data: T) => void): () => void {
+export function subscribeToCache<T>(key: string, callback: (data: T, isInvalidated?: boolean) => void): () => void {
   if (!listeners.has(key)) {
     listeners.set(key, new Set());
   }
   const set = listeners.get(key)!;
-  const listener = callback as (data: unknown) => void;
+  const listener = callback as (data: unknown, isInvalidated?: boolean) => void;
   set.add(listener);
 
   return () => {

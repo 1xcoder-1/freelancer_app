@@ -17,9 +17,9 @@
   --surface: #f4f3f1;
   --line: #ebe9e6;
   --line-strong: #dcd8d3;
-  --accent: #ea6311;
-  --accent-hi: #c9520b;
-  --accent-soft: #fdeee1;
+  --accent: #c85a17;
+  --accent-hi: #b34d10;
+  --accent-soft: #fbf0e8;
   --accent-fg: #ffffff;
   --ok: #15803d;
   --warn: #a16207;
@@ -37,10 +37,10 @@
   --surface: #1d1d1f;
   --line: #28282a;
   --line-strong: #38383b;
-  --accent: #f97b2c;
-  --accent-hi: #fb9148;
-  --accent-soft: #2b1a10;
-  --accent-fg: #1a120a;
+  --accent: #d46b28;
+  --accent-hi: #e07730;
+  --accent-soft: #261912;
+  --accent-fg: #ffffff;
   --ok: #3fbf6f;
   --warn: #e3a83a;
   --danger: #ef6f5f;
@@ -104,12 +104,14 @@ select,
   user-select: text;
 }
 
-/* Utility to hide scrollbars on horizontal scroll strips while keeping scrollable */
-.no-scrollbar {
-  -ms-overflow-style: none;
+/* Utility to hide scrollbars while keeping scrollable */
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
-.no-scrollbar::-webkit-scrollbar {
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
@@ -137,6 +139,15 @@ select,
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--muted);
+}
+
+/* Utility to hide scrollbars while preserving scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Display headline used across landing + section headers (clean grotesque, like refs) */

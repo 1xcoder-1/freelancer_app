@@ -21,7 +21,17 @@ class ClientCreate(BaseModel):
     phone: Optional[str] = Field(None, max_length=50)
     website: Optional[str] = Field(None, max_length=255)
     notes: Optional[str] = Field(None, max_length=20_000)
-    status: Literal["lead", "active", "archived"] = "active"
+    status: Literal["lead", "active", "archived", "vip"] = "active"
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=255)
+    company_name: Optional[str] = Field(None, max_length=255)
+    email: Optional[str] = Field(None, min_length=5, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50)
+    website: Optional[str] = Field(None, max_length=255)
+    notes: Optional[str] = Field(None, max_length=20_000)
+    status: Optional[str] = None
+    health_score: Optional[float] = None
 
 class ClientOut(BaseModel):
     id: str
@@ -34,6 +44,12 @@ class ClientOut(BaseModel):
     status: str
     notes: Optional[str] = None
     health_score: float = 100.0
+    # Revenue tracking, computed from this client's invoices when listing:
+    # total_billed = every invoice that left draft (sent/overdue/paid),
+    # total_paid = the subset that actually landed. Defaults keep the schema
+    # usable for single-client responses that skip the aggregation.
+    total_billed: float = 0.0
+    total_paid: float = 0.0
     created_at: datetime
 
     class Config:
@@ -234,6 +250,11 @@ class InvoiceCreate(BaseModel):
     due_date: Optional[UTCDatetime] = None
     notes: Optional[str] = Field(None, max_length=10_000)
     items: List[InvoiceItemCreate] = Field(default_factory=list, max_length=200)
+    # Tracked time billed on this invoice: the client sends the entry ids it
+    # imported as line items; the server re-validates them (workspace-owned,
+    # billable, not already invoiced) and stamps them billed — double-billing
+    # an entry is rejected rather than silently counted twice.
+    time_entry_ids: List[str] = Field(default_factory=list, max_length=500)
 
 class InvoiceItemOut(BaseModel):
     id: str
@@ -287,6 +308,9 @@ class WorkspaceUpdate(BaseModel):
     payment_terms: Optional[str] = Field(None, max_length=120)
     late_fee_policy: Optional[str] = Field(None, max_length=200)
     payment_notes: Optional[str] = Field(None, max_length=10_000)
+    # Cash Runway: real money in the bank. Bounded so a typo or a malicious
+    # payload can never produce a runway figure in the trillions.
+    bank_balance: Optional[float] = Field(None, ge=-10_000_000, le=100_000_000)
 
 class WorkspaceOut(BaseModel):
     id: str
@@ -301,6 +325,8 @@ class WorkspaceOut(BaseModel):
     payment_terms: Optional[str] = None
     late_fee_policy: Optional[str] = None
     payment_notes: Optional[str] = None
+    bank_balance: float = 0.0
+    bank_balance_updated_at: Optional[datetime] = None
 
     # Billing columns are added to an existing workspace via raw ALTER TABLE,
     # which leaves legacy rows NULL (the ORM `default=` only fires on INSERT).
@@ -312,7 +338,7 @@ class WorkspaceOut(BaseModel):
         defaults = {"currency": "USD", "invoice_prefix": "INV-"}
         return value if value else defaults[info.field_name]
 
-    @field_validator("default_hourly_rate", mode="before")
+    @field_validator("default_hourly_rate", "bank_balance", mode="before")
     @classmethod
     def _null_rate_to_default(cls, value):
         return 0.0 if value is None else value
@@ -386,6 +412,15 @@ class ExpenseCreate(BaseModel):
     amount: float = Field(..., ge=0, le=_MAX_MONEY)
     description: Optional[str] = Field(None, max_length=10_000)
     receipt_cloudinary_url: Optional[str] = Field(None, max_length=512)
+    is_recurring: bool = False
+
+class ExpenseUpdate(BaseModel):
+    """Closed whitelist for PATCH /expenses/{id}: only these fields can ever
+    be written, and each keeps the same bounds as create."""
+    category: Optional[str] = Field(None, min_length=1, max_length=100)
+    amount: Optional[float] = Field(None, ge=0, le=_MAX_MONEY)
+    description: Optional[str] = Field(None, max_length=10_000)
+    is_recurring: Optional[bool] = None
 
 class ExpenseOut(BaseModel):
     id: str
@@ -395,7 +430,16 @@ class ExpenseOut(BaseModel):
     amount: float
     description: Optional[str] = None
     receipt_cloudinary_url: Optional[str] = None
+    is_recurring: bool = False
     created_at: datetime
+
+    # Dev auto-sync adds the column with raw ALTER TABLE, leaving legacy rows
+    # NULL (the ORM default only fires on INSERT). NULL simply means "not a
+    # subscription".
+    @field_validator("is_recurring", mode="before")
+    @classmethod
+    def _null_to_false(cls, value):
+        return False if value is None else value
 
     class Config:
         from_attributes = True
@@ -524,6 +568,13 @@ class IntakeFormCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     description: Optional[str] = Field(None, max_length=10_000)
     questions: List[IntakeQuestion] = Field(default_factory=list, max_length=100)
+
+class IntakeFormUpdate(BaseModel):
+    client_id: Optional[str] = Field(None, max_length=36)
+    title: Optional[str] = Field(None, min_length=2, max_length=255)
+    description: Optional[str] = Field(None, max_length=10_000)
+    questions: Optional[List[IntakeQuestion]] = Field(None, max_length=100)
+    status: Optional[str] = Field(None, max_length=50)
 
 class IntakeSubmissionCreate(BaseModel):
     client_name: Optional[str] = Field(None, max_length=255)

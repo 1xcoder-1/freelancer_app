@@ -110,10 +110,10 @@ export default function DashboardPage() {
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="rounded-lg bg-card border-line text-fg"
+            className="rounded-xl bg-card border-line text-fg w-9 h-9 p-0 flex items-center justify-center shrink-0"
+            title="Refresh"
           >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
           <Button
             size="sm"

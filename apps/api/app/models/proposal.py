@@ -22,5 +22,10 @@ class Proposal(Base, TimestampMixin):
 
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True, default=generate_token)
 
+    # Proposal expiry (L4): unanswered proposals age silently, so money that is
+    # effectively gone still looks open. A daily scan flips past-expiry 'sent'
+    # proposals to 'expired' and the accept action is blocked once expired.
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True, index=True)
+
     # Relationships
     client: Mapped["Client"] = relationship("Client")

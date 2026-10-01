@@ -40,31 +40,17 @@ engine_kwargs = {
     "future": True,
 }
 
-# Neon's pooler multiplexes many client sessions onto a few server connections.
-# asyncpg caches prepared statement plans per connection, and any schema change
-# (create_all adding a column/table, a migration, or the pooler recycling a
-# server connection) invalidates those plans server-side, surfacing as
-# InvalidCachedStatementError on the next query. Disabling the statement cache
-# for Postgres URLs is Neon's documented fix and costs only a trivial re-parse.
 if db_url.startswith("postgresql"):
-    engine_kwargs["connect_args"] = {"statement_cache_size": 0}
-    # /dashboard/overview now runs several sections concurrently (one extra
-    # session each), so a single page load checks out a handful of connections
-    # at once. Give the pool headroom above the default 5 to avoid checkout
-    # waits under parallel dashboard loads. Keep modest so a DIRECT (non-pooler)
-    # Neon host is never over-connected — see .env.example note.
+    engine_kwargs["connect_args"] = {
+        "statement_cache_size": 0,
+        "timeout": 30,
+        "command_timeout": 60,
+    }
     engine_kwargs["pool_size"] = 10
-    engine_kwargs["max_overflow"] = 10
-
-# Serverless Postgres (Neon) and other cloud DBs kill idle connections,
-# which leaves dead connections sitting in SQLAlchemy's pool and causes
-# asyncpg "connection is closed" InterfaceErrors on the next request that
-# reuses one. Pre-ping verifies a connection before handing it out and
-# transparently recycles it if it's stale; recycle gives a hard age cap.
-# SQLite (aiosqlite, used for local dev) has no pool, so skip these.
+    engine_kwargs["max_overflow"] = 15
 if not db_url.startswith("sqlite"):
     engine_kwargs["pool_pre_ping"] = True
-    engine_kwargs["pool_recycle"] = 300
+    engine_kwargs["pool_recycle"] = 60
 
 engine = create_async_engine(db_url, **engine_kwargs)
 
@@ -86,16 +72,21 @@ async def init_db():
         
         # In development, auto-sync any newly added columns in models to the database
         if engine.dialect.name == "postgresql" and settings.APP_ENV.strip().lower() in ("development", "dev", "local"):
+            # S6: DDL fragments go through the dialect's identifier preparer so
+            # table/column names are always quoted, and the introspection query
+            # uses a bound parameter — no string-built SQL, even from metadata.
+            quote = engine.dialect.identifier_preparer.quote
             # Retired columns (features removed from the models) are dropped here
             # once; DROP COLUMN IF EXISTS keeps it a no-op on fresh databases.
-            for _table, _column in (("projects", "budgeted_hours"),):
-                await conn.execute(text(f"ALTER TABLE {_table} DROP COLUMN IF EXISTS {_column};"))
+            for _table, _column in (("projects", "budgeted_hours"), ("clients", "health_score")):
+                await conn.execute(text(
+                    f"ALTER TABLE {quote(_table)} DROP COLUMN IF EXISTS {quote(_column)};"
+                ))
             for table_name, table in Base.metadata.tables.items():
-                res = await conn.execute(text(f"""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = '{table_name}';
-                """))
+                res = await conn.execute(
+                    text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"),
+                    {"t": table_name},
+                )
                 existing_cols = {row[0] for row in res.fetchall()}
                 if not existing_cols:
                     continue
@@ -103,7 +94,10 @@ async def init_db():
                 for col in table.columns:
                     if col.name not in existing_cols:
                         col_type = col.type.compile(dialect=engine.dialect)
-                        await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col.name} {col_type};"))
+                        await conn.execute(text(
+                            f"ALTER TABLE {quote(table_name)} "
+                            f"ADD COLUMN IF NOT EXISTS {quote(col.name)} {col_type};"
+                        ))
 
 async def get_db():
     """
@@ -112,5 +106,8 @@ async def get_db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             await session.close()

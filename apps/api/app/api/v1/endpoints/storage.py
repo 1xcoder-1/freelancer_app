@@ -1,15 +1,17 @@
 import re
 from fastapi import APIRouter, Query, HTTPException, status, Depends
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any
+from typing import Literal, Optional, Dict, Any
 from app.core.auth import require_authenticated_user
 from app.services.storage_service import storage_service
 
 router = APIRouter(prefix="/storage", tags=["Storage & Media"])
 
 ALLOWED_CONTENT_TYPES = {
-    # Images
-    "image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml",
+    # Images. NOTE (SE6): image/svg+xml is deliberately NOT allowed — an SVG can
+    # carry a <script> and, if ever rendered inline, is stored XSS. Raster/WEBP
+    # formats are safe; a client that needs vector art converts it to PNG first.
+    "image/jpeg", "image/png", "image/webp", "image/gif",
     # Documents & Invoices
     "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain", "text/csv",
@@ -19,10 +21,18 @@ ALLOWED_CONTENT_TYPES = {
     "video/mp4", "video/webm", "video/quicktime"
 }
 
+# S2: closed set of upload buckets. `category` is interpolated into the
+# Cloudinary folder path, so it must never be a free-form string — values like
+# "../../<other-user>/contracts" would escape the per-user sandbox.
+UploadCategory = Literal[
+    "receipts", "invoices", "contracts", "proposals", "deliverables",
+    "clients", "documents", "uploads",
+]
+
 class UploadUrlRequest(BaseModel):
     file_key: str = Field(..., min_length=3, max_length=200, description="Target file name e.g. 'receipt_101.png'")
     content_type: str = Field(default="application/octet-stream", description="MIME type of the file")
-    category: str = Field(default="uploads", description="Category: 'receipts', 'invoices', 'contracts', 'proposals', 'deliverables'")
+    category: UploadCategory = Field(default="uploads", description="Category: 'receipts', 'invoices', 'contracts', 'proposals', 'deliverables', 'clients', 'documents', or 'uploads'")
     expires_in: int = Field(default=3600, ge=60, le=86400, description="Expiration in seconds")
 
     @field_validator("file_key")

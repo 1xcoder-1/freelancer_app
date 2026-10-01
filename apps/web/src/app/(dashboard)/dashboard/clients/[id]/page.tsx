@@ -42,6 +42,7 @@ import { invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { ClientProductivityTabs } from "@/components/dashboard/panels/ClientProductivityTabs";
 
 function getInitials(name: string) {
   if (!name) return "CL";
@@ -154,29 +155,18 @@ export default function ClientDetailPage() {
 
   // Parse notes and metadata
   let category = "Featured";
-  let roleTitle = "";
-  let preferredChannel = "Direct Communication";
   let linkedIn = "";
   let rateDisplay = "";
   let clientCurrency = currency;
   let paymentTerms = "";
-  let billingAddress = "";
   let rawNotes = client.notes || "";
 
   if (rawNotes) {
     const catMatch = rawNotes.match(/\[category:\s*([^\]]+)\]/i);
     if (catMatch && catMatch[1] && catMatch[1].trim() !== "[object Object]") {
       category = catMatch[1].trim();
-    }
-
-    const roleMatch = rawNotes.match(/\[role:\s*([^\]]+)\]/i);
-    if (roleMatch && roleMatch[1] && roleMatch[1].trim() !== "[object Object]" && !roleMatch[1].includes("[object Object]")) {
-      roleTitle = roleMatch[1].trim();
-    }
-
-    const chanMatch = rawNotes.match(/\[channel:\s*([^\]]+)\]/i);
-    if (chanMatch && chanMatch[1] && chanMatch[1].trim() !== "[object Object]" && !chanMatch[1].includes("[object Object]")) {
-      preferredChannel = chanMatch[1].trim();
+    } else if (client.status === "vip") {
+      category = "VIP & Enterprise";
     }
 
     const linkMatch = rawNotes.match(/\[linkedin:\s*([^\]]+)\]/i);
@@ -204,14 +194,36 @@ export default function ClientDetailPage() {
       }
     }
 
+    const TERMS_FORMAT_MAP: Record<string, string> = {
+      "50_advance_50_completion": "50% Advance / 50% on Completion",
+      "100_advance": "100% Advance Payment",
+      "30_advance_70_completion": "30% Advance / 70% on Completion",
+      "on_completion": "100% on Project Completion",
+      "net_7": "Net 7 Days",
+      "net_15": "Net 15 Days",
+      "net_30": "Net 30 Days",
+      "monthly_advance": "Monthly Fixed (Advance)",
+    };
+
+    const formatTerms = (raw: string): string => {
+      if (!raw) return "";
+      const cleanKey = raw.toLowerCase().trim().replace(/[\s-]+/g, "_");
+      if (TERMS_FORMAT_MAP[cleanKey]) {
+        return TERMS_FORMAT_MAP[cleanKey];
+      }
+      const advCompMatch = raw.match(/(\d+)\s*(?:advance|\%?\s*advance)?\s*[\/\-&]?\s*(\d+)\s*(?:completion|\%?\s*completion)/i);
+      if (advCompMatch) {
+        return `${advCompMatch[1]}% Advance / ${advCompMatch[2]}% on Completion`;
+      }
+      if (/^100\s*(?:advance)?/i.test(raw)) {
+        return "100% Advance Payment";
+      }
+      return raw.replace(/_/g, " ");
+    };
+
     const termsMatch = rawNotes.match(/\[terms:\s*([^\]]+)\]/i);
     if (termsMatch && termsMatch[1] && termsMatch[1].trim() !== "[object Object]" && !termsMatch[1].includes("[object Object]")) {
-      paymentTerms = termsMatch[1].trim().replace(/_/g, " ");
-    }
-
-    const addrMatch = rawNotes.match(/\[address:\s*([^\]]+)\]/i);
-    if (addrMatch && addrMatch[1] && addrMatch[1].trim() !== "[object Object]" && !addrMatch[1].includes("[object Object]")) {
-      billingAddress = addrMatch[1].trim();
+      paymentTerms = formatTerms(termsMatch[1].trim());
     }
 
     // Strip metadata tags for clean readable notes
@@ -252,17 +264,16 @@ export default function ClientDetailPage() {
           <div className="space-y-1.5">
             {/* Colorful soft pill tags matching reference image */}
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1">
+              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1">
                 {client.name}
               </h1>
 
               {/* Status Pill */}
               <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${
-                  isVip
-                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25"
-                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                }`}
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${isVip
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25"
+                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
+                  }`}
               >
                 {isVip ? "★ VIP Client" : client.status || "Active Client"}
               </span>
@@ -273,14 +284,10 @@ export default function ClientDetailPage() {
               </span>
             </div>
 
-            {(client.company_name || roleTitle) && (
+            {client.company_name && (
               <p className="text-xs text-muted font-normal flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-accent" />
-                {client.company_name && (
-                  <span className="text-fg font-medium">{client.company_name}</span>
-                )}
-                {client.company_name && roleTitle && <span>•</span>}
-                {roleTitle && <span>{roleTitle}</span>}
+                <span className="text-fg font-medium">{client.company_name}</span>
               </p>
             )}
           </div>
@@ -312,14 +319,17 @@ export default function ClientDetailPage() {
         </div>
       </div>
 
+      {/* Client Productivity Tabs: Overview, Finances, Documents */}
+      <ClientProductivityTabs clientId={clientId} />
+
       {/* Main Details Grid (2 Columns: Main 8 cols, Side 4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Billing Overview & Notes (8 cols) */}
         <div className="lg:col-span-8 space-y-5">
-          {/* Billing Rate / Retainer Card */}
+          {/* Billing Rate Card */}
           <div className="p-5 rounded-2xl bg-card border border-line flex items-center justify-between">
             <div className="space-y-0.5">
-              <span className="text-xs font-medium text-muted">Billing Rate / Retainer</span>
+              <span className="text-xs font-medium text-muted">Agreed Billing Rate</span>
               <div className="text-2xl font-mono font-medium text-fg">
                 {rateDisplay ? `${clientCurrency} ${rateDisplay}` : "Standard Rates"}
               </div>
@@ -330,20 +340,20 @@ export default function ClientDetailPage() {
           </div>
 
           {/* Scope & Notes */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-line">
+          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-3.5">
+            <div className="flex items-center gap-2 pb-2.5 border-b border-line">
               <FileText className="w-4 h-4 text-accent" />
-              <h2 className="text-sm font-medium text-fg">
+              <h2 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg">
                 Notes & Special Instructions
               </h2>
             </div>
 
             {rawNotes ? (
-              <p className="text-sm text-fg leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm sm:text-[15px] text-fg leading-relaxed whitespace-pre-wrap">
                 {rawNotes}
               </p>
             ) : (
-              <p className="text-xs text-muted italic">
+              <p className="text-xs sm:text-sm text-muted italic">
                 No special instructions or notes added yet. Click &quot;Edit Profile&quot; to add details.
               </p>
             )}
@@ -353,85 +363,73 @@ export default function ClientDetailPage() {
         {/* Right Column: Key Contact & Metadata (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
           <Card className="p-5 rounded-2xl border-line bg-card space-y-4">
-            <h2 className="text-sm font-medium text-fg pb-2 border-b border-line">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2 border-b border-line">
               Contact Details
             </h2>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3">
               <div>
-                <span className="text-muted block mb-0.5">Email Address</span>
+                <span className="text-[11px] font-medium text-muted  tracking-wider block mb-0.5">Email Address</span>
                 {client.email ? (
                   <a
                     href={`mailto:${client.email}`}
-                    className="text-fg font-medium hover:text-accent transition-colors break-all"
+                    className="text-[13px] sm:text-sm text-fg font-medium hover:text-accent transition-colors break-all block"
                   >
                     {client.email}
                   </a>
                 ) : (
-                  <span className="text-muted">Not specified</span>
+                  <span className="text-[13px] text-muted">Not specified</span>
                 )}
               </div>
 
               <div>
-                <span className="text-muted block mb-0.5">Phone / WhatsApp</span>
+                <span className="text-[11px] font-medium text-muted  tracking-wider block mb-0.5">Phone / WhatsApp</span>
                 {client.phone ? (
                   <a
                     href={`tel:${client.phone}`}
-                    className="text-fg font-mono font-medium hover:text-accent transition-colors"
+                    className="text-[13px] sm:text-sm text-fg font-mono font-medium hover:text-accent transition-colors block"
                   >
                     {client.phone}
                   </a>
                 ) : (
-                  <span className="text-muted">Not specified</span>
+                  <span className="text-[13px] text-muted">Not specified</span>
                 )}
               </div>
 
               {client.website && (
                 <div>
-                  <span className="text-muted block mb-0.5">Website</span>
+                  <span className="text-[11px] font-medium text-muted  tracking-wider block mb-0.5">Website</span>
                   <a
                     href={client.website.startsWith("http") ? client.website : `https://${client.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-accent font-medium hover:underline inline-flex items-center gap-1 break-all"
+                    className="text-[13px] sm:text-sm text-accent font-medium hover:underline inline-flex items-center gap-1.5 break-all"
                   >
                     <span>{client.website}</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                   </a>
                 </div>
               )}
 
               {linkedIn && (
                 <div>
-                  <span className="text-muted block mb-0.5">LinkedIn Profile</span>
+                  <span className="text-[11px] font-medium text-muted  tracking-wider block mb-0.5">LinkedIn Profile</span>
                   <a
                     href={linkedIn.startsWith("http") ? linkedIn : `https://${linkedIn}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-accent font-medium hover:underline inline-flex items-center gap-1 break-all"
+                    className="text-[13px] sm:text-sm text-accent font-medium hover:underline inline-flex items-center gap-1.5 break-all"
                   >
                     <span>{linkedIn}</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                   </a>
                 </div>
               )}
 
-              <div>
-                <span className="text-muted block mb-0.5">Preferred Channel</span>
-                <span className="text-fg font-medium">{preferredChannel}</span>
-              </div>
-
               {paymentTerms && (
                 <div>
-                  <span className="text-muted block mb-0.5">Payment Terms</span>
-                  <span className="text-fg font-medium capitalize">{paymentTerms}</span>
-                </div>
-              )}
-
-              {billingAddress && (
-                <div>
-                  <span className="text-muted block mb-0.5">Billing Address</span>
-                  <p className="text-fg font-mono whitespace-pre-wrap">{billingAddress}</p>
+                  <span className="text-[11px] font-medium text-muted uppercase tracking-wider block mb-0.5">Payment Terms</span>
+                  <span className="text-[13px] sm:text-sm text-fg font-medium font-sans block">{paymentTerms}</span>
                 </div>
               )}
             </div>
@@ -443,16 +441,14 @@ export default function ClientDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-between text-xs font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
+                className="w-full justify-between h-10 px-3.5 text-xs sm:text-[13px] font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
               >
-                <span className="flex items-center gap-2 text-fg">
-                  <FolderKanban className="w-3.5 h-3.5 text-accent" />
+                <span className="flex items-center gap-2.5 text-fg font-medium">
+                  <FolderKanban className="w-4 h-4 text-accent" />
                   Client Projects
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <Badge className="bg-accent-soft text-accent text-[10px] font-mono px-2 py-0.5 border border-accent/20">
-                    {clientProjects.length} {clientProjects.length === 1 ? "Project" : "Projects"}
-                  </Badge>
+
                   <ArrowUpRight className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors" />
                 </div>
               </Button>
@@ -462,11 +458,11 @@ export default function ClientDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-between text-xs font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
+                className="w-full justify-between h-10 px-3.5 text-xs sm:text-[13px] font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
               >
-                <span className="flex items-center gap-2 text-fg">
-                  <Receipt className="w-3.5 h-3.5 text-accent" />
-                  Invoices & Statements
+                <span className="flex items-center gap-2.5 text-fg font-medium">
+                  <Receipt className="w-4 h-4 text-accent" />
+                  Invoices
                 </span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors" />
               </Button>

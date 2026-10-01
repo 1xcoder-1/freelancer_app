@@ -136,7 +136,7 @@ export function IntakePanel() {
           <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
             <ChaiCupIcon className="w-7 h-7" />
           </div>
-          <h3 className="text-lg font-bold text-fg">No questionnaires yet</h3>
+          <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No questionnaires yet</h3>
           <p className="text-sm text-muted mt-1 max-w-md mx-auto">
             Build customized client questionnaires to collect requirements before kicking off projects.
           </p>
@@ -180,14 +180,9 @@ export function IntakePanel() {
                 {/* Category Header with Title, Count, Underline & Sliding Navigation */}
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                   <div className="inline-flex flex-col items-start space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">
-                        {cat}
-                      </h3>
-                      <span className="text-xs font-mono font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-md border border-accent/20">
-                        {catForms.length}
-                      </span>
-                    </div>
+                    <h3 className="font-display text-base md:text-lg font-medium tracking-wide text-fg">
+                      {cat}
+                    </h3>
                     {/* Straight orange line under category title */}
                     <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
                   </div>
@@ -246,14 +241,14 @@ export function IntakePanel() {
                         onClick={() => handleOpenDetail(form)}
                         tags={
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/15 text-sky-400 border-sky-500/25 capitalize">
+                            <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/10 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25 capitalize">
                               {cat}
                             </span>
-                            <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                            <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
                               {questionsList.length} Question{questionsList.length === 1 ? "" : "s"}
                             </span>
                             {submissionsCount > 0 && (
-                              <span className="text-[11px] font-mono font-medium text-emerald-400 bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/25">
+                              <span className="text-[11px] font-mono font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/20 dark:border-emerald-500/25">
                                 {submissionsCount} Answer{submissionsCount === 1 ? "" : "s"}
                               </span>
                             )}

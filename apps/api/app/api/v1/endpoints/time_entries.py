@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
 from app.models.finance import TimeEntry
-from app.models.project import Project
+from app.models.project import Project, Task
 from app.schemas.domain import TimeEntryCreate, TimeEntryOut
 
 router = APIRouter(prefix="/time-entries", tags=["Time Tracking"])
@@ -58,6 +58,16 @@ async def log_time_entry(
     project = p_res.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # P5: task_id is now written for real (actual-vs-estimated), so it must be
+    # validated — a foreign or guessed id would mis-attribute hours. It has to
+    # belong to this same project (which is already workspace-scoped).
+    if payload.task_id:
+        t_res = await db.execute(
+            select(Task.id).where(Task.id == payload.task_id, Task.project_id == project.id)
+        )
+        if t_res.scalars().first() is None:
+            raise HTTPException(status_code=400, detail="Task does not belong to this project")
 
     entry = TimeEntry(
         workspace_id=workspace.id,

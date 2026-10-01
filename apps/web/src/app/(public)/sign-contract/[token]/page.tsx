@@ -53,7 +53,7 @@ export default function SignContractPage({ params }: PageProps) {
         setContract(data);
         if (data.recipient_name) setSignerName(data.recipient_name);
         if (data.recipient_email) setSignerEmail(data.recipient_email);
-        if (data.status === "signed") setSignedSuccess(true);
+        if (data.status === "signed" || data.status === "fully_executed") setSignedSuccess(true);
       } catch (err: unknown) {
         const axiosErr = err as { response?: { data?: { detail?: string } } };
         setError(axiosErr?.response?.data?.detail || "Invalid or expired contract link.");
@@ -221,9 +221,21 @@ export default function SignContractPage({ params }: PageProps) {
             </div>
 
             <div>
-              {contract.status === "signed" || signedSuccess ? (
+              {contract.status === "signed" || contract.status === "fully_executed" || signedSuccess ? (
                 <Badge className="bg-accent-soft text-accent border-accent/20 text-xs px-3 py-1 font-semibold">
                   <CheckCircle2 className="w-4 h-4 mr-1.5" /> Fully Executed & Signed
+                </Badge>
+              ) : contract.status === "superseded" || contract.superseded ? (
+                <Badge className="bg-danger/15 text-danger border-danger/25 text-xs px-3 py-1 font-semibold">
+                  <AlertCircle className="w-4 h-4 mr-1.5" /> Superseded
+                </Badge>
+              ) : contract.status === "expired" ? (
+                <Badge className="bg-danger/15 text-danger border-danger/25 text-xs px-3 py-1 font-semibold">
+                  <Clock className="w-4 h-4 mr-1.5" /> Expired
+                </Badge>
+              ) : contract.status === "declined" ? (
+                <Badge className="bg-warn/15 text-warn border-warn/25 text-xs px-3 py-1 font-semibold">
+                  <AlertCircle className="w-4 h-4 mr-1.5" /> Declined
                 </Badge>
               ) : (
                 <Badge className="bg-accent-soft text-info border-accent/30 text-xs px-3 py-1 font-semibold">
@@ -264,7 +276,7 @@ export default function SignContractPage({ params }: PageProps) {
         </Card>
 
         {/* Signing Area or Execution Confirmation */}
-        {signedSuccess || contract.status === "signed" ? (
+        {signedSuccess || contract.status === "signed" || contract.status === "fully_executed" ? (
           <Card className="bg-accent-soft border-accent p-8 text-center space-y-4 backdrop-blur-xl">
             <div className="w-14 h-14 rounded-full bg-accent-soft border border-accent/20 text-accent flex items-center justify-center mx-auto shadow-sm">
               <CheckCircle2 className="w-8 h-8" />
@@ -291,6 +303,26 @@ export default function SignContractPage({ params }: PageProps) {
                 </div>
               </div>
             )}
+          </Card>
+        ) : contract.status === "expired" || contract.status === "superseded" || contract.superseded || contract.status === "declined" ? (
+          <Card className="bg-card border-danger/30 p-8 text-center space-y-4 backdrop-blur-xl">
+            <div className="w-14 h-14 rounded-full bg-danger/15 border border-danger/25 text-danger flex items-center justify-center mx-auto shadow-sm">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold text-fg">
+              {contract.status === "superseded" || contract.superseded
+                ? "This version is no longer valid"
+                : contract.status === "expired"
+                ? "This offer has expired"
+                : "This agreement was declined"}
+            </h2>
+            <p className="text-sm text-muted max-w-md mx-auto">
+              {contract.status === "superseded" || contract.superseded
+                ? "The sender has issued a newer version of these terms. Please open the latest link they sent you to sign."
+                : contract.status === "expired"
+                ? "This version of the contract is past its valid-through date. Ask the sender to re-issue a fresh copy."
+                : "No signature is needed on this copy. Reach out to the sender if you'd like to proceed."}
+            </p>
           </Card>
         ) : (
           <Card className="bg-card border-line p-6 sm:p-8 backdrop-blur-xl space-y-6">

@@ -14,6 +14,14 @@ import {
   Check,
   ArrowLeft,
   PencilLine,
+  Share2,
+  History,
+  Link2,
+  X,
+  Clock,
+  Calendar,
+  CalendarClock,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,7 +54,15 @@ import {
   updatePlannerTodo,
   deletePlannerTodo,
   renamePlannerBoard,
+  enablePlannerShare,
+  rotatePlannerShareToken,
+  disablePlannerShare,
+  listPlannerSnapshots,
+  restorePlannerSnapshot,
   type PlannerTodo,
+  type PlannerTodoPayload,
+  type PlannerShare,
+  type PlannerSnapshotSummary,
   type ApiError,
 } from "@/lib/api";
 
@@ -61,12 +77,114 @@ function todoBoxPosition(index: number) {
   return { x: 120 + (index % 4) * 260, y: 120 + Math.floor(index / 4) * 150 };
 }
 
+// Format a 0..1439 minute-of-day into HH:MM without touching the wall clock
+// (the purity rule forbids Date.now()/new Date() during render).
+function fmtMinute(min: number | null | undefined): string {
+  if (min == null) return "";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function parseMinute(value: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mm = Number(m[2]);
+  if (h > 23 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+// Compare two ISO "YYYY-MM-DD" dates lexically (safe, timezone-free, no clock).
+function isoDayDiff(iso: string | null | undefined, today: string | null): number | null {
+  if (!iso || !today) return null;
+  if (iso === today) return 0;
+  return iso < today ? -1 : 1;
+}
+
 function CanvasSkeleton() {
   return (
     <div className="w-full h-full flex items-center justify-center bg-surface/40">
       <div className="flex items-center gap-2 text-muted text-sm">
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading sketch board…
+      </div>
+    </div>
+  );
+}
+
+// PL1/PL2/PL3 — inline per-todo planner (no modal): due date, priority,
+// recurrence and a timebox block (day + start + duration). Saved through the
+// same PATCH endpoint the tick uses, so the revision bump propagates live.
+function TodoPlanner({
+  todo,
+  onSave,
+  onCancel,
+}: {
+  todo: PlannerTodo;
+  onSave: (patch: PlannerTodoPayload) => void;
+  onCancel: () => void;
+}) {
+  const [dueDate, setDueDate] = useState(todo.due_date ?? "");
+  const [priority, setPriority] = useState(todo.priority || "medium");
+  const [recurrence, setRecurrence] = useState(todo.recurrence ?? "");
+  const [day, setDay] = useState(todo.date ?? "");
+  const [start, setStart] = useState(todo.start_minute != null ? fmtMinute(todo.start_minute) : "");
+  const [duration, setDuration] = useState(todo.duration_minutes != null ? String(todo.duration_minutes) : "");
+
+  const save = () => {
+    const patch: PlannerTodoPayload = {
+      due_date: dueDate || null,
+      priority: priority as PlannerTodoPayload["priority"],
+      recurrence: (recurrence || null) as PlannerTodoPayload["recurrence"],
+      date: day || null,
+      start_minute: start ? parseMinute(start) : null,
+      duration_minutes: duration ? Math.max(0, Number(duration) || 0) : null,
+    };
+    onSave(patch);
+  };
+
+  const field = "px-2 py-1.5 rounded-lg bg-card border border-line text-xs text-fg focus:outline-none focus:border-accent";
+  return (
+    <div className="mx-2 mb-2 p-2.5 rounded-lg bg-surface border border-line space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Due date
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={field} />
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Priority
+          <select value={priority} onChange={(e) => setPriority(e.target.value)} className={field}>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="urgent">urgent</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Repeat
+          <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} className={field}>
+            <option value="">none</option>
+            <option value="daily">daily</option>
+            <option value="weekly">weekly</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Timebox day
+          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={field} />
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Start
+          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={field} />
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Minutes
+          <input type="number" min={0} max={1440} value={duration} onChange={(e) => setDuration(e.target.value)} className={field} />
+        </label>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <button onClick={onCancel} className="px-2.5 py-1 rounded-lg text-xs text-muted hover:text-fg">Cancel</button>
+        <button onClick={save} className="px-3 py-1 rounded-lg text-xs font-semibold bg-accent hover:bg-accent-hi text-accent-fg">Save plan</button>
       </div>
     </div>
   );
@@ -83,6 +201,12 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   const [syncing, setSyncing] = useState(false);
   const [draft, setDraft] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [today, setToday] = useState<string | null>(null);
+  const [planningId, setPlanningId] = useState<string | null>(null);
+  const [share, setShare] = useState<PlannerShare | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [snapOpen, setSnapOpen] = useState(false);
+  const [snapshots, setSnapshots] = useState<PlannerSnapshotSummary[]>([]);
 
   const revisionRef = useRef(0);
   const dirtyRef = useRef(false); // unsaved local canvas edits pending
@@ -133,6 +257,7 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
       const head = await getPlannerBoardHead(boardId, token);
       if (!mountedRef.current) return;
       setTodos(head.todos);
+      if (head.today) setToday(head.today);
       if (!dirtyRef.current && head.revision > revisionRef.current) {
         await pullScene();
       }
@@ -219,7 +344,7 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     if (!text) return;
     try {
       const token = (await getToken()) || undefined;
-      const todo = await createPlannerTodo(boardId, text, token);
+      const todo = await createPlannerTodo(boardId, { text }, token);
       setTodos((prev) => [...prev, todo]);
       setDraft("");
     } catch (err) {
@@ -288,6 +413,96 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     }
   };
 
+  // PL1/PL2/PL3 — apply an inline plan edit to one todo (optimistic).
+  const saveTodoPlan = async (todo: PlannerTodo, patch: PlannerTodoPayload) => {
+    const before = todos;
+    setTodos((prev) => prev.map((t) => (t.id === todo.id ? { ...t, ...patch } : t)));
+    try {
+      const token = (await getToken()) || undefined;
+      const updated = await updatePlannerTodo(todo.id, patch, token);
+      setTodos((prev) => prev.map((t) => (t.id === todo.id ? updated : t)));
+      setPlanningId(null);
+    } catch (err) {
+      setTodos(before);
+      toast.error(err instanceof Error ? err.message : "Failed to update todo");
+    }
+  };
+
+  // PL5 — read-only share link lifecycle (enable / copy / rotate / disable).
+  const openShare = () => {
+    setSnapOpen(false);
+    setShareOpen((v) => !v);
+  };
+
+  const enableShare = async (expiresIso: string | null) => {
+    try {
+      const token = (await getToken()) || undefined;
+      const res = await enablePlannerShare(boardId, expiresIso, token);
+      setShare(res);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to enable sharing");
+    }
+  };
+
+  const rotateShare = async () => {
+    try {
+      const token = (await getToken()) || undefined;
+      setShare(await rotatePlannerShareToken(boardId, token));
+      toast.success("New link issued — the old one no longer works");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to rotate link");
+    }
+  };
+
+  const turnOffShare = async () => {
+    try {
+      const token = (await getToken()) || undefined;
+      setShare(await disablePlannerShare(boardId, token));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disable sharing");
+    }
+  };
+
+  const copyShare = () => {
+    if (!share?.share_token) return;
+    const url = `${window.location.origin}/planner/share/${share.share_token}`;
+    void navigator.clipboard?.writeText(url).then(
+      () => toast.success("Read-only link copied"),
+      () => toast.error(url)
+    );
+  };
+
+  // PL4 — time travel: list captured days and restore one into the live board.
+  const openHistory = async () => {
+    setShareOpen(false);
+    const next = !snapOpen;
+    setSnapOpen(next);
+    if (!next) return;
+    try {
+      const token = (await getToken()) || undefined;
+      setSnapshots(await listPlannerSnapshots(boardId, token));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load history");
+    }
+  };
+
+  const restoreDay = async (capturedOn: string) => {
+    if (!(await confirmDialog({ message: `Restore the plan from ${capturedOn}? The current board will be replaced.`, confirmLabel: "Restore" }))) return;
+    try {
+      const token = (await getToken()) || undefined;
+      const res = await restorePlannerSnapshot(boardId, capturedOn, token);
+      revisionRef.current = res.revision;
+      dirtyRef.current = false;
+      await pullScene();
+      setSnapOpen(false);
+      toast.success(`Restored ${capturedOn}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to restore");
+    }
+  };
+
+  const overdue = today ? todos.filter((t) => !t.is_done && isoDayDiff(t.due_date, today) === -1).length : 0;
+  const dueToday = today ? todos.filter((t) => !t.is_done && isoDayDiff(t.due_date, today) === 0).length : 0;
   const pendingCount = todos.filter((t) => !t.is_done).length;
 
   return (
@@ -336,9 +551,101 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
             <span className={`w-2 h-2 rounded-full ${syncing ? "bg-warn animate-pulse" : "bg-ok"}`} />
             {syncing ? "Saving…" : `Rev ${revisionRef.current}`}
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void openHistory()}
+            className="rounded-lg border-line text-fg"
+            title="Day history"
+          >
+            <History className="w-4 h-4 mr-1" />
+            <span className="hidden sm:inline">History</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openShare}
+            className="rounded-lg border-line text-fg"
+            title="Share read-only"
+          >
+            <Share2 className="w-4 h-4 mr-1" />
+            <span className="hidden sm:inline">Share</span>
+          </Button>
           <ThemeToggle />
         </div>
       </div>
+
+      {/* PL5 share / PL4 history inline panels (no popups) */}
+      {shareOpen && (
+        <div className="px-4 sm:px-6 py-3 border-b border-line bg-surface/40 flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold text-fg">Read-only share link</span>
+          {share?.share_token ? (
+            <>
+              <code className="px-2 py-1 rounded-md bg-card border border-line text-xs text-muted truncate max-w-[280px]">
+                {`${typeof window !== "undefined" ? window.location.origin : ""}/planner/share/${share.share_token}`}
+              </code>
+              {share.expires_at && (
+                <span className="text-[11px] text-faint">expires {share.expires_at.slice(0, 10)}</span>
+              )}
+              <Button size="sm" variant="outline" onClick={copyShare} className="rounded-lg border-line text-fg">
+                <Link2 className="w-3.5 h-3.5 mr-1" />Copy
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void rotateShare()} className="rounded-lg border-line text-fg">
+                Rotate
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void turnOffShare()} className="rounded-lg border-line text-danger">
+                Turn off
+              </Button>
+            </>
+          ) : (
+            <span className="flex items-center gap-2">
+              <label className="text-xs text-muted">Expires (optional)</label>
+              <input type="date" id="share-expiry" className="px-2 py-1 rounded-lg bg-card border border-line text-sm text-fg" />
+              <Button
+                size="sm"
+                onClick={() => {
+                  const el = document.getElementById("share-expiry") as HTMLInputElement | null;
+                  const iso = el?.value ? new Date(`${el.value}T23:59:59`).toISOString() : null;
+                  void enableShare(iso);
+                }}
+                className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg"
+              >
+                Enable
+              </Button>
+            </span>
+          )}
+          <button onClick={() => setShareOpen(false)} className="ml-auto p-1 rounded-md text-muted hover:text-fg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {snapOpen && (
+        <div className="px-4 sm:px-6 py-3 border-b border-line bg-surface/40">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-fg text-sm">Day history (auto-captured once per day)</span>
+            <button onClick={() => setSnapOpen(false)} className="p-1 rounded-md text-muted hover:text-fg">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {snapshots.length === 0 ? (
+            <p className="text-xs text-faint">No snapshots yet — one is saved the first time you edit the board each day.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {snapshots.map((s) => (
+                <button
+                  key={s.captured_on}
+                  onClick={() => void restoreDay(s.captured_on)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-card border border-line text-xs text-fg hover:border-accent"
+                  title="Restore this day"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-muted" />{s.captured_on}
+                  <span className="font-mono text-[10px] text-faint">rev {s.revision}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Body: two panes */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
@@ -349,6 +656,20 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
               <span className="text-xs font-semibold text-muted uppercase tracking-wide">Todos</span>
               <span className="text-[11px] font-mono text-faint">{pendingCount} open</span>
             </div>
+            {today && (overdue > 0 || dueToday > 0) && (
+              <div className="mb-2 flex flex-wrap gap-1.5 text-[11px]">
+                {overdue > 0 && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-danger/10 text-danger">
+                    <AlertCircle className="w-3 h-3" />{overdue} overdue
+                  </span>
+                )}
+                {dueToday > 0 && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warn/10 text-warn">
+                    <Calendar className="w-3 h-3" />{dueToday} due today
+                  </span>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <input
                 value={draft}
@@ -379,36 +700,74 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
                 No todos yet. Add one above, then sketch it on the board.
               </p>
             ) : (
-              todos.map((todo, i) => (
-                <div key={todo.id} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface">
-                  <button
-                    onClick={() => toggleTodo(todo)}
-                    className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                      todo.is_done ? "bg-accent border-accent text-accent-fg" : "border-line-strong text-transparent hover:border-accent"
-                    }`}
-                    aria-label={todo.is_done ? "Mark not done" : "Mark done"}
-                  >
-                    <Check className="w-3 h-3" />
-                  </button>
-                  <span className={`flex-1 text-sm truncate ${todo.is_done ? "line-through text-faint" : "text-fg"}`}>
-                    {todo.text}
-                  </span>
-                  <button
-                    onClick={() => sketchTodo(todo, i)}
-                    title="Add to board"
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-accent shrink-0"
-                  >
-                    <PenLine className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => removeTodo(todo)}
-                    title="Delete"
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-danger shrink-0"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))
+              todos.map((todo, i) => {
+                const diff = isoDayDiff(todo.due_date, today);
+                const overdueRow = !todo.is_done && diff === -1;
+                const dueTodayRow = !todo.is_done && diff === 0;
+                const planning = planningId === todo.id;
+                return (
+                  <div key={todo.id} className="rounded-lg hover:bg-surface">
+                    <div className="group flex items-center gap-2 px-2 py-1.5">
+                      <button
+                        onClick={() => toggleTodo(todo)}
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                          todo.is_done ? "bg-accent border-accent text-accent-fg" : "border-line-strong text-transparent hover:border-accent"
+                        }`}
+                        aria-label={todo.is_done ? "Mark not done" : "Mark done"}
+                      >
+                        <Check className="w-3 h-3" />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className={`block text-sm truncate ${todo.is_done ? "line-through text-faint" : "text-fg"}`}>
+                          {todo.text}
+                        </span>
+                        {(todo.due_date || todo.start_minute != null || todo.recurrence || (todo.priority && todo.priority !== "medium")) && (
+                          <div className="flex flex-wrap items-center gap-1 text-[10px] mt-0.5">
+                            {todo.priority && todo.priority !== "medium" && (
+                              <span className="px-1 py-0.5 rounded bg-surface text-muted capitalize">{todo.priority}</span>
+                            )}
+                            {todo.due_date && (
+                              <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded ${overdueRow ? "bg-danger/10 text-danger" : dueTodayRow ? "bg-warn/10 text-warn" : "bg-surface text-muted"}`}>
+                                <Calendar className="w-2.5 h-2.5" />{todo.due_date}
+                              </span>
+                            )}
+                            {todo.start_minute != null && (
+                              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-info/10 text-info">
+                                <Clock className="w-2.5 h-2.5" />{fmtMinute(todo.start_minute)}{todo.duration_minutes ? `–${fmtMinute((todo.start_minute + todo.duration_minutes) % 1440)}` : ""}
+                              </span>
+                            )}
+                            {todo.recurrence && (
+                              <span className="px-1 py-0.5 rounded bg-surface text-muted">↻ {todo.recurrence}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setPlanningId(planning ? null : todo.id)}
+                        title="Plan (date, priority, project, timebox)"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-accent shrink-0"
+                      >
+                        <CalendarClock className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => sketchTodo(todo, i)}
+                        title="Add to board"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-accent shrink-0"
+                      >
+                        <PenLine className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => removeTodo(todo)}
+                        title="Delete"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-danger shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {planning && <TodoPlanner todo={todo} onSave={(p) => void saveTodoPlan(todo, p)} onCancel={() => setPlanningId(null)} />}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

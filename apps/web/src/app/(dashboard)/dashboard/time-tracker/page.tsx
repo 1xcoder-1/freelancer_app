@@ -227,7 +227,7 @@ export default function TimeTrackerPage() {
     <div className="space-y-8 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Time</h1>
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Time</h1>
           <p className="text-muted text-sm mt-1">
             Start the clock, stop it, and the hours are ready to bill. It keeps counting even if you
             close the tab or switch devices.

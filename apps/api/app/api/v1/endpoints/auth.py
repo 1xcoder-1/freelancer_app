@@ -24,9 +24,12 @@ async def get_auth_config_status(
 ) -> Dict[str, Any]:
     """
     Public auth status check endpoint.
+
+    S4: answers with the standardized profile only — never the verified claim
+    set — so internal Clerk metadata (sid, swa, nbf, ...) is not echoed back.
     """
     return {
         "clerk_configured": True,
         "authenticated": user is not None,
-        "user": user
+        "user": AuthService.format_user_profile(user) if user else None
     }

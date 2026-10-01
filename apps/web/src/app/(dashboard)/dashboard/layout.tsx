@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { usePathname } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { CommandMenu } from "@/components/common/CommandMenu";
@@ -22,7 +22,9 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg text-fg antialiased font-sans select-none">
       {/* Universal Collapsible Sidebar */}
-      <DashboardSidebar />
+      <Suspense fallback={null}>
+        <DashboardSidebar />
+      </Suspense>
 
       {/* Main Content Area */}
       <main

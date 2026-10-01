@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { getClient, updateClient, type Client } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
@@ -29,11 +30,6 @@ const clientFormSchema = z.object({
     .string()
     .trim()
     .max(100, "Company name cannot exceed 100 characters")
-    .optional(),
-  roleTitle: z
-    .string()
-    .trim()
-    .max(100, "Role title cannot exceed 100 characters")
     .optional(),
   email: z.union([
     z.literal(""),
@@ -73,7 +69,6 @@ const clientFormSchema = z.object({
       ),
   ]),
   rateOrBudget: z.string().max(50, "Rate cannot exceed 50 characters").optional(),
-  billingAddress: z.string().max(300, "Billing address cannot exceed 300 characters").optional(),
 });
 
 const DEFAULT_CATEGORIES = [
@@ -84,6 +79,16 @@ const DEFAULT_CATEGORIES = [
   "Strategy & Consulting",
 ];
 
+const CURRENCY_OPTIONS = [
+  { value: "USD", label: "USD ($)" },
+  { value: "PKR", label: "PKR (₨)" },
+  { value: "EUR", label: "EUR (€)" },
+  { value: "GBP", label: "GBP (£)" },
+  { value: "AED", label: "AED (د.إ)" },
+  { value: "CAD", label: "CAD ($)" },
+  { value: "AUD", label: "AUD ($)" },
+];
+
 const PAYMENT_TERMS = [
   { value: "50_advance_50_completion", label: "50% Advance / 50% on Completion" },
   { value: "100_advance", label: "100% Advance Payment" },
@@ -92,10 +97,8 @@ const PAYMENT_TERMS = [
   { value: "net_7", label: "Net 7 Days" },
   { value: "net_15", label: "Net 15 Days" },
   { value: "net_30", label: "Net 30 Days" },
-  { value: "monthly_advance", label: "Monthly Retainer (Advance)" },
+  { value: "monthly_advance", label: "Monthly Fixed (Advance)" },
 ];
-
-const CHANNELS = ["Email", "Slack Connect", "WhatsApp", "Discord", "Telegram", "Phone"];
 
 const formatAmountWithCommas = (val: string): string => {
   if (!val) return "";
@@ -131,7 +134,6 @@ export default function EditClientPage() {
   // Form State
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [roleTitle, setRoleTitle] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
@@ -139,9 +141,7 @@ export default function EditClientPage() {
   const [currency, setCurrency] = useState("USD");
   const [category, setCategory] = useState("Featured");
   const [customCategory, setCustomCategory] = useState("");
-  const [preferredChannel, setPreferredChannel] = useState("Email");
   const [paymentTerms, setPaymentTerms] = useState("50_advance_50_completion");
-  const [billingAddress, setBillingAddress] = useState("");
   const [clientNotes, setClientNotes] = useState("");
   const [isVip, setIsVip] = useState(false);
 
@@ -181,16 +181,6 @@ export default function EditClientPage() {
             }
           }
 
-          const roleMatch = raw.match(/\[role:\s*([^\]]+)\]/i);
-          if (roleMatch && roleMatch[1] && roleMatch[1].trim() !== "[object Object]") {
-            setRoleTitle(roleMatch[1].trim());
-          }
-
-          const chanMatch = raw.match(/\[channel:\s*([^\]]+)\]/i);
-          if (chanMatch && chanMatch[1] && chanMatch[1].trim() !== "[object Object]") {
-            setPreferredChannel(chanMatch[1].trim());
-          }
-
           const rateMatch = raw.match(/\[rate:\s*([A-Z]{3})?\s*([^\]]+)\]/i);
           if (rateMatch) {
             if (rateMatch[1] && rateMatch[1].trim() !== "[object Object]") setCurrency(rateMatch[1].trim());
@@ -202,11 +192,6 @@ export default function EditClientPage() {
           const termsMatch = raw.match(/\[terms:\s*([^\]]+)\]/i);
           if (termsMatch && termsMatch[1] && termsMatch[1].trim() !== "[object Object]") {
             setPaymentTerms(termsMatch[1].trim());
-          }
-
-          const addrMatch = raw.match(/\[address:\s*([^\]]+)\]/i);
-          if (addrMatch && addrMatch[1] && addrMatch[1].trim() !== "[object Object]") {
-            setBillingAddress(addrMatch[1].trim());
           }
 
           let cleanNotes = raw
@@ -230,10 +215,22 @@ export default function EditClientPage() {
     }
 
     loadClientData();
+
     return () => {
       mounted = false;
     };
   }, [clientId, getToken]);
+
+  const handleToggleVip = () => {
+    const nextVip = !isVip;
+    setIsVip(nextVip);
+    if (nextVip) {
+      setCategory("VIP & Enterprise");
+      setCustomCategory("");
+    } else if (category === "VIP & Enterprise" && !customCategory) {
+      setCategory("Featured");
+    }
+  };
 
   const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatAmountWithCommas(e.target.value);
@@ -247,12 +244,10 @@ export default function EditClientPage() {
     const result = clientFormSchema.safeParse({
       name,
       companyName,
-      roleTitle,
       email,
       phone,
       website,
       rateOrBudget,
-      billingAddress,
     });
 
     if (!result.success) {
@@ -272,12 +267,9 @@ export default function EditClientPage() {
 
     const meta: string[] = [];
     meta.push(`[category: ${chosenCategory}]`);
-    if (roleTitle.trim()) meta.push(`[role: ${roleTitle.trim()}]`);
     if (isVip) meta.push(`[vip: true]`);
-    if (preferredChannel) meta.push(`[channel: ${preferredChannel}]`);
     if (rateOrBudget.trim()) meta.push(`[rate: ${currency} ${rateOrBudget.trim()}]`);
     if (paymentTerms) meta.push(`[terms: ${paymentTerms}]`);
-    if (billingAddress.trim()) meta.push(`[address: ${billingAddress.trim()}]`);
 
     let finalNotes = meta.join("\n");
     if (clientNotes.trim()) {
@@ -334,7 +326,7 @@ export default function EditClientPage() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Client</span>
           </Link>
-          <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-fg">
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
             Edit Client Profile
           </h1>
         </div>
@@ -345,7 +337,7 @@ export default function EditClientPage() {
             variant="outline"
             onClick={() => router.push(`/dashboard/clients/${clientId}`)}
             disabled={saving}
-            className="text-xs rounded-xl h-9 px-4 border-line"
+            className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg border border-line bg-card hover:bg-surface text-fg font-medium text-xs sm:text-sm transition-all duration-150 cursor-pointer disabled:opacity-50 h-9"
           >
             Cancel
           </Button>
@@ -354,7 +346,7 @@ export default function EditClientPage() {
             type="submit"
             form="edit-client-form"
             disabled={saving || !name.trim()}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-medium text-xs rounded-xl h-9 px-5 shadow-xs"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:pointer-events-none h-9"
           >
             {saving ? (
               <>
@@ -380,12 +372,11 @@ export default function EditClientPage() {
               </h2>
               <button
                 type="button"
-                onClick={() => setIsVip(!isVip)}
-                className={`text-xs px-2.5 py-1 rounded-xl border flex items-center gap-1.5 font-medium transition-all ${
-                  isVip
-                    ? "bg-amber-500 text-white border-amber-600 shadow-xs"
-                    : "bg-surface/50 text-muted border-line hover:text-fg"
-                }`}
+                onClick={handleToggleVip}
+                className={`text-xs px-2.5 py-1 rounded-xl border flex items-center gap-1.5 font-medium transition-all cursor-pointer ${isVip
+                  ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                  : "bg-surface/50 text-muted border-line hover:text-fg"
+                  }`}
               >
                 <Crown className="w-3 h-3" />
                 {isVip ? "VIP Client" : "Mark as VIP"}
@@ -406,9 +397,8 @@ export default function EditClientPage() {
                     if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
                   }}
                   placeholder="e.g. Alex Henderson"
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
-                    errors.name ? "border-danger" : "border-line"
-                  }`}
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${errors.name ? "border-danger" : "border-line"
+                    }`}
                 />
                 {errors.name && (
                   <p className="text-[11px] text-danger flex items-center gap-1">
@@ -432,19 +422,6 @@ export default function EditClientPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-fg block">
-                  Role / Job Title
-                </label>
-                <input
-                  type="text"
-                  value={roleTitle}
-                  onChange={(e) => setRoleTitle(e.target.value)}
-                  placeholder="e.g. Founder, Product Lead"
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">
                   Email Address
                 </label>
                 <input
@@ -455,9 +432,8 @@ export default function EditClientPage() {
                     if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
                   }}
                   placeholder="alex@company.com"
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
-                    errors.email ? "border-danger" : "border-line"
-                  }`}
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${errors.email ? "border-danger" : "border-line"
+                    }`}
                 />
                 {errors.email && (
                   <p className="text-[11px] text-danger flex items-center gap-1">
@@ -479,7 +455,7 @@ export default function EditClientPage() {
                 />
               </div>
 
-              <div className="sm:col-span-2 space-y-1.5">
+              <div className="space-y-1.5">
                 <label className="text-xs font-medium text-fg block">
                   Website URL (Optional)
                 </label>
@@ -495,16 +471,25 @@ export default function EditClientPage() {
           </Card>
 
           {/* 2. Billing & Category */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-5">
-            <h2 className="text-sm font-medium text-fg">
-              Billing & Category
-            </h2>
+          <Card className="p-5 sm:p-6 rounded-2xl border border-line bg-card space-y-5 shadow-xs">
+            <div className="flex items-center justify-between pb-1 border-b border-line/50">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-accent" />
+                <h2 className="text-sm font-medium text-fg">
+                  Billing
+                </h2>
+              </div>
+              <span className="text-[11px] font-mono text-muted  tracking-wider">Ts</span>
+            </div>
 
             {/* Category Pills */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-fg block">
-                Client Roster Category
-              </label>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-fg">
+                  Client Category
+                </label>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 {DEFAULT_CATEGORIES.map((c) => {
                   const active = category === c && !customCategory;
@@ -516,11 +501,10 @@ export default function EditClientPage() {
                         setCategory(c);
                         setCustomCategory("");
                       }}
-                      className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all ${
-                        active
-                          ? "bg-accent text-accent-fg border-accent shadow-xs"
-                          : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
-                      }`}
+                      className={`text-xs px-3.5 py-1.5 rounded-xl border font-medium transition-all cursor-pointer ${active
+                        ? "bg-accent text-accent-fg border-accent shadow-xs"
+                        : "bg-surface/60 text-muted border-line hover:border-line-strong hover:text-fg"
+                        }`}
                     >
                       {c}
                     </button>
@@ -533,111 +517,67 @@ export default function EditClientPage() {
                 value={customCategory}
                 onChange={(e) => setCustomCategory(e.target.value)}
                 placeholder="Or enter custom category name..."
-                className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-xs placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all mt-2"
+                className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/60 text-fg text-xs placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all mt-1"
               />
             </div>
 
-            {/* Billing Rate, Terms, Channel */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-line/60">
-              <div className="space-y-1.5 min-w-0">
-                <label className="text-xs font-medium text-fg block">
-                  Billing Rate / Retainer
-                </label>
-                <div className="flex items-center gap-2 min-w-0">
+            {/* Billing Rate & Payment Terms */}
+            <div className="space-y-4 pt-3 border-t border-line/60">
+              {/* Rate Row */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-fg">
+                    Billing Rate
+                  </label>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-32 sm:w-36 shrink-0">
+                    <CustomSelect
+                      value={currency}
+                      onChange={setCurrency}
+                      options={CURRENCY_OPTIONS}
+                    />
+                  </div>
                   <input
                     type="text"
                     value={rateOrBudget}
                     onChange={handleRateChange}
                     placeholder="5,000 / mo"
-                    className="flex-1 min-w-0 w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all"
+                    className="flex-1 min-w-0 w-full h-11 px-4 rounded-xl border border-line bg-surface/60 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all placeholder:text-muted/50"
                   />
-                  <div className="relative w-24 sm:w-28 shrink-0">
-                    <select
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value)}
-                      className="w-full h-10 appearance-none px-2.5 sm:px-3 pr-7 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
-                    >
-                      <option value="USD">USD ($)</option>
-                      <option value="PKR">PKR (₨)</option>
-                      <option value="EUR">EUR (€)</option>
-                      <option value="GBP">GBP (£)</option>
-                      <option value="AED">AED (د.إ)</option>
-                      <option value="CAD">CAD ($)</option>
-                      <option value="AUD">AUD ($)</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
-                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1.5 min-w-0">
-                <label className="text-xs font-medium text-fg block">
-                  Payment Terms
-                </label>
-                <div className="relative w-full">
-                  <select
-                    value={paymentTerms}
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
-                  >
-                    {PAYMENT_TERMS.map((term) => (
-                      <option key={term.value} value={term.value}>{term.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
+              {/* Terms Row (Full Width - no truncated text) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-fg">
+                    Payment Terms
+                  </label>
                 </div>
-              </div>
-
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="text-xs font-medium text-fg block">
-                  Preferred Communication Channel
-                </label>
-                <div className="relative">
-                  <select
-                    value={preferredChannel}
-                    onChange={(e) => setPreferredChannel(e.target.value)}
-                    className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
-                  >
-                    {CHANNELS.map((ch) => (
-                      <option key={ch} value={ch}>{ch}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
-                </div>
+                <CustomSelect
+                  value={paymentTerms}
+                  onChange={setPaymentTerms}
+                  options={PAYMENT_TERMS}
+                />
               </div>
             </div>
           </Card>
 
-          {/* 3. Billing Address & Notes */}
+
           <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
             <h2 className="text-sm font-medium text-fg">
-              Address & Notes (Optional)
+              Notes & Instructions
             </h2>
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">
-                  Billing Address / Tax Info
-                </label>
-                <textarea
-                  value={billingAddress}
-                  onChange={(e) => setBillingAddress(e.target.value)}
-                  rows={2}
-                  placeholder="Street address, Tax/VAT ID, postal code..."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">
-                  Internal Notes & Instructions
-                </label>
                 <textarea
                   value={clientNotes}
                   onChange={(e) => setClientNotes(e.target.value)}
-                  rows={3}
+                  rows={7}
                   placeholder="Client preferences, key contacts, or milestone agreements..."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg no-scrollbar scrollbar-none placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
                 />
               </div>
             </div>
@@ -653,17 +593,25 @@ export default function EditClientPage() {
 
           <CategoryVisualCard
             title={name.trim() || "Client Name"}
-            subtitle={companyName.trim() || roleTitle || "Direct Client"}
-            currentCount={isVip ? "★" : "1"}
-            totalCount={isVip ? "VIP" : "10"}
+            subtitle={companyName.trim() || "Direct Client"}
             category={effectiveCategory}
+            topRightContent={
+              isVip ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/15 to-yellow-500/15 dark:from-amber-500/20 dark:to-yellow-500/20 border border-amber-500/30 dark:border-amber-500/35 text-amber-700 dark:text-amber-300 text-xs font-semibold shadow-sm tracking-wide">
+                  <span className="text-amber-600 dark:text-amber-400 text-sm">★</span>
+                  <span className="font-display font-bold tracking-wider text-[11px]">VIP</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-500/10 dark:bg-white/5 border border-slate-200/90 dark:border-white/10 text-slate-600 dark:text-slate-300 text-xs font-medium shadow-2xs tracking-wide">
+                  <span className="text-slate-400 dark:text-slate-500 text-[10px]">✦</span>
+                  <span className="font-medium text-[11px] tracking-wide">Standard</span>
+                </div>
+              )
+            }
             tags={
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white/10 text-zinc-200 border border-white/10 capitalize">
-                  {isVip ? "VIP" : "Active"}
-                </span>
                 {rateOrBudget && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-orange-500/15 text-white border border-orange-500/25 font-mono">
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-orange-500/10 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20 dark:border-orange-500/25 font-mono">
                     {currency} {formatAmountWithCommas(rateOrBudget)}
                   </span>
                 )}

@@ -313,7 +313,7 @@ function SettingsContent() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Settings</h1>
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Settings</h1>
           <p className="text-muted text-sm mt-1">
             Set your business details once — they apply to every invoice and every device.
           </p>

@@ -56,12 +56,7 @@ export function useApiData<T>(
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
-
-  // Keep the latest fetcher/callbacks in refs so loadData (and therefore the
-  // poll interval that depends on it) stays referentially stable across
-  // renders. Consumers pass inline arrow fetchers, which would otherwise
-  // recreate loadData every render and reset the timer — live refresh would
-  // never fire while the screen is actively re-rendering.
+  
   const fetcherRef = useRef(fetcher);
   const onSuccessRef = useRef(onSuccess);
   const onErrorRef = useRef(onError);
@@ -94,6 +89,10 @@ export function useApiData<T>(
 
   const [error, setError] = useState<Error | null>(null);
 
+  // Refs used by loadData and the self-heal effect — declared before loadData
+  // so the closure captures them cleanly.
+  const attemptsRef = useRef(0);
+
   const loadData = useCallback(
     async (isManualRefresh: boolean = false): Promise<T | null> => {
       if (!key || !enabled) return null;
@@ -105,14 +104,40 @@ export function useApiData<T>(
       setError(null);
 
       try {
-        const token = (await getTokenRef.current()) || undefined;
-        const freshData = await fetchWithDeduplication(
-          key,
-          () => fetcherRef.current(token),
-          ttlMs
-        );
+        let token = (await getTokenRef.current()) || undefined;
+        let freshData: T;
+        try {
+          freshData = await fetchWithDeduplication(
+            key,
+            () => fetcherRef.current(token),
+            ttlMs
+          );
+        } catch (innerErr) {
+          // If the failure is a 401, immediately ask Clerk for a fresh token
+          // with skipCache: true and retry without a blocking sleep delay.
+          const status = (innerErr as { status?: number })?.status;
+          if (status === 401) {
+            try {
+              token = (await (getTokenRef.current as any)({ skipCache: true })) || (await getTokenRef.current()) || undefined;
+              if (token) {
+                freshData = await fetchWithDeduplication(
+                  key,
+                  () => fetcherRef.current(token),
+                  ttlMs
+                );
+              } else {
+                throw innerErr;
+              }
+            } catch {
+              throw innerErr;
+            }
+          } else {
+            throw innerErr;
+          }
+        }
 
         setData(freshData);
+        attemptsRef.current = 0; // Reset backoff on success.
         if (onSuccessRef.current) onSuccessRef.current(freshData);
         return freshData;
       } catch (err) {
@@ -172,6 +197,34 @@ export function useApiData<T>(
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [key, enabled, pollMs, loadData]);
+
+  // Self-heal after transient failures (e.g. the uvicorn --reload window or a
+  // Neon cold start): without pollMs, an errored key used to stay stuck at
+  // zeros until a manual refresh. Retry with a capped backoff while errors
+  // persist, and catch up immediately when the tab becomes visible again.
+  const errorRef = useRef<Error | null>(null);
+  useEffect(() => {
+    errorRef.current = error;
+  }, [error]);
+  useEffect(() => {
+    if (!enabled || !key) return;
+    if (!error) return; // Don't reset attempts here — loadData clears error mid-retry.
+    const delay = Math.min(5000 * 2 ** attemptsRef.current, 30000);
+    attemptsRef.current += 1;
+    const id = setTimeout(() => void loadData(false), delay);
+    return () => clearTimeout(id);
+  }, [error, key, enabled, loadData]);
+
+  useEffect(() => {
+    if (!enabled || !key || !error) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && errorRef.current) {
+        void loadData(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [key, enabled, error, loadData]);
 
   const mutate = useCallback(
     (

@@ -1,39 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import {
   Calendar as CalendarIcon,
   Clock,
   Video,
-  DollarSign,
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
   User,
-  Mail,
-  FileText
+  FileText,
+  RefreshCw,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 import {
   getPublicBooking,
+  getPublicBookingSlots,
   schedulePublicBooking,
   PublicBookingConsultation,
-  BookingAppointment
+  BookingAppointment,
 } from "@/lib/api";
 
-const TIME_SLOTS = [
-  "09:00 AM",
-  "10:00 AM",
-  "11:30 AM",
-  "01:00 PM",
-  "02:30 PM",
-  "04:00 PM",
-  "05:15 PM"
-];
+// Re-opened slots are polled on this cadence so a slot a second client just
+// took disappears before this visitor can click it (B1).
+const SLOTS_POLL_MS = 15_000;
+
+function fmtDay(iso: string): string {
+  // Server times are naive UTC; append Z so the weekday label is truthful.
+  return new Date(`${iso}Z`).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function fmtTime(iso: string): string {
+  return `${iso.slice(11, 16)} UTC`;
+}
 
 export default function PublicBookingPage() {
   const params = useParams();
@@ -43,13 +52,12 @@ export default function PublicBookingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Booking Form states
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split("T")[0];
-  });
-  const [selectedTime, setSelectedTime] = useState("10:00 AM");
+  // B1/B2: live, server-computed conflict-free slots.
+  const [slots, setSlots] = useState<string[]>([]);
+  const [slotsRefreshing, setSlotsRefreshing] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string>("");
+  const [selectedSlot, setSelectedSlot] = useState<string>("");
+
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [notes, setNotes] = useState("");
@@ -58,34 +66,94 @@ export default function PublicBookingPage() {
 
   useEffect(() => {
     if (!token) return;
-    const fetchBooking = async () => {
+    let active = true;
+    (async () => {
       try {
         const data = await getPublicBooking(token);
+        if (!active) return;
         setConsultation(data);
       } catch (err: any) {
-        setError(err.message || "Consultation not found.");
+        if (active) setError(err.message || "Consultation not found.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
+    })();
+    return () => {
+      active = false;
     };
-    fetchBooking();
   }, [token]);
+
+  const loadSlots = useCallback(async (manual = false) => {
+    if (!token) return;
+    if (manual) setSlotsRefreshing(true);
+    try {
+      const res = await getPublicBookingSlots(token, 14);
+      setSlots(res.slots);
+    } catch {
+      // Graceful: keep the last known slots rather than blanking the picker.
+    } finally {
+      setSlotsRefreshing(false);
+    }
+  }, [token]);
+
+  // Poll open slots every 15s (B1). Stops once an appointment is confirmed.
+  useEffect(() => {
+    if (!token || confirmedAppt) return;
+    loadSlots();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void loadSlots();
+    }, SLOTS_POLL_MS);
+    return () => clearInterval(id);
+  }, [token, confirmedAppt, loadSlots]);
+
+  const days = useMemo(() => {
+    const set = new Set(slots.map((s) => s.slice(0, 10)));
+    return Array.from(set).sort();
+  }, [slots]);
+
+  // Keep a valid day/slot selected as the live slot list changes.
+  useEffect(() => {
+    if (days.length === 0) {
+      setSelectedDay("");
+      setSelectedSlot("");
+      return;
+    }
+    if (!days.includes(selectedDay)) setSelectedDay(days[0]);
+  }, [days, selectedDay]);
+
+  const daySlots = useMemo(
+    () => slots.filter((s) => s.slice(0, 10) === selectedDay),
+    [slots, selectedDay]
+  );
+
+  useEffect(() => {
+    if (daySlots.length === 0) {
+      setSelectedSlot("");
+    } else if (!daySlots.includes(selectedSlot)) {
+      setSelectedSlot(daySlots[0]);
+    }
+  }, [daySlots, selectedSlot]);
 
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientName.trim() || !clientEmail.trim() || !selectedDate || !selectedTime) return;
-
+    if (!clientName.trim() || !clientEmail.trim() || !selectedSlot) {
+      toast.error("Pick a time and add your details first.");
+      return;
+    }
     setScheduling(true);
     try {
       const appt = await schedulePublicBooking(token, {
         client_name: clientName,
         client_email: clientEmail,
-        appointment_time: `${selectedDate}T12:00:00Z`,
-        notes: notes ? `${notes} (Preferred Slot: ${selectedTime})` : `Preferred Slot: ${selectedTime}`,
+        appointment_time: selectedSlot,
+        notes: notes || undefined,
       });
       setConfirmedAppt(appt);
     } catch (err: any) {
-      setError(err.message || "Failed to schedule appointment.");
+      const msg = err?.message || "That slot was just taken. Please pick another.";
+      toast.error(msg);
+      // A 409 (race) means the list is stale — refresh immediately.
+      void loadSlots(true);
     } finally {
       setScheduling(false);
     }
@@ -121,31 +189,34 @@ export default function PublicBookingPage() {
   }
 
   if (confirmedAppt) {
+    const needsPayment = confirmedAppt.payment_status === "unpaid" && confirmedAppt.invoice_token;
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-4 text-fg">
         <Card className="w-full max-w-lg bg-card border-line p-8 text-center space-y-6 shadow-2xl backdrop-blur-xl">
-          <div className="w-16 h-16 rounded-xl bg-accent-soft text-accent flex items-center justify-center mx-auto border border-accent">
-            <CheckCircle2 className="w-8 h-8" />
+          <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto border ${
+            needsPayment ? "bg-warn/10 text-warn border-warn/30" : "bg-accent-soft text-accent border-accent"
+          }`}>
+            {needsPayment ? <CreditCard className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-fg">Appointment Confirmed!</h2>
+            <h2 className="text-2xl font-bold text-fg">
+              {needsPayment ? "Almost booked — payment required" : "Appointment Confirmed!"}
+            </h2>
             <p className="text-sm text-fg mt-1">
-              You're scheduled for <span className="text-info font-semibold">{consultation.title}</span> with {consultation.freelancer_name}
+              {needsPayment
+                ? "Your slot is held. Complete payment to confirm the call."
+                : <>You&apos;re scheduled for <span className="text-info font-semibold">{consultation.title}</span> with {consultation.freelancer_name}</>}
             </p>
           </div>
 
           <div className="p-4 rounded-xl bg-bg border border-line text-xs text-fg text-left space-y-2">
             <div className="flex justify-between">
               <span className="text-faint">Date:</span>
-              <span className="font-mono text-fg font-semibold">
-                {new Date(confirmedAppt.appointment_time).toLocaleDateString()}
-              </span>
+              <span className="font-mono text-fg font-semibold">{fmtDay(confirmedAppt.appointment_time)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-faint">Time:</span>
-              <span className="font-mono text-info font-semibold">
-                {selectedTime}
-              </span>
+              <span className="font-mono text-info font-semibold">{fmtTime(confirmedAppt.appointment_time)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-faint">Duration:</span>
@@ -154,17 +225,28 @@ export default function PublicBookingPage() {
             {confirmedAppt.meeting_link && (
               <div className="flex justify-between items-center pt-2 border-t border-line">
                 <span className="text-faint">Video Call:</span>
-                <a
-                  href={confirmedAppt.meeting_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-info dark:text-info hover:underline flex items-center gap-1 font-semibold"
-                >
-                  <Video className="w-3.5 h-3.5" /> Join Google Meet
+                <a href={confirmedAppt.meeting_link} target="_blank" rel="noopener noreferrer"
+                  className="text-info hover:underline flex items-center gap-1 font-semibold">
+                  <Video className="w-3.5 h-3.5" /> Join Call
                 </a>
               </div>
             )}
           </div>
+
+          {needsPayment && (
+            <a href={`/pay/${confirmedAppt.invoice_token}`} className="block">
+              <Button className="w-full bg-accent hover:bg-accent-hi text-accent-fg font-semibold">
+                <CreditCard className="w-4 h-4 mr-2" />
+                Pay ${consultation.price.toFixed(2)} to confirm
+              </Button>
+            </a>
+          )}
+
+          {confirmedAppt.token && (
+            <a href={`/reschedule/${confirmedAppt.token}`} className="block text-xs text-muted hover:text-fg underline">
+              Need to move this? Reschedule online
+            </a>
+          )}
 
           <p className="text-xs text-faint">
             A confirmation invite has been dispatched to <span className="text-fg font-mono">{confirmedAppt.client_email}</span>.
@@ -181,7 +263,7 @@ export default function PublicBookingPage() {
         <Card className="bg-card border-line p-6 backdrop-blur-xl shadow-2xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <Badge className="bg-info/10 text-info dark:text-info border-info/20 font-mono text-xs mb-2">
+              <Badge className="bg-info/10 text-info border-info/20 font-mono text-xs mb-2">
                 1-on-1 Consultation
               </Badge>
               <h1 className="text-2xl sm:text-3xl font-bold text-fg">{consultation.title}</h1>
@@ -195,66 +277,78 @@ export default function PublicBookingPage() {
                 {consultation.price > 0 ? `$${consultation.price.toFixed(2)}` : "Free"}
               </div>
               <div className="text-xs text-muted flex items-center sm:justify-end gap-1 mt-0.5">
-                <Clock className="w-3.5 h-3.5 text-info dark:text-info" />
+                <Clock className="w-3.5 h-3.5 text-info" />
                 {consultation.duration_minutes} Mins
               </div>
             </div>
           </div>
         </Card>
 
+        {/* B5: pre-call intake link */}
+        {consultation.intake_token && (
+          <a href={`/intake/${consultation.intake_token}`}
+            className="flex items-center gap-2 text-xs text-info hover:underline px-1">
+            <FileText className="w-4 h-4" />
+            Please complete the short intake form before your call.
+          </a>
+        )}
+
+        {consultation.requires_payment && (
+          <p className="text-xs text-warn px-1">
+            This is a paid consultation — the slot is only confirmed once payment clears.
+          </p>
+        )}
+
         {/* Schedule Form */}
         <Card className="bg-card border-line shadow-2xl backdrop-blur-xl">
           <form onSubmit={handleSchedule}>
             <CardContent className="space-y-6 pt-6">
-              {/* Date & Time Slot Selection */}
+              {/* Date & Time Slot Selection (live) */}
               <div className="space-y-4 pb-4 border-b border-line">
-                <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
-                  <CalendarIcon className="w-4 h-4 text-info" /> 1. Select Date & Time
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-info" /> 1. Pick an open time
+                  </h3>
+                  <button type="button" onClick={() => loadSlots(true)}
+                    className="text-xs text-muted hover:text-fg inline-flex items-center gap-1" title="Refresh slots">
+                    <RefreshCw className={`w-3.5 h-3.5 ${slotsRefreshing ? "animate-spin" : ""}`} />
+                    Live
+                  </button>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-fg block mb-1">
-                      Pick Date
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      min={new Date().toISOString().split("T")[0]}
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-fg block mb-1">
-                      Available Time Slots
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {TIME_SLOTS.slice(0, 4).map((slot) => (
-                        <button
-                          key={slot}
-                          type="button"
-                          onClick={() => setSelectedTime(slot)}
-                          className={`px-3 py-2 rounded-xl text-xs font-mono font-medium transition-all border ${
-                            selectedTime === slot
-                              ? "bg-accent text-accent-fg border-accent shadow-sm"
-                              : "bg-bg text-fg border-line hover:border-line-strong"
-                          }`}
-                        >
-                          {slot}
+                {days.length === 0 ? (
+                  <p className="text-sm text-muted py-4">No open slots right now — please check back shortly.</p>
+                ) : (
+                  <>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {days.map((d) => (
+                        <button key={d} type="button" onClick={() => setSelectedDay(d)}
+                          className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                            selectedDay === d ? "bg-accent text-accent-fg border-accent" : "bg-bg text-fg border-line hover:border-line-strong"
+                          }`}>
+                          {fmtDay(d)}
                         </button>
                       ))}
                     </div>
-                  </div>
-                </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {daySlots.map((s) => (
+                        <button key={s} type="button" onClick={() => setSelectedSlot(s)}
+                          className={`px-3 py-2 rounded-xl text-xs font-mono font-medium transition-all border ${
+                            selectedSlot === s ? "bg-accent text-accent-fg border-accent shadow-sm" : "bg-bg text-fg border-line hover:border-line-strong"
+                          }`}>
+                          {fmtTime(s)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Client Contact Info */}
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
-                  <User className="w-4 h-4 text-info dark:text-info" /> 2. Your Information
+                  <User className="w-4 h-4 text-info" /> 2. Your Information
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -262,42 +356,25 @@ export default function PublicBookingPage() {
                     <label className="text-xs font-semibold text-fg block mb-1">
                       Your Name <span className="text-danger">*</span>
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Marcus Vance"
-                      value={clientName}
+                    <input type="text" required placeholder="e.g. Marcus Vance" value={clientName}
                       onChange={(e) => setClientName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                    />
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent" />
                   </div>
-
                   <div>
                     <label className="text-xs font-semibold text-fg block mb-1">
                       Your Email <span className="text-danger">*</span>
                     </label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="marcus@company.com"
-                      value={clientEmail}
+                    <input type="email" required placeholder="marcus@company.com" value={clientEmail}
                       onChange={(e) => setClientEmail(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                    />
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-fg block mb-1">
-                    Meeting Topic / Project Overview
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Briefly describe what you'd like to discuss or accomplish during the session..."
-                    value={notes}
+                  <label className="text-xs font-semibold text-fg block mb-1">Meeting Topic / Project Overview</label>
+                  <textarea rows={3} placeholder="Briefly describe what you'd like to discuss..." value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                  />
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent" />
                 </div>
               </div>
             </CardContent>
@@ -305,14 +382,11 @@ export default function PublicBookingPage() {
             <CardFooter className="pt-4 pb-6 border-t border-line flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs text-faint">
                 <ShieldCheck className="w-4 h-4 text-accent" />
-                Instant Calendar Booking
+                Times shown in {consultation.timezone}
               </div>
-              <Button
-                type="submit"
-                disabled={scheduling}
-                className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold px-6 shadow-sm"
-              >
-                {scheduling ? "Confirming Slot..." : "Confirm & Schedule Appointment"}
+              <Button type="submit" disabled={scheduling || !selectedSlot}
+                className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold px-6 shadow-sm">
+                {scheduling ? "Confirming Slot..." : consultation.requires_payment ? "Reserve & Pay" : "Confirm Booking"}
               </Button>
             </CardFooter>
           </form>

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
 import {
   Target,
   Plus,
@@ -13,11 +12,16 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ListChecks,
+  Zap,
+  Flame,
+  ArrowUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SubTabs } from "@/components/dashboard/SubTabs";
 import {
   getLeads,
   getPipelineInsights,
@@ -25,7 +29,7 @@ import {
   type LeadStage,
   type PipelineInsights,
 } from "@/lib/api";
-import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useApiData } from "@/hooks/use-api-data";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
 const CARDS_PER_PAGE = 20;
@@ -42,33 +46,39 @@ const STAGES: Array<{ key: LeadStage; label: string; step: number; tone: string 
 const money = (n: number, currency: string) =>
   `${currency === "USD" ? "$" : `${currency} `}${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
+// L4 proposal expiry chip. Pure by construction: both dates come from server
+// data (never a render-time clock read), so it respects the react-hooks/purity
+// rule while still telling the freelancer how long a quote stays valid.
+const expiryChip = (expiresAt?: string | null, nowIso?: string): string => {
+  if (!expiresAt) return "";
+  const end = new Date(expiresAt).getTime();
+  if (Number.isNaN(end)) return "";
+  const now = nowIso ? new Date(nowIso).getTime() : Number.NaN;
+  if (Number.isNaN(now)) return "Valid";
+  const days = Math.ceil((end - now) / 86_400_000);
+  if (days <= 0) return "Expired";
+  return `Valid ${days} more day${days === 1 ? "" : "s"}`;
+};
+
 export function LeadsPanel() {
   const router = useRouter();
-  const { getToken } = useAuth();
   const [catPages, setCatPages] = useState<Record<string, number>>({});
+  const [tab, setTab] = useState("nextup");
 
   const { data: leadsData, loading, refresh: loadLeads } = useApiData<Lead[]>(
     "leads:data",
     async (token) => getLeads(token),
-    { reportContext: "leads" }
+    { pollMs: 20000, reportContext: "leads" }
   );
 
   const { data: insights, refresh: loadInsights } = useApiData<PipelineInsights>(
     "leads:insights",
     async (token) => getPipelineInsights(token),
-    { reportContext: "leads-insights" }
+    { pollMs: 20000, reportContext: "leads-insights" }
   );
 
   const leads = leadsData ?? [];
   const currency = insights?.currency ?? "USD";
-
-  const reloadBoth = () => {
-    invalidateCache("leads:insights");
-    invalidateCache("clients:data");
-    invalidateCache("dashboard:data");
-    loadLeads();
-    loadInsights();
-  };
 
   const getLeadCategory = (l: Lead): string => {
     if (!l) return "Featured";
@@ -137,13 +147,10 @@ export function LeadsPanel() {
 
           <button
             onClick={() => handleOpenCreate()}
-            className="relative group overflow-hidden rounded-xl p-[1px] font-semibold text-xs transition-all duration-300 shadow-sm hover:shadow-accent/25 hover:shadow-md active:scale-[0.98]"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
           >
-            <span className="absolute inset-0 bg-gradient-to-r from-accent via-amber-400 to-accent rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
-            <span className="relative flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-accent group-hover:bg-accent-hi text-accent-fg transition-colors duration-200 font-bold">
-              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
-              <span>Add Lead</span>
-            </span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Lead</span>
           </button>
         </div>
       </div>
@@ -182,8 +189,117 @@ export function LeadsPanel() {
         </div>
       ) : null}
 
-      {/* Cards Display Grouped by Category with Sliding Pagination */}
-      {loading && leads.length === 0 ? (
+      {/* L5/L6 analytics strip — response speed and which source actually pays */}
+      {insights && (insights.source_revenue?.length || insights.response_speed) ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {insights.response_speed?.median_hours_to_first_reply != null && (
+            <Card className="bg-card border-line p-4 rounded-2xl">
+              <div className="flex items-center gap-2 text-muted text-xs font-semibold">
+                <Zap className="w-3.5 h-3.5 text-info" /> Median first reply
+              </div>
+              <p className="text-xl font-bold font-mono text-fg mt-1.5">{Math.round(insights.response_speed.median_hours_to_first_reply)}h</p>
+              <p className="text-[11px] text-muted mt-0.5">to first touch · {insights.response_speed.measured_leads} leads</p>
+            </Card>
+          )}
+          {insights.response_speed?.median_days_to_close != null && (
+            <Card className="bg-card border-line p-4 rounded-2xl">
+              <div className="flex items-center gap-2 text-muted text-xs font-semibold">
+                <Target className="w-3.5 h-3.5 text-accent" /> Median days to close
+              </div>
+              <p className="text-xl font-bold font-mono text-fg mt-1.5">{insights.response_speed.median_days_to_close}d</p>
+            </Card>
+          )}
+          {insights.lost_by_reason && Object.keys(insights.lost_by_reason).length > 0 && (
+            <Card className="bg-card border-line p-4 rounded-2xl">
+              <div className="flex items-center gap-2 text-muted text-xs font-semibold">
+                <Flame className="w-3.5 h-3.5 text-danger" /> Lost by reason
+              </div>
+              <p className="text-sm font-medium text-fg mt-1.5 capitalize">
+                {Object.entries(insights.lost_by_reason).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([r, c]) => `${r} (${c})`).join(", ")}
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">median lost: {money(insights.median_lost_deal_size || 0, currency)}</p>
+            </Card>
+          )}
+          {insights.source_revenue?.length > 0 && (
+            <Card className="bg-card border-line p-4 rounded-2xl">
+              <div className="flex items-center gap-2 text-muted text-xs font-semibold">
+                <DollarSign className="w-3.5 h-3.5 text-ok" /> Top source (by $)
+              </div>
+              <p className="text-sm font-medium text-fg mt-1.5">{insights.source_revenue[0].source}</p>
+              <p className="text-[11px] text-muted mt-0.5">{money(insights.source_revenue[0].won_value, currency)} won</p>
+            </Card>
+          )}
+        </div>
+      ) : null}
+
+      {/* L1 Next Up / full Pipeline sub-pages (one SubTabs row, no menus) */}
+      <SubTabs
+        tabs={[
+          { value: "nextup", label: "Next Up", count: insights?.next_up?.length ?? 0 },
+          { value: "pipeline", label: "Pipeline", count: leads.length },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+
+      {tab === "nextup" && (
+        insights ? (
+          (insights.next_up?.length ?? 0) === 0 ? (
+            <Card className="bg-card border-dashed border-line p-10 text-center rounded-2xl">
+              <div className="w-12 h-12 rounded-2xl bg-ok/10 flex items-center justify-center mx-auto mb-3">
+                <ListChecks className="w-6 h-6 text-ok" />
+              </div>
+              <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Inbox zero on the pipeline</h3>
+              <p className="text-sm text-muted mt-1">Nothing due, nothing going cold, nothing awaiting a reply.</p>
+            </Card>
+          ) : (
+            <Card className="bg-card border-line rounded-2xl overflow-hidden">
+              <ul className="divide-y divide-line/70">
+                {insights.next_up.map((item) => (
+                  <li key={`${item.type}:${item.id}`}>
+                    <button
+                      onClick={() => (item.type === "proposal_reply"
+                        ? router.push(`/dashboard/proposals`)
+                        : router.push(`/dashboard/leads/${item.id}`))}
+                      className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-surface/60 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+                          item.type === "follow_up" ? "bg-warn/10 text-warn" :
+                          item.type === "stale" ? "bg-danger/10 text-danger" : "bg-info/10 text-info"
+                        }`}>
+                          {item.type === "follow_up" ? <CalendarClock className="w-4 h-4" /> :
+                           item.type === "stale" ? <AlertTriangle className="w-4 h-4" /> : <ListChecks className="w-4 h-4" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-fg truncate">{item.name}</p>
+                          <p className="text-[11px] text-muted truncate">{item.company ? `${item.company} · ` : ""}{item.why}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.expires_at && item.type === "proposal_reply" && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border bg-accent-soft text-accent border-accent/20">
+                            {expiryChip(item.expires_at, insights?.timestamp)}
+                          </span>
+                        )}
+                        <span className="text-sm font-mono font-semibold text-orange-400">{money(item.value || 0, currency)}</span>
+                        <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-accent transition-colors" />
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )
+        ) : (
+          <Skeleton className="h-40 w-full rounded-2xl" />
+        )
+      )}
+
+      {tab === "pipeline" && (
+        <>
+          {/* Cards Display Grouped by Category with Sliding Pagination */}
+          {loading && leads.length === 0 ? (
         <div className="space-y-8">
           {[1, 2].map((group) => (
             <div key={group} className="space-y-3">
@@ -197,21 +313,23 @@ export function LeadsPanel() {
           ))}
         </div>
       ) : leads.length === 0 ? (
-        <Card className="bg-card border-dashed border-line p-12 text-center rounded-2xl">
-          <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
-            <ChaiCupIcon className="w-7 h-7" />
+        <Card className="bg-card border-dashed border-line p-10 text-center rounded-2xl">
+          <div className="w-12 h-12 rounded-xl bg-accent-soft flex items-center justify-center mx-auto mb-3.5">
+            <ChaiCupIcon className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-fg">No leads yet</h3>
-          <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+          <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No leads yet</h3>
+          <p className="text-xs sm:text-sm text-muted mt-1 max-w-sm mx-auto leading-relaxed">
             Track every prospective project by category and move them through deal stages.
           </p>
-          <Button
-            onClick={() => handleOpenCreate()}
-            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add First Lead
-          </Button>
+          <div className="mt-5 flex justify-center">
+            <button
+              onClick={() => handleOpenCreate()}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Lead</span>
+            </button>
+          </div>
         </Card>
       ) : (
         <div className="space-y-10">
@@ -244,14 +362,9 @@ export function LeadsPanel() {
                 {/* Category Header with Title, Count, Underline & Sliding Navigation */}
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                   <div className="inline-flex flex-col items-start space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">
-                        {cat}
-                      </h3>
-                      <span className="text-xs font-mono font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-md border border-accent/20">
-                        {catLeads.length}
-                      </span>
-                    </div>
+                    <h3 className="font-display text-base md:text-lg font-medium tracking-wide text-fg">
+                      {cat}
+                    </h3>
                     {/* Straight orange line under category title */}
                     <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
                   </div>
@@ -313,19 +426,19 @@ export function LeadsPanel() {
                             <span
                               className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${
                                 lead.stage === "won"
-                                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+                                  ? "bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/25"
                                   : lead.stage === "negotiation"
-                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/25"
+                                  ? "bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/20 dark:border-amber-500/25"
                                   : lead.stage === "proposal"
-                                  ? "bg-purple-500/15 text-purple-400 border-purple-500/25"
+                                  ? "bg-purple-500/10 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/20 dark:border-purple-500/25"
                                   : lead.stage === "contacted"
-                                  ? "bg-sky-500/15 text-sky-400 border-sky-500/25"
-                                  : "bg-slate-500/15 text-slate-400 border-slate-500/25"
+                                  ? "bg-sky-500/10 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25"
+                                  : "bg-slate-500/10 dark:bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/20 dark:border-slate-500/25"
                               }`}
                             >
                               {stageObj.label}
                             </span>
-                            <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                            <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
                               {money(lead.estimated_value || 0, currency)}
                             </span>
                           </div>
@@ -338,6 +451,8 @@ export function LeadsPanel() {
             );
           })}
         </div>
+          )}
+        </>
       )}
     </div>
   );

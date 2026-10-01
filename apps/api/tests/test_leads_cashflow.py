@@ -76,17 +76,18 @@ async def test_log_contact_stamps_touch_and_appends_note(client):
 
 
 async def test_won_lead_creates_client_once(client):
+    # SE8: a deal is won through the dedicated close endpoint, not a stage PATCH.
     lid = await _make_lead(client, name="Bright Co", email="hire@bright.test")
-    res = await client.patch(f"/api/v1/leads/{lid}", json={"stage": "won"})
+    res = await client.post(f"/api/v1/leads/{lid}/close", json={"outcome": "won"})
     assert res.status_code == 200, res.text
 
     clients = (await client.get("/api/v1/clients")).json()
     matches = [c for c in clients if c["email"] == "hire@bright.test"]
     assert len(matches) == 1
 
-    # Flipping back and forth must not duplicate the client row
+    # Re-closing must not duplicate the client row.
     await client.patch(f"/api/v1/leads/{lid}", json={"stage": "negotiation"})
-    await client.patch(f"/api/v1/leads/{lid}", json={"stage": "won"})
+    await client.post(f"/api/v1/leads/{lid}/close", json={"outcome": "won"})
     clients = (await client.get("/api/v1/clients")).json()
     assert len([c for c in clients if c["email"] == "hire@bright.test"]) == 1
 
@@ -121,7 +122,7 @@ async def test_leads_are_isolated_between_workspaces(client, client_b):
     res = await client_b.get(f"/api/v1/leads?stage={_lead_payload()['stage']}")
     assert res.status_code == 200
     assert all(l["id"] != lid for l in res.json())
-    assert (await client_b.patch(f"/api/v1/leads/{lid}", json={"stage": "won"})).status_code == 404
+    assert (await client_b.post(f"/api/v1/leads/{lid}/close", json={"outcome": "won"})).status_code == 404
     assert (await client_b.post(f"/api/v1/leads/{lid}/log-contact", json={})).status_code == 404
     assert (await client_b.delete(f"/api/v1/leads/{lid}")).status_code == 404
 

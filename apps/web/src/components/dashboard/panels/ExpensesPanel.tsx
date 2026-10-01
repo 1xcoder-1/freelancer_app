@@ -359,7 +359,7 @@ export function ExpensesPanel() {
           <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
             <ChaiCupIcon className="w-7 h-7" />
           </div>
-          <h3 className="text-lg font-bold text-fg">No expenses recorded yet</h3>
+          <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No expenses recorded yet</h3>
           <p className="text-sm text-muted mt-1 max-w-md mx-auto">
             Add tools, subscriptions, software, and hardware to organize your expenses into visual cards.
           </p>
@@ -380,7 +380,7 @@ export function ExpensesPanel() {
             return (
               <div key={cat} className="space-y-3">
                 {/* Category Header */}
-                <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">{cat}</h3>
+                <h3 className="font-display text-base md:text-lg font-medium tracking-wide text-fg">{cat}</h3>
 
                 {/* Cards Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
@@ -399,7 +399,7 @@ export function ExpensesPanel() {
                         onClick={() => setSelectedExpense(exp)}
                         tags={
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-mono font-bold text-white">
+                            <span className="text-xs font-mono font-bold text-zinc-900 dark:text-white">
                               {money(expAmount)}
                             </span>
                             {exp.is_recurring && (

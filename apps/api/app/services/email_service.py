@@ -104,6 +104,34 @@ def build_booking_reminder_email(
     return subject, text, html
 
 
+def build_booking_nudge_email(
+    *,
+    client_name: str,
+    consultation_title: str,
+    appointment_time: datetime,
+    meeting_link: str | None,
+) -> tuple[str, str, str]:
+    """One-hour-before nudge (B6): the short-notice 'get ready' ping."""
+    when_label = appointment_time.strftime("%H:%M UTC")
+    subject = f"Starting soon: {consultation_title} at {when_label}"
+    link_line = f"Join here: {meeting_link}\n\n" if meeting_link else ""
+    text = (
+        f"Hi {client_name},\n\n"
+        f"Your session \"{consultation_title}\" starts in about an hour "
+        f"({when_label}).\n\n"
+        f"{link_line}"
+        f"See you soon,\nFreelance Book"
+    )
+    html = (
+        f"<p>Hi {client_name},</p>"
+        f"<p>Your session <strong>{consultation_title}</strong> starts in about "
+        f"an hour ({when_label}).</p>"
+        + (f'<p><a href="{meeting_link}">Join here</a>.</p>' if meeting_link else "")
+        + "<p>See you soon,<br>Freelance Book</p>"
+    )
+    return subject, text, html
+
+
 def build_contract_reminder_email(
     *,
     client_name: str,

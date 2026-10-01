@@ -21,7 +21,11 @@ import {
   ChevronDown,
   Target,
   ClipboardList,
+  Receipt,
+  FileSignature,
+  RotateCcw,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 interface SubNavItem {
   title: string;
@@ -48,8 +52,17 @@ const navItems: NavItem[] = [
       { title: "Intake Forms", href: "/dashboard/intake", icon: ClipboardList },
     ],
   },
+  {
+    title: "Projects",
+    href: "/dashboard/projects",
+    icon: LayoutGrid,
+    children: [
+      { title: "Projects Roster", href: "/dashboard/projects", icon: LayoutGrid },
+      { title: "Invoices & Billing", href: "/dashboard/invoices", icon: Receipt },
+      { title: "Contracts", href: "/dashboard/contracts", icon: FileSignature },
+    ],
+  },
   { title: "Time", href: "/dashboard/time-tracker", icon: Clock },
-  { title: "Projects", href: "/dashboard/projects", icon: LayoutGrid },
   { title: "Money", href: "/dashboard/cashflow", icon: Wallet },
   { title: "Proposals", href: "/dashboard/proposals", icon: Sparkles },
   { title: "Booking", href: "/dashboard/booking", icon: Calendar },
@@ -60,6 +73,7 @@ const navItems: NavItem[] = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -67,6 +81,25 @@ export function DashboardSidebar() {
   // Submenu state for flyout & accordion
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
+
+  const currentSearchStr = searchParams?.toString() ? `?${searchParams.toString()}` : "";
+  const fullCurrentPath = `${pathname}${currentSearchStr}`;
+
+  const isLinkActive = (href: string) => {
+    if (href.includes("?")) {
+      return fullCurrentPath === href;
+    }
+    if (href === "/dashboard/intake") {
+      return pathname.startsWith("/dashboard/forms") || pathname.startsWith("/dashboard/intake");
+    }
+    if (href === "/dashboard/projects") {
+      return pathname === "/dashboard/projects" && !searchParams?.get("tab");
+    }
+    if (href === "/dashboard") {
+      return pathname === "/dashboard";
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   // Auto-detect mobile screen sizes
   useEffect(() => {
@@ -82,7 +115,7 @@ export function DashboardSidebar() {
   // Close flyout upon navigation
   useEffect(() => {
     setOpenSubmenu(null);
-  }, [pathname]);
+  }, [pathname, searchParams]);
 
   // Close flyout on outside click
   useEffect(() => {
@@ -95,7 +128,14 @@ export function DashboardSidebar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const userName = user?.firstName || user?.fullName || "Freelancer";
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const userName = mounted ? (user?.firstName || user?.fullName || "Freelancer") : "Freelancer";
+  const userImageUrl = mounted ? user?.imageUrl : undefined;
 
   return (
     <>
@@ -116,15 +156,13 @@ export function DashboardSidebar() {
         initial={false}
         animate={{ width: isCollapsed ? 72 : 248 }}
         transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-        className={`relative flex flex-col h-screen border-r border-dashed border-line bg-card select-none z-50 transition-colors ${
-          isMobile ? "fixed inset-y-0 left-0 shadow-2xl shadow-black/60" : "shrink-0"
-        }`}
+        className={`relative flex flex-col h-screen border-r border-dashed border-line bg-card select-none z-50 transition-colors ${isMobile ? "fixed inset-y-0 left-0 shadow-2xl shadow-black/60" : "shrink-0"
+          }`}
       >
         {/* Brand Header */}
         <div
-          className={`flex items-center h-16 border-b border-dashed border-line ${
-            isCollapsed ? "justify-center px-0" : "px-5 justify-between"
-          }`}
+          className={`flex items-center h-16 border-b border-dashed border-line ${isCollapsed ? "justify-center px-0" : "px-5 justify-between"
+            }`}
         >
           <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden group">
             <span className="w-8 h-8 rounded-xl bg-accent-soft border border-accent/40 text-fg font-bold group-hover:border-accent transition-all flex items-center justify-center text-xs font-mono shrink-0 shadow-xs">
@@ -150,24 +188,17 @@ export function DashboardSidebar() {
           {navItems.map((item) => {
             const hasChildren = item.children && item.children.length > 0;
             const isChildActive = hasChildren
-              ? item.children?.some(
-                  (c) =>
-                    pathname === c.href ||
-                    (c.href === "/dashboard/intake" &&
-                      (pathname.startsWith("/dashboard/forms") || pathname.startsWith("/dashboard/intake"))) ||
-                    (c.href !== "/dashboard" && pathname.startsWith(c.href))
-                )
+              ? item.children?.some((c) => isLinkActive(c.href))
               : false;
 
             const isActive =
               isChildActive ||
-              pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              isLinkActive(item.href);
 
             const Icon = item.icon;
             const isSubmenuOpen = openSubmenu === item.title;
 
-            // Item with Submenu (e.g. Clients -> Clients Roster, Leads Pipeline, Intake Forms)
+            // Item with Submenu (e.g. Clients -> Clients Roster, Leads Pipeline, Intake Forms, Projects -> Active, Invoices, Contracts, etc.)
             if (hasChildren) {
               return (
                 <div key={item.title} className="relative">
@@ -178,11 +209,10 @@ export function DashboardSidebar() {
                         type="button"
                         onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.title)}
                         onMouseEnter={() => setOpenSubmenu(item.title)}
-                        className={`relative flex items-center rounded-full text-sm transition-all duration-200 w-11 h-11 mx-auto justify-center ${
-                          isActive
+                        className={`relative flex items-center rounded-full text-sm transition-all duration-200 w-11 h-11 mx-auto justify-center ${isActive
                             ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                             : "text-muted font-medium hover:bg-surface hover:text-fg"
-                        }`}
+                          }`}
                         title={item.title}
                       >
                         <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
@@ -213,23 +243,17 @@ export function DashboardSidebar() {
                             <div className="space-y-1">
                               {item.children?.map((child) => {
                                 const ChildIcon = child.icon;
-                                const isCurrent =
-                                  pathname === child.href ||
-                                  (child.href === "/dashboard/intake" &&
-                                    (pathname.startsWith("/dashboard/forms") ||
-                                      pathname.startsWith("/dashboard/intake"))) ||
-                                  (child.href !== "/dashboard" && pathname.startsWith(child.href));
+                                const isCurrent = isLinkActive(child.href);
 
                                 return (
                                   <Link
                                     key={child.title}
                                     href={child.href}
                                     onClick={() => setOpenSubmenu(null)}
-                                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${
-                                      isCurrent
+                                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${isCurrent
                                         ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                                         : "text-fg hover:bg-surface hover:text-accent"
-                                    }`}
+                                      }`}
                                   >
                                     <div className="flex items-center gap-2.5">
                                       <ChildIcon className={`w-4 h-4 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
@@ -252,20 +276,18 @@ export function DashboardSidebar() {
                       <button
                         type="button"
                         onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.title)}
-                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-full text-sm transition-all duration-200 ${
-                          isActive
+                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-full text-sm transition-all duration-200 ${isActive
                             ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                             : "text-muted font-medium hover:bg-surface hover:text-fg"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-3">
                           <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
                           <span className="truncate text-fg font-semibold">{item.title}</span>
                         </div>
                         <ChevronDown
-                          className={`w-4 h-4 transition-transform duration-200 ${
-                            isSubmenuOpen ? "rotate-180" : ""
-                          }`}
+                          className={`w-4 h-4 transition-transform duration-200 ${isSubmenuOpen ? "rotate-180" : ""
+                            }`}
                         />
                       </button>
 
@@ -280,22 +302,16 @@ export function DashboardSidebar() {
                           >
                             {item.children?.map((child) => {
                               const ChildIcon = child.icon;
-                              const isCurrent =
-                                pathname === child.href ||
-                                (child.href === "/dashboard/intake" &&
-                                  (pathname.startsWith("/dashboard/forms") ||
-                                    pathname.startsWith("/dashboard/intake"))) ||
-                                (child.href !== "/dashboard" && pathname.startsWith(child.href));
+                              const isCurrent = isLinkActive(child.href);
 
                               return (
                                 <Link
                                   key={child.title}
                                   href={child.href}
-                                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-150 ${
-                                    isCurrent
+                                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-150 ${isCurrent
                                       ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                                       : "text-muted hover:bg-surface hover:text-fg font-medium"
-                                  }`}
+                                    }`}
                                 >
                                   <div className="flex items-center gap-2.5">
                                     <ChildIcon className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
@@ -318,11 +334,10 @@ export function DashboardSidebar() {
             return (
               <Link key={item.title} href={item.href} className="block">
                 <div
-                  className={`flex items-center gap-3 rounded-full text-sm transition-all duration-200 ${
-                    isActive
+                  className={`flex items-center gap-3 rounded-full text-sm transition-all duration-200 ${isActive
                       ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                       : "text-muted font-medium hover:bg-surface hover:text-fg"
-                  } ${isCollapsed ? "w-11 h-11 mx-auto justify-center px-0" : "px-4 py-2.5"}`}
+                    } ${isCollapsed ? "w-11 h-11 mx-auto justify-center px-0" : "px-4 py-2.5"}`}
                   title={item.title}
                 >
                   <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
@@ -346,15 +361,16 @@ export function DashboardSidebar() {
                 href="/dashboard/settings"
                 className="flex-1 flex items-center gap-2.5 p-1.5 pr-3 rounded-full border border-dashed border-line-strong hover:border-accent/50 transition-colors group overflow-hidden"
                 title="View Profile Settings"
+                suppressHydrationWarning
               >
-                <span className="w-7 h-7 rounded-full overflow-hidden border border-line bg-surface shrink-0 flex items-center justify-center text-xs">
-                  {user?.imageUrl ? (
-                    <img src={user.imageUrl} alt={userName} className="w-full h-full object-cover" />
+                <span className="w-7 h-7 rounded-full overflow-hidden border border-line bg-surface shrink-0 flex items-center justify-center text-xs" suppressHydrationWarning>
+                  {userImageUrl ? (
+                    <img src={userImageUrl} alt={userName} className="w-full h-full object-cover" />
                   ) : (
                     <span className="font-bold text-fg">{userName.charAt(0).toUpperCase()}</span>
                   )}
                 </span>
-                <span className="text-xs font-semibold text-fg truncate">{userName}</span>
+                <span className="text-xs font-semibold text-fg truncate" suppressHydrationWarning>{userName}</span>
               </Link>
 
               <button
@@ -371,11 +387,12 @@ export function DashboardSidebar() {
                 href="/dashboard/settings"
                 className="w-8 h-8 rounded-full border border-dashed border-line-strong flex items-center justify-center hover:border-accent/50 transition-colors overflow-hidden"
                 title={userName}
+                suppressHydrationWarning
               >
-                {user?.imageUrl ? (
-                  <img src={user.imageUrl} alt={userName} className="w-full h-full object-cover" />
+                {userImageUrl ? (
+                  <img src={userImageUrl} alt={userName} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-xs font-bold text-fg">{userName.charAt(0).toUpperCase()}</span>
+                  <span className="text-xs font-bold text-fg" suppressHydrationWarning>{userName.charAt(0).toUpperCase()}</span>
                 )}
               </Link>
 

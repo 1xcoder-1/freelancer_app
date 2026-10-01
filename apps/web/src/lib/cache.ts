@@ -19,7 +19,9 @@ const STALE_TTL_MS = 10 * 60 * 1000;  // 10 minutes stale-while-revalidate windo
 
 const cacheStore = new Map<string, CacheEntry<unknown>>();
 const inFlightRequests = new Map<string, Promise<unknown>>();
-const listeners = new Map<string, Set<(data: any) => void>>();
+// Listeners receive the new data; on invalidation they are called with
+// (undefined, true) so subscribers can tell a fresh value from a clear.
+const listeners = new Map<string, Set<(data: any, isInvalidation?: boolean) => void>>();
 
 export function getCachedData<T>(key: string): { data: T; isStale: boolean } | null {
   const entry = cacheStore.get(key);

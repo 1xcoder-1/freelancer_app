@@ -150,7 +150,7 @@ export default function ProposalsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[26px] font-bold tracking-tight text-fg">Proposals</h1>
+            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Proposals</h1>
           </div>
           <p className="text-muted text-sm mt-1">
             Write winning proposals for new clients, save them, and mark deals as won.

@@ -14,18 +14,26 @@ import {
   CalendarDays,
   ChevronRight,
   TrendingUp,
+  TrendingDown,
   Users,
+  AlertTriangle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatCard } from "@/components/dashboard/patterns";
+import { StatCard, StatChip } from "@/components/dashboard/patterns";
 import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 import {
   getDashboardStats,
   getDashboardOverview,
   getActiveTimer,
   getCalendarEvents,
+  getExpenses,
+  getLeads,
+  getIntakeForms,
+  getContracts,
+  getBookings,
+  getBookingAppointments,
   type TimerSession,
   type CalendarFeedItem,
 } from "@/lib/api";
@@ -46,20 +54,65 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<TabKey>("today");
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const { data: dashboardData, loading, refresh: loadData } = useApiData(
+  const { data: dashboardData, loading, error, refresh: loadData } = useApiData(
     "dashboard:data",
     async (token) => {
-      const [statsRes, overviewRes] = await Promise.all([
-        getDashboardStats(token).catch(() => null),
-        getDashboardOverview(token).catch(() => null),
+      // Primary data + supporting metrics for headline cards & capsule chips
+      const [
+        statsRes,
+        overviewRes,
+        expensesRes,
+        leadsRes,
+        intakeRes,
+        contractsRes,
+        bookingsRes,
+        appointmentsRes,
+      ] = await Promise.all([
+        getDashboardStats(token),
+        getDashboardOverview(token),
+        getExpenses(token).catch(() => []),
+        getLeads(token).catch(() => []),
+        getIntakeForms(token).catch(() => []),
+        getContracts(undefined, token).catch(() => []),
+        getBookings(token).catch(() => []),
+        getBookingAppointments(undefined, token).catch(() => []),
       ]);
-      return { stats: statsRes, overview: overviewRes };
+      return {
+        stats: statsRes,
+        overview: overviewRes,
+        expenses: expensesRes,
+        leads: leadsRes,
+        intakeForms: intakeRes,
+        contracts: contractsRes,
+        bookings: bookingsRes,
+        appointments: appointmentsRes,
+      };
     },
     { reportContext: "dashboard" }
   );
 
   const stats = dashboardData?.stats ?? null;
   const overview = dashboardData?.overview ?? null;
+  const expenses = dashboardData?.expenses ?? [];
+  const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const recurringExpenses = expenses.filter((e) => e.is_recurring).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const expensesCount = expenses.length;
+
+  const leads = dashboardData?.leads ?? [];
+  const pendingLeadsCount = leads.filter((l) => l.stage !== "won" && l.stage !== "lost").length;
+
+  const intakeForms = dashboardData?.intakeForms ?? [];
+  const pendingIntakeCount = intakeForms.length;
+
+  const contracts = dashboardData?.contracts ?? [];
+  const waitingContractsCount = contracts.filter(
+    (c) => c.status === "sent" || c.status === "viewed" || c.status === "draft" || c.status === "signed"
+  ).length;
+
+  const appointments = dashboardData?.appointments ?? [];
+  const pendingBookingsCount = appointments.length > 0
+    ? appointments.filter((a) => a.status !== "completed" && a.status !== "cancelled").length
+    : (dashboardData?.bookings?.length ?? 0);
 
   // Today's schedule — same feed the calendar uses, window = today only.
   const { data: todayEvents, loading: todayLoading } = useApiData<CalendarFeedItem[]>(
@@ -84,7 +137,7 @@ export default function DashboardPage() {
   });
 
   const usd = (n: number | undefined) =>
-    `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    `$${Math.round(n ?? 0).toLocaleString("en-US")}`;
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "today", label: "Today" },
@@ -98,11 +151,11 @@ export default function DashboardPage() {
       {/* Greeting + one-line summary */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-[26px] sm:text-3xl font-bold tracking-tight text-fg">
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg" suppressHydrationWarning>
             {greeting}
             {firstName ? `, ${firstName}` : ""}
           </h1>
-          <p className="text-muted text-sm mt-1">{todayLabel}</p>
+          <p className="text-muted text-sm mt-1" suppressHydrationWarning>{todayLabel}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -126,14 +179,37 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* The four headline numbers — clean, original design styling */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading ? (
+      {/* Data unreachable: show a retry strip instead of silent zeros. */}
+      {!loading && error && !dashboardData && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-warn min-w-0">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span className="truncate">
+              {(error as { status?: number }).status === 401
+                ? "Session expired — click Retry to sign in again."
+                : `Couldn't reach the server — ${error.message}`}
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadData(true)}
+            className="rounded-lg bg-surface border-line text-fg shrink-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1" />
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* The 4 Headline Cards — Reference Design with App Domain Content */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        {loading || (!dashboardData && error) ? (
           <>
-            <Skeleton className="h-32 w-full rounded-xl" />
-            <Skeleton className="h-32 w-full rounded-xl" />
-            <Skeleton className="h-32 w-full rounded-xl" />
-            <Skeleton className="h-32 w-full rounded-xl" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
           </>
         ) : (
           <>
@@ -141,74 +217,70 @@ export default function DashboardPage() {
               label="Earned"
               value={usd(stats?.monthly_revenue)}
               icon={DollarSign}
-              subtext="This month"
-              badge={
-                stats?.revenue_growth_pct != null ? (
-                  <span className="text-[11px] font-mono font-medium text-ok">
-                    {stats.revenue_growth_pct >= 0 ? "+" : ""}
-                    {stats.revenue_growth_pct.toFixed(1)}%
-                  </span>
-                ) : null
-              }
+              rows={[
+                {
+                  text: stats?.revenue_growth_pct != null
+                    ? `${stats.revenue_growth_pct >= 0 ? "+" : ""}${Math.round(stats.revenue_growth_pct)}% vs last month`
+                    : "Cleared this month",
+                  dot: "ok",
+                },
+                { text: `${usd(stats?.pending_invoices_amount)} Pending`, dot: "danger" },
+              ]}
             />
             <StatCard
-              label="Owed"
-              value={usd(stats?.pending_invoices_amount)}
-              icon={Receipt}
-              subtext="Unsettled"
-              badge={
-                <span className="text-[11px] font-mono font-medium text-warn">
-                  {stats?.pending_invoices_count || 0} waiting
-                </span>
-              }
+              label="Expenses"
+              value={usd(totalExpenses)}
+              icon={TrendingDown}
+              rows={[
+                { text: `${expensesCount} Recorded`, dot: "ok" },
+                { text: `${usd(recurringExpenses)} Recurring`, dot: "danger" },
+              ]}
             />
             <StatCard
               label="Projects"
-              value={stats?.active_projects_count || 0}
+              value={stats?.active_projects_count ?? 0}
               icon={LayoutGrid}
-              subtext="In progress"
-              badge={<span className="text-[11px] font-mono font-medium text-info">Active</span>}
+              rows={[
+                { text: `${stats?.active_projects_count ?? 0} Total`, dot: "ok" },
+                { text: `${stats?.active_projects_count ?? 0} In Progress`, dot: "danger" },
+              ]}
             />
             <StatCard
-              label="Clients"
-              value={stats?.active_clients_count || 0}
+              label="Active Clients"
+              value={stats?.active_clients_count ?? 0}
               icon={Users}
-              subtext="In flight"
-              badge={<span className="text-[11px] font-mono font-medium text-ok">Active</span>}
+              rows={[
+                { text: `${stats?.active_clients_count ?? 0} Retainers`, check: true },
+                { text: `${stats?.active_clients_count ?? 0} Ongoing`, dot: "danger" },
+              ]}
             />
           </>
         )}
       </div>
 
-      {/* Small context cards — actionable freelancer metrics with generous spacing */}
-      {!loading && stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-          <SmallStatCard
-            tone="warn"
-            label="Invoices waiting"
-            value={String(stats.pending_invoices_count || 0)}
-            sub="awaiting settlement"
-          />
-          <SmallStatCard
-            tone="info"
-            label="Today's schedule"
-            value={String(todayEvents?.length || 0)}
-            sub="sessions & deadlines"
-          />
-          <SmallStatCard
-            tone="accent"
-            label="Pending pipeline"
-            value={usd(stats.pending_invoices_amount)}
-            sub="uncollected invoices"
-          />
-          <SmallStatCard
-            tone="ok"
-            label="Monthly collected"
-            value={usd(stats.monthly_revenue)}
-            sub="cleared earnings"
-          />
-        </div>
-      )}
+      {/* The Capsule Rating & Context Badges — Reference Design with App Domain Content */}
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 pt-1">
+        <StatChip tone="green">
+          <span className="font-semibold">{String(stats?.pending_invoices_count || 0)}</span>
+          <span>Invoices waiting</span>
+        </StatChip>
+        <StatChip tone="blue">
+          <span className="font-semibold">{String(pendingLeadsCount)}</span>
+          <span>Pending leads</span>
+        </StatChip>
+        <StatChip tone="purple">
+          <span className="font-semibold">{String(pendingIntakeCount)}</span>
+          <span>Pending intake forms</span>
+        </StatChip>
+        <StatChip tone="red">
+          <span className="font-semibold">{String(waitingContractsCount)}</span>
+          <span>Contracts waiting</span>
+        </StatChip>
+        <StatChip tone="violet">
+          <span className="font-semibold">{String(pendingBookingsCount)}</span>
+          <span>Pending bookings</span>
+        </StatChip>
+      </div>
 
       {/* One small tabbed area — pick a label, see a short list */}
       <div className="bg-card border border-line rounded-xl p-5">
@@ -422,7 +494,7 @@ function SimpleEmpty({
   return (
     <div className="py-8 text-center">
       <Icon className="w-8 h-8 text-faint mx-auto mb-3" />
-      <h3 className="text-base font-semibold text-fg">{title}</h3>
+      <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">{title}</h3>
       <p className="text-xs text-muted mt-1 max-w-sm mx-auto leading-relaxed">{desc}</p>
       {action}
     </div>
@@ -457,7 +529,7 @@ function SmallStatCard({
         {label}
       </p>
       <div className="my-1">
-        <p className="font-sans text-[22px] sm:text-[24px] font-bold tracking-tight text-fg leading-none truncate">
+        <p className="font-display text-[22px] sm:text-[24px] font-medium tracking-wide text-fg leading-none truncate">
           {value}
         </p>
       </div>

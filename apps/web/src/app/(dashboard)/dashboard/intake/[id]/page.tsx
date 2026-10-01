@@ -188,7 +188,7 @@ export default function IntakeDetailPage() {
           <div className="space-y-1.5">
             {/* Colorful soft pill tags matching reference image */}
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1 capitalize">
+              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1 capitalize">
                 {form.title}
               </h1>
 

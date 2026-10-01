@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import init_db, engine
 from app.core.rate_limit import enforce_rate_limit
+from app.core.startup import validate_settings
 from app.api.v1.router import api_router
 from app.core.auth import warm_jwks
 import sentry_sdk
@@ -14,26 +15,20 @@ from app.core.sentry import setup_sentry
 # Sentry Error & Performance Observability (config: app/core/sentry.py)
 setup_sentry()
 
+# Run the startup guards BEFORE the FastAPI app is built, so the SE11 DEBUG
+# decision actually governs docs_url/openapi_url below (they are read at
+# construction time). validate_settings() is idempotent and runs again in the
+# lifespan, so a new entry point that forgets it is still protected.
+validate_settings()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # SECURITY GUARD: never allow the dev auth bypass outside development
-    if settings.ALLOW_DEV_AUTH and settings.APP_ENV.strip().lower() not in ("development", "dev", "local"):
-        raise RuntimeError(
-            "ALLOW_DEV_AUTH=true is forbidden outside development. "
-            "Remove it from the environment before deploying."
-        )
+    # Centralised guards (dev-auth bypass, Inngest signing, DEBUG) — see
+    # app/core/startup.py. Raises for the two hard errors, self-corrects DEBUG.
+    validate_settings()
 
     is_dev_env = settings.APP_ENV.strip().lower() in ("development", "dev", "local")
     is_local_sqlite = settings.DATABASE_URL.startswith("sqlite")
-
-    # SECURITY GUARD: the Inngest serve endpoint (/api/inngest) is public —
-    # in production its requests MUST be signature-verified via the signing
-    # key (mirrors the ALLOW_DEV_AUTH guard above).
-    if settings.INNGEST_ENABLED and not is_dev_env and not settings.INNGEST_SIGNING_KEY:
-        raise RuntimeError(
-            "INNGEST_ENABLED=true requires INNGEST_SIGNING_KEY outside "
-            "development. Set it in the environment or disable background jobs."
-        )
 
     # Auto-create tables only for local development databases. Shared/prod
     # databases (e.g. Neon) must never be mutated implicitly at startup —
@@ -143,15 +138,10 @@ app.include_router(api_router, prefix="/api/v1")
 # deployment never touches the SDK; the security-header middleware above
 # still covers these routes.
 if settings.INNGEST_ENABLED:
-    # Fail fast with a clear message before the SDK raises its own opaque
-    # SigningKeyMissingError from serve() (mirrors the lifespan guard, which
-    # runs too late since serve executes at import time).
-    if settings.APP_ENV.strip().lower() not in ("development", "dev", "local") and not settings.INNGEST_SIGNING_KEY:
-        raise RuntimeError(
-            "INNGEST_ENABLED=true requires INNGEST_SIGNING_KEY outside "
-            "development. Set it in the environment or disable background jobs."
-        )
-
+    # The signing-key requirement is enforced centrally by validate_settings()
+    # (called above at import time and again in the lifespan), so this block
+    # only needs to register the serve routes; imports stay inside the gate so a
+    # disabled deployment never touches the SDK.
     import inngest.fast_api
 
     from app.core.inngest_client import inngest_client

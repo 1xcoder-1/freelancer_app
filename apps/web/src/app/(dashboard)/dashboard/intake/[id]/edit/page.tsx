@@ -245,7 +245,7 @@ export default function EditIntakeFormPage() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Questionnaire</span>
           </Link>
-          <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-fg">
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
             Edit Questionnaire
           </h1>
           <p className="text-xs text-muted">

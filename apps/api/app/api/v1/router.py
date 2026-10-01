@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     projects, 
     invoices, 
     leads,
+    interactions,
     cashflow,
     time_entries, 
     timer,
@@ -31,6 +32,7 @@ api_router.include_router(storage.router)
 api_router.include_router(workspace_settings.router)
 api_router.include_router(clients.router)
 api_router.include_router(leads.router)
+api_router.include_router(interactions.router)
 api_router.include_router(cashflow.router)
 api_router.include_router(projects.router)
 api_router.include_router(contracts.router)

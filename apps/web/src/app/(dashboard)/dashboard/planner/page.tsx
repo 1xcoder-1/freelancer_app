@@ -12,6 +12,9 @@ import {
   CheckSquare,
   RefreshCw,
   ArrowRight,
+  Share2,
+  AlertCircle,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,6 +53,7 @@ export default function PlannerPage() {
   const [boards, setBoards] = useState<PlannerBoardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,11 +86,10 @@ export default function PlannerPage() {
     }
   };
 
-  const rename = async (board: PlannerBoardSummary) => {
-    const name = window.prompt("Rename board", board.name);
-    if (name === null) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  const commitRename = async (board: PlannerBoardSummary, value: string) => {
+    setEditingId(null);
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === board.name) return;
     try {
       const token = (await getToken()) || undefined;
       const updated = await renamePlannerBoard(board.id, trimmed, token);
@@ -121,7 +124,7 @@ export default function PlannerPage() {
             <PenLine className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="font-display font-bold text-2xl text-fg leading-tight">Planner</h1>
+            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg leading-tight">Planner</h1>
             <p className="text-sm text-muted">
               Todo list + freeform sketch board, merged into one planning surface.
             </p>
@@ -164,7 +167,7 @@ export default function PlannerPage() {
           <div className="mx-auto w-14 h-14 rounded-2xl bg-accent-soft text-accent flex items-center justify-center mb-4">
             <PenLine className="w-7 h-7" />
           </div>
-          <h2 className="font-display font-bold text-lg text-fg">No boards yet</h2>
+          <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No boards yet</h2>
           <p className="text-sm text-muted mt-1 mb-5 max-w-sm mx-auto">
             A board is a blank canvas for a project or idea. Sketch it out and tick
             off the todos as you go — everything syncs live across your tabs.
@@ -198,7 +201,7 @@ export default function PlannerPage() {
                   </span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      onClick={(e) => { e.stopPropagation(); void rename(board); }}
+                      onClick={(e) => { e.stopPropagation(); setEditingId(board.id); }}
                       title="Rename"
                       className="p-1.5 rounded-md text-muted hover:text-fg hover:bg-surface"
                     >
@@ -214,9 +217,24 @@ export default function PlannerPage() {
                   </div>
                 </div>
 
-                <h3 className="mt-3 font-semibold text-fg truncate" title={board.name}>
-                  {board.name}
-                </h3>
+                {editingId === board.id ? (
+                  <input
+                    autoFocus
+                    defaultValue={board.name}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={(e) => void commitRename(board, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void commitRename(board, (e.target as HTMLInputElement).value);
+                      if (e.key === "Escape") setEditingId(null);
+                    }}
+                    maxLength={255}
+                    className="mt-3 input-line text-sm font-semibold"
+                  />
+                ) : (
+                  <h3 className="mt-3 font-semibold text-fg truncate" title={board.name}>
+                    {board.name}
+                  </h3>
+                )}
 
                 <div className="mt-1 flex items-center gap-3 text-xs text-muted">
                   <span className="inline-flex items-center gap-1">
@@ -227,11 +245,39 @@ export default function PlannerPage() {
                   <span>{relativeTime(board.updated_at)}</span>
                 </div>
 
+                {/* PL6 live Today column — where today's work actually lives */}
+                {(board.overdue_count > 0 || board.due_today_count > 0 || board.planned_today_count > 0) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {board.overdue_count > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-danger/10 text-danger">
+                        <AlertCircle className="w-3 h-3" />{board.overdue_count} overdue
+                      </span>
+                    )}
+                    {board.due_today_count > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warn/10 text-warn">
+                        <CalendarClock className="w-3 h-3" />{board.due_today_count} due today
+                      </span>
+                    )}
+                    {board.planned_today_count > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-info/10 text-info">
+                        {board.planned_today_count} timeboxed
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
                   <span className="font-mono text-[11px] text-faint">rev {board.revision}</span>
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                    Open <ArrowRight className="w-3.5 h-3.5" />
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {board.has_share && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent" title="Shared read-only">
+                        <Share2 className="w-3.5 h-3.5" />Shared
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent opacity-0 group-hover:opacity-100 transition-opacity">
+                      Open <ArrowRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
                 </div>
               </div>
             );

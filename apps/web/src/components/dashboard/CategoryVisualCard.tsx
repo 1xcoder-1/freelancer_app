@@ -45,6 +45,7 @@ interface CategoryVisualCardProps {
   title: string | any;
   currentCount?: number | string | any;
   totalCount?: number | string | any;
+  topRightContent?: React.ReactNode;
   subtitle?: string | any;
   category?: string | any;
   onClick?: () => void;
@@ -55,8 +56,9 @@ interface CategoryVisualCardProps {
 
 export function CategoryVisualCard({
   title,
-  currentCount = 0,
-  totalCount = 10,
+  currentCount,
+  totalCount,
+  topRightContent,
   subtitle = "Direct Client",
   onClick,
   tags,
@@ -86,28 +88,30 @@ export function CategoryVisualCard({
 
   const displaySubtitle = cleanSubtitle ? `By ${cleanSubtitle}` : "By Direct Client";
 
-  let safeCurrent = "0";
+  let safeCurrent: string | null = null;
   if (typeof currentCount === "number") {
     safeCurrent = String(currentCount);
   } else if (typeof currentCount === "string" && currentCount.trim() && currentCount !== "[object Object]") {
     safeCurrent = currentCount.trim();
   }
 
-  let safeTotal = "10";
+  let safeTotal: string | null = null;
   if (typeof totalCount === "number") {
     safeTotal = String(totalCount);
   } else if (typeof totalCount === "string" && totalCount.trim() && totalCount !== "[object Object]") {
     safeTotal = totalCount.trim();
   }
 
+  const hasCounter = safeCurrent !== null && safeTotal !== null;
+
   return (
     <div
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-[20px] border border-white/5 dark:border-white/10 bg-[#141416] hover:bg-[#18181c] p-5 sm:p-6 shadow-md hover:shadow-xl hover:shadow-black/50 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none transition-all duration-200 ease-out hover:-translate-y-1 ${className}`}
+      className={`group relative overflow-hidden rounded-[20px] border border-zinc-200/90 dark:border-white/10 bg-[#faf9f6] dark:bg-[#141416] hover:bg-white dark:hover:bg-[#18181c] p-5 sm:p-6 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:shadow-md hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/50 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none transition-all duration-200 ease-out hover:-translate-y-1 ${className}`}
     >
       {/* Background Subtle Grid & Pixel Block Texture */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.06] dark:opacity-[0.09] transition-opacity duration-300 group-hover:opacity-[0.12]"
+        className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.09] transition-opacity duration-300 group-hover:opacity-[0.07] dark:group-hover:opacity-[0.12]"
         style={{
           backgroundImage: `
             linear-gradient(to right, #ea580c 1px, transparent 1px),
@@ -120,29 +124,35 @@ export function CategoryVisualCard({
       />
 
       {/* Subtle Warm Amber/Orange Ambient Glow at bottom right corner */}
-      <div className="pointer-events-none absolute -bottom-10 -right-10 w-44 h-44 rounded-full bg-gradient-to-tl from-orange-500/25 via-amber-500/10 to-transparent blur-2xl opacity-60 group-hover:opacity-85 transition-opacity duration-300" />
+      <div className="pointer-events-none absolute -bottom-10 -right-10 w-48 h-48 rounded-full bg-gradient-to-tl from-orange-400/25 via-amber-300/15 to-transparent dark:from-orange-500/25 dark:via-amber-500/10 dark:to-transparent blur-2xl opacity-75 dark:opacity-60 group-hover:opacity-95 dark:group-hover:opacity-85 transition-opacity duration-300" />
 
-      {/* Top Section: Title & Fraction Counter */}
+      {/* Top Section: Title & Fraction Counter or Top-Right Badge */}
       <div className="relative z-10 flex items-start justify-between gap-3">
         <div className="space-y-1.5 flex-1 min-w-0 pr-2">
-          <h4 className="text-[18px] sm:text-[19.5px] font-medium text-white tracking-wide line-clamp-2 transition-colors leading-snug capitalize">
+          <h4 className="text-[18px] sm:text-[19.5px] font-medium text-zinc-900 dark:text-white tracking-wide line-clamp-2 transition-colors leading-snug capitalize">
             {safeTitle}
           </h4>
           {tags && <div className="flex flex-wrap items-center gap-1.5">{tags}</div>}
         </div>
 
-        {/* Top-Right Number Counter */}
-        <div className="flex items-center shrink-0 pt-0.5">
-          <div className="font-mono text-sm sm:text-base font-semibold tracking-tight flex items-baseline">
-            <span className="text-[#f97316] text-base sm:text-[17px] font-bold">{safeCurrent}</span>
-            <span className="text-zinc-400 font-medium text-xs sm:text-sm">/{safeTotal}</span>
+        {/* Top-Right Badge or Fraction Counter */}
+        {topRightContent ? (
+          <div className="flex items-center shrink-0 pt-0.5">
+            {topRightContent}
           </div>
-        </div>
+        ) : hasCounter ? (
+          <div className="flex items-center shrink-0 pt-0.5">
+            <div className="font-mono text-sm sm:text-base font-semibold tracking-tight flex items-baseline">
+              <span className="text-[#ea580c] dark:text-[#f97316] text-base sm:text-[17px] font-bold">{safeCurrent}</span>
+              <span className="text-zinc-500 dark:text-zinc-400 font-medium text-xs sm:text-sm">/{safeTotal}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Bottom Section: "By Subtitle" & Chai Cup */}
       <div className="relative z-10 flex items-end justify-between gap-2 pt-2">
-        <span className="text-xs sm:text-[13px] text-zinc-400 font-normal tracking-wide truncate max-w-[75%] group-hover:text-zinc-300 transition-colors capitalize">
+        <span className="text-xs sm:text-[13px] text-zinc-500 dark:text-zinc-400 font-normal tracking-wide truncate max-w-[75%] group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors capitalize">
           {displaySubtitle}
         </span>
         <div className="shrink-0 transition-transform duration-300 ease-out group-hover:scale-115 group-hover:rotate-3">

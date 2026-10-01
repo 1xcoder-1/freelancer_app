@@ -5,6 +5,7 @@ import {
   FolderKanban,
   CheckCircle2,
   ShieldCheck,
+  ShieldAlert,
   AlertCircle,
   Building2,
   Sparkles,
@@ -14,17 +15,32 @@ import {
   MessageSquare,
   Check,
   Zap,
+  Mail,
+  X,
+  DollarSign,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getPublicProjectPortal, approvePublicMilestone, type PublicProjectPortal } from "@/lib/api";
+import {
+  getPublicProjectPortal,
+  approvePublicMilestone,
+  verifyPortalRecipient,
+  decidePortalChangeRequest,
+  type PublicProjectPortal,
+} from "@/lib/api";
 import { toast } from "sonner";
 
 interface PageProps {
   params: Promise<{ token: string }>;
 }
+
+const detail = (err: unknown, fallback: string): string => {
+  const e = err as { response?: { data?: { detail?: string } } };
+  return e?.response?.data?.detail || fallback;
+};
 
 export default function ClientPortalPage({ params }: PageProps) {
   const { token } = use(params);
@@ -37,6 +53,17 @@ export default function ClientPortalPage({ params }: PageProps) {
   const [clientFeedback, setClientFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
 
+  // SE4 recipient guard: a leaked link is inert until the viewer proves the
+  // email this project was shared with. Kept locally so approve/decide can
+  // re-send it; the server only ever stores it once.
+  const [emailInput, setEmailInput] = useState("");
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  // P3 change-request decision state.
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [crNote, setCrNote] = useState("");
+
   useEffect(() => {
     async function loadPortal() {
       try {
@@ -44,8 +71,7 @@ export default function ClientPortalPage({ params }: PageProps) {
         const data = await getPublicProjectPortal(token);
         setPortal(data);
       } catch (err: unknown) {
-        const axiosErr = err as { response?: { data?: { detail?: string } } };
-        setError(axiosErr?.response?.data?.detail || "Project portal link is invalid or expired.");
+        setError(detail(err, "Project portal link is invalid or expired."));
       } finally {
         setLoading(false);
       }
@@ -53,18 +79,60 @@ export default function ClientPortalPage({ params }: PageProps) {
     loadPortal();
   }, [token]);
 
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = emailInput.trim();
+    if (!email) return;
+    try {
+      setVerifying(true);
+      const updated = await verifyPortalRecipient(token, email);
+      setPortal(updated);
+      setVerifiedEmail(email.toLowerCase());
+      toast.success("Verified. You can now approve deliverables and scope changes.");
+    } catch (err: unknown) {
+      toast.error(detail(err, "That email does not match this project."));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const handleApprove = async (milestoneId: string) => {
+    if (!verifiedEmail) {
+      toast.error("Verify your email above before approving.");
+      return;
+    }
     try {
       setApprovingId(milestoneId);
-      const updated = await approvePublicMilestone(token, milestoneId);
+      const updated = await approvePublicMilestone(token, milestoneId, verifiedEmail);
       setPortal(updated);
       setJustApprovedId(milestoneId);
       setTimeout(() => setJustApprovedId(null), 3000);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } };
-      toast.error(axiosErr?.response?.data?.detail || "Failed to approve deliverable.");
+      toast.error(detail(err, "Failed to approve deliverable."));
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const handleDecide = async (crId: string, decision: "approved" | "rejected") => {
+    if (!verifiedEmail) {
+      toast.error("Verify your email above before deciding.");
+      return;
+    }
+    try {
+      setDecidingId(crId);
+      const updated = await decidePortalChangeRequest(token, crId, {
+        decision,
+        email: verifiedEmail,
+        note: crNote.trim() || undefined,
+      });
+      setPortal(updated);
+      setCrNote("");
+      toast.success(decision === "approved" ? "Change request approved." : "Change request declined.");
+    } catch (err: unknown) {
+      toast.error(detail(err, "Failed to record your decision."));
+    } finally {
+      setDecidingId(null);
     }
   };
 
@@ -102,11 +170,14 @@ export default function ClientPortalPage({ params }: PageProps) {
   }
 
   const progress = portal.progress_pct || 0;
+  const isVerified = Boolean(verifiedEmail);
+  const pendingChanges = portal.change_requests.filter((c) => c.status === "requested");
+  const decidedChanges = portal.change_requests.filter((c) => c.status !== "requested");
 
   return (
     <div className="min-h-screen bg-bg text-fg py-10 px-4 sm:px-6 lg:px-8 selection:bg-accent-soft">
       <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300">
-        
+
         {/* Brand Header */}
         <div className="flex items-center justify-between border-b border-line pb-5">
           <div className="flex items-center gap-3">
@@ -120,11 +191,46 @@ export default function ClientPortalPage({ params }: PageProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Badge className="bg-accent-soft text-accent border-accent/20 text-xs">
-              <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Live Sync Verified
-            </Badge>
+            {isVerified ? (
+              <Badge className="bg-accent-soft text-accent border-accent/20 text-xs">
+                <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Recipient Verified
+              </Badge>
+            ) : (
+              <Badge className="bg-warn/20 text-warn border-warn/30 text-xs">
+                <ShieldAlert className="w-3.5 h-3.5 mr-1" /> Verify to Approve
+              </Badge>
+            )}
           </div>
         </div>
+
+        {/* SE4 recipient verification gate */}
+        {!isVerified && (
+          <Card className="bg-card border-accent/30 p-6 space-y-3">
+            <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+              <Mail className="w-4 h-4 text-accent" /> Confirm it&apos;s you
+            </h3>
+            <p className="text-xs text-muted">
+              To protect this project, approvals and scope decisions require the email your
+              freelancer shared this portal with. A leaked link alone cannot approve spend.
+            </p>
+            <form onSubmit={handleVerify} className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="you@company.com"
+                className="flex-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-accent"
+              />
+              <Button
+                type="submit"
+                disabled={verifying || !emailInput.trim()}
+                className="bg-accent hover:bg-accent-hi text-accent-fg text-sm font-semibold"
+              >
+                {verifying ? "Verifying..." : "Verify"}
+              </Button>
+            </form>
+          </Card>
+        )}
 
         {/* Hero Progress Banner */}
         <Card className="relative overflow-hidden bg-card border-line p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
@@ -193,8 +299,8 @@ export default function ClientPortalPage({ params }: PageProps) {
             </div>
 
             <div className="p-3 rounded-lg bg-bg border border-line space-y-0.5">
-              <span className="text-[10px] font-mono text-faint uppercase">Last Sync</span>
-              <p className="text-base font-bold text-fg">Just Now</p>
+              <span className="text-[10px] font-mono text-faint uppercase">Pending Changes</span>
+              <p className="text-base font-bold text-warn">{pendingChanges.length}</p>
             </div>
           </div>
         </Card>
@@ -252,9 +358,13 @@ export default function ClientPortalPage({ params }: PageProps) {
                             <Badge className="bg-accent-soft text-accent border-accent/20 text-[10px]">
                               Approved & Verified
                             </Badge>
+                          ) : m.submitted_at ? (
+                            <Badge className="bg-info/15 text-info border-info/30 text-[10px]">
+                              Submitted — waiting on you
+                            </Badge>
                           ) : (
-                            <Badge className="bg-warn/20 text-warn border-warn/30 text-[10px] animate-pulse">
-                              Ready for Review
+                            <Badge className="bg-warn/20 text-warn border-warn/30 text-[10px]">
+                              In Progress
                             </Badge>
                           )}
                         </div>
@@ -264,6 +374,11 @@ export default function ClientPortalPage({ params }: PageProps) {
                           <div className="mt-2 text-xs text-muted flex items-center gap-1.5 font-mono">
                             <Zap className="w-3.5 h-3.5 text-info" />
                             <span>Deliverable: {m.deliverable_note}</span>
+                          </div>
+                        )}
+                        {m.approved_at && (
+                          <div className="mt-1 text-[11px] text-faint font-mono flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Approved {new Date(m.approved_at).toLocaleDateString()}
                           </div>
                         )}
                       </div>
@@ -278,8 +393,9 @@ export default function ClientPortalPage({ params }: PageProps) {
                       ) : (
                         <Button
                           onClick={() => handleApprove(m.id)}
-                          disabled={isApproving}
-                          className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs shadow-sm"
+                          disabled={isApproving || !isVerified}
+                          title={!isVerified ? "Verify your email first" : undefined}
+                          className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs shadow-sm disabled:opacity-50"
                         >
                           {isApproving ? (
                             "Approving..."
@@ -301,6 +417,93 @@ export default function ClientPortalPage({ params }: PageProps) {
             })}
           </div>
         </div>
+
+        {/* P3 Change Requests — priced scope changes, client decides here */}
+        {(portal.change_requests.length > 0 || isVerified) && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-fg flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-info" />
+                Change Requests
+              </h2>
+              <p className="text-xs text-muted mt-0.5">
+                Scope additions with a price and schedule impact. Approving adds them to the project.
+              </p>
+            </div>
+
+            {portal.change_requests.length === 0 && (
+              <Card className="bg-card border-line p-5 text-sm text-muted">No change requests right now.</Card>
+            )}
+
+            {pendingChanges.map((c) => (
+              <Card key={c.id} className="bg-card border-warn/30 p-5 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-fg">{c.title}</h3>
+                    {c.detail && <p className="text-xs text-muted">{c.detail}</p>}
+                  </div>
+                  <Badge className="bg-warn/20 text-warn border-warn/30 text-[10px] shrink-0">Awaiting your decision</Badge>
+                </div>
+                <div className="flex items-center gap-4 text-sm font-mono">
+                  <span className="text-accent flex items-center gap-1">
+                    <DollarSign className="w-3.5 h-3.5" /> {c.price.toLocaleString()}
+                  </span>
+                  {c.impact_days > 0 && (
+                    <span className="text-muted flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> +{c.impact_days} days
+                    </span>
+                  )}
+                </div>
+                {isVerified && (
+                  <div className="space-y-2 pt-1 border-t border-line">
+                    <input
+                      value={decidingId === c.id ? crNote : ""}
+                      onChange={(e) => { setDecidingId(c.id); setCrNote(e.target.value); }}
+                      placeholder="Optional note with your decision..."
+                      className="w-full px-3 py-2 rounded-lg bg-bg border border-line text-fg text-xs focus:outline-none focus:border-accent"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleDecide(c.id, "approved")}
+                        className="bg-accent hover:bg-accent-hi text-accent-fg text-xs font-semibold"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                      </Button>
+                      <Button
+                        onClick={() => handleDecide(c.id, "rejected")}
+                        className="bg-bg hover:bg-surface text-fg border border-line text-xs font-semibold"
+                      >
+                        <X className="w-3.5 h-3.5 mr-1" /> Decline
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))}
+
+            {decidedChanges.map((c) => (
+              <Card key={c.id} className="bg-card border-line p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-fg">{c.title}</p>
+                  <p className="text-[11px] text-faint font-mono">
+                    ${c.price.toLocaleString()}
+                    {c.decided_at && ` • decided ${new Date(c.decided_at).toLocaleDateString()}`}
+                  </p>
+                  {c.decision_note && <p className="text-xs text-muted mt-1">“{c.decision_note}”</p>}
+                </div>
+                <Badge
+                  className={
+                    c.status === "approved" || c.status === "implemented"
+                      ? "bg-accent-soft text-accent border-accent/20 text-[10px] capitalize"
+                      : "bg-danger/15 text-danger border-danger/30 text-[10px] capitalize"
+                  }
+                >
+                  {c.status}
+                </Badge>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Project Scope & Client Feedback Card */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

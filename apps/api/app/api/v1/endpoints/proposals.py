@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
@@ -51,6 +51,7 @@ async def list_proposals(
             "status": p.status,
             "pitch_content": p.pitch_content,
             "token": p.token,
+            "expires_at": p.expires_at,
             "created_at": p.created_at
         })
     return out
@@ -89,6 +90,9 @@ async def create_proposal(
         budget=payload.budget,
         status=payload.status or "sent",
         pitch_content=payload.pitch_content,
+        # L4: seed expiry from an explicit date or valid_days so an unanswered
+        # proposal becomes 'expired' on the daily scan instead of lingering open.
+        expires_at=payload.expires_at or (datetime.utcnow() + timedelta(days=payload.valid_days)),
     )
     db.add(proposal)
     await db.commit()
@@ -119,6 +123,7 @@ async def create_proposal(
         "status": proposal.status,
         "pitch_content": proposal.pitch_content,
         "token": proposal.token,
+        "expires_at": proposal.expires_at,
         "created_at": proposal.created_at
     }
 
@@ -138,6 +143,15 @@ async def update_proposal_status(
     proposal = res.scalar_one_or_none()
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
+
+    # L4: an expired proposal cannot be accepted. Money that quietly aged out
+    # must be re-quoted, not resurrected by a stale link click.
+    if payload.status == "accepted" and proposal.status == "expired":
+        raise HTTPException(status_code=410, detail="This proposal has expired; send a new version to accept it.")
+    if payload.status == "accepted" and proposal.expires_at and proposal.expires_at < datetime.utcnow():
+        proposal.status = "expired"
+        await db.commit()
+        raise HTTPException(status_code=410, detail="This proposal has expired; send a new version to accept it.")
 
     proposal.status = payload.status
     await db.commit()
@@ -162,6 +176,7 @@ async def update_proposal_status(
         "status": proposal.status,
         "pitch_content": proposal.pitch_content,
         "token": proposal.token,
+        "expires_at": proposal.expires_at,
         "created_at": proposal.created_at,
     }
 

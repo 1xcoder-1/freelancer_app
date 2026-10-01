@@ -41,3 +41,12 @@ class Lead(Base, TimestampMixin):
     last_contact_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     next_follow_up_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=True)
+    # Loss reason (L3): without a structured reason you cannot tell a pricing
+    # problem from a pipeline problem. Enum enforced in the schema, never free
+    # text, so the "lost by reason" analytics stay honest.
+    reason_lost: Mapped[str] = mapped_column(String(30), nullable=True)
+    reason_lost_note: Mapped[str] = mapped_column(Text, nullable=True)
+    # First touch timestamp (L5): set once on create so median hours-to-first-
+    # reply and days-to-close can be measured against a baseline. last_contact_at
+    # moves on every touch; this one never does.
+    first_contact_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)

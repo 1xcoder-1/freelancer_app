@@ -33,7 +33,7 @@ export function ClientsPanel() {
     async (token) => {
       return await getClients(token);
     },
-    { reportContext: "clients" }
+    { pollMs: 20000, reportContext: "clients" }
   );
 
   const clients = clientsData ?? [];
@@ -50,6 +50,9 @@ export function ClientsPanel() {
           return val;
         }
       }
+    }
+    if (c.status === "vip") {
+      return "VIP & Enterprise";
     }
     return "Featured";
   };
@@ -97,18 +100,12 @@ export function ClientsPanel() {
 
   // Helper to parse client card metadata
   const parseClientCardInfo = (client: Client) => {
-    let roleTitle = "";
     let rateDisplay = "";
     let clientCurrency = "USD";
     const rawNotes = client.notes || "";
     const isVip = client.status === "vip";
 
     if (rawNotes) {
-      const roleMatch = rawNotes.match(/\[role:\s*([^\]]+)\]/i);
-      if (roleMatch && roleMatch[1] && roleMatch[1] !== "[object Object]" && !roleMatch[1].includes("[object Object]")) {
-        roleTitle = roleMatch[1].trim();
-      }
-
       const rateMatch = rawNotes.match(/\[rate:\s*([A-Z]{3})?\s*([^\]]+)\]/i);
       if (rateMatch) {
         if (rateMatch[1] && rateMatch[1] !== "[object Object]") clientCurrency = rateMatch[1].trim();
@@ -118,7 +115,7 @@ export function ClientsPanel() {
       }
     }
 
-    return { roleTitle, rateDisplay, clientCurrency, isVip };
+    return { rateDisplay, clientCurrency, isVip };
   };
 
   return (
@@ -151,13 +148,10 @@ export function ClientsPanel() {
 
           <button
             onClick={() => handleOpenCreate()}
-            className="relative group overflow-hidden rounded-xl p-[1px] font-semibold text-xs transition-all duration-300 shadow-sm hover:shadow-accent/25 hover:shadow-md active:scale-[0.98]"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
           >
-            <span className="absolute inset-0 bg-gradient-to-r from-accent via-amber-400 to-accent rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
-            <span className="relative flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-accent group-hover:bg-accent-hi text-accent-fg transition-colors duration-200 font-bold">
-              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
-              <span>Add Client</span>
-            </span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Client</span>
           </button>
         </div>
       </div>
@@ -177,21 +171,23 @@ export function ClientsPanel() {
           ))}
         </div>
       ) : clients.length === 0 ? (
-        <Card className="bg-card border-dashed border-line p-12 text-center rounded-2xl">
-          <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
-            <ChaiCupIcon className="w-7 h-7" />
+        <Card className="bg-card border-dashed border-line p-10 text-center rounded-2xl">
+          <div className="w-12 h-12 rounded-xl bg-accent-soft flex items-center justify-center mx-auto mb-3.5">
+            <ChaiCupIcon className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-fg">No clients yet</h3>
-          <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+          <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No clients yet</h3>
+          <p className="text-xs sm:text-sm text-muted mt-1 max-w-sm mx-auto leading-relaxed">
             Organize clients by category and track invoices, retainers, and contact details seamlessly.
           </p>
-          <Button
-            onClick={() => handleOpenCreate()}
-            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add First Client
-          </Button>
+          <div className="mt-5 flex justify-center">
+            <button
+              onClick={() => handleOpenCreate()}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Client</span>
+            </button>
+          </div>
         </Card>
       ) : (
         /* Categorized Cards with Sliding Pagination (20 cards per page) */
@@ -225,14 +221,9 @@ export function ClientsPanel() {
                 {/* Category Header with Title, Count, Underline & Sliding Navigation */}
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                   <div className="inline-flex flex-col items-start space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base md:text-lg font-medium tracking-wide text-fg">
-                        {cat}
-                      </h3>
-                      <span className="text-xs font-mono font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-md border border-accent/20">
-                        {catClients.length}
-                      </span>
-                    </div>
+                    <h3 className="font-display text-base md:text-lg font-medium tracking-wide text-fg">
+                      {cat}
+                    </h3>
                     {/* Straight orange line under category title */}
                     <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
                   </div>
@@ -277,32 +268,40 @@ export function ClientsPanel() {
                 {/* Cards Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
                   {visibleClients.map((client) => {
-                    const { roleTitle, rateDisplay, clientCurrency, isVip } = parseClientCardInfo(client);
-                    const paidMilestones = client.total_paid ? Math.round(client.total_paid / 100) : (isVip ? "★" : "0");
-                    const totalMilestones = client.total_billed ? Math.max(Number(paidMilestones) || 1, Math.round(client.total_billed / 100)) : (isVip ? "VIP" : "10");
+                    const { rateDisplay, clientCurrency, isVip } = parseClientCardInfo(client);
+                    const clientStatus = client.status ? client.status.toLowerCase() : "active";
+                    const isClientVip = isVip || clientStatus === "vip";
 
                     return (
                       <CategoryVisualCard
                         key={client.id}
                         title={client.name}
-                        currentCount={paidMilestones}
-                        totalCount={totalMilestones}
-                        subtitle={client.company_name || roleTitle || "Direct Client"}
+                        subtitle={client.company_name || "Direct Client"}
                         category={cat}
                         onClick={() => handleOpenDetail(client)}
+                        topRightContent={
+                          isClientVip ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/15 to-yellow-500/15 dark:from-amber-500/20 dark:to-yellow-500/20 border border-amber-500/30 dark:border-amber-500/35 text-amber-700 dark:text-amber-300 text-xs font-semibold shadow-sm tracking-wide">
+                              <span className="text-amber-600 dark:text-amber-400 text-sm">★</span>
+                              <span className="font-display font-bold tracking-wider text-[11px]">VIP</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-500/10 dark:bg-white/5 border border-slate-200/90 dark:border-white/10 text-slate-600 dark:text-slate-300 text-xs font-medium shadow-2xs tracking-wide">
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px]">✦</span>
+                              <span className="font-medium text-[11px] tracking-wide">Standard</span>
+                            </div>
+                          )
+                        }
                         tags={
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border capitalize ${
-                                isVip || client.status === "vip"
-                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/25 font-semibold"
-                                  : "bg-sky-500/15 text-sky-400 border-sky-500/25"
-                              }`}
-                            >
-                              {isVip || client.status === "vip" ? "★ VIP" : client.status || "Active"}
-                            </span>
+                            {/* C2 silence badge — a quiet client is now visible */}
+                            {typeof client.days_since_touch === "number" && client.days_since_touch >= 45 && (
+                              <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/20 dark:border-red-500/25">
+                                {client.days_since_touch}d silent
+                              </span>
+                            )}
                             {rateDisplay && (
-                              <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                              <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
                                 {clientCurrency} {rateDisplay}
                               </span>
                             )}

@@ -21,7 +21,7 @@ export function PageHeader({
   return (
     <div className="flex items-start justify-between gap-4 mb-8">
       <div>
-        <h1 className="font-display text-[26px] sm:text-3xl font-bold tracking-tight text-fg">
+        <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
           {title}
         </h1>
         {subtitle && (
@@ -47,77 +47,76 @@ export function StatCard({
   icon?: React.ElementType;
   badge?: React.ReactNode;
   subtext?: string;
-  rows?: { text: string; dot?: "ok" | "danger" | "warn" | "info" }[];
+  rows?: { text: string; dot?: "ok" | "danger" | "warn" | "info" | "green" | "red" | "blue" | "amber"; check?: boolean }[];
   tone?: string;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "bg-card border border-line hover:border-line-strong rounded-2xl p-5 sm:p-6 flex flex-col justify-between min-h-[150px] shadow-xs hover:shadow-sm transition-all duration-200",
+        "bg-[#141518] dark:bg-[#141518] border border-[#26272d] hover:border-[#383942] rounded-2xl p-6 flex flex-col justify-between min-h-[180px] shadow-sm transition-all duration-200",
         className
       )}
     >
       {/* Top Header Row */}
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[13px] sm:text-[14px] font-medium text-muted tracking-tight">
+        <h3 className="font-display text-[17px] font-medium text-[#f4f4f5] leading-snug whitespace-pre-line tracking-wide">
           {label}
-        </span>
+        </h3>
         {Icon && (
-          <div className="p-2.5 rounded-xl bg-surface text-fg border border-line/70 shrink-0">
-            <Icon className="w-4 h-4" />
-          </div>
+          <Icon className="w-5 h-5 text-[#d4d4d8] opacity-90 shrink-0 mt-0.5" />
         )}
       </div>
 
       {/* Primary Value */}
-      <div className="my-2.5">
-        <div className="font-sans text-[28px] sm:text-[32px] font-bold tracking-tight text-fg leading-none truncate">
+      <div className="my-auto py-1">
+        <div className="font-display text-4xl sm:text-[40px] font-medium text-white tracking-tight leading-none">
           {value}
         </div>
       </div>
 
-      {/* Bottom Row: Subtext & Badge / Metadata */}
-      {(subtext || badge) && (
-        <div className="flex items-center justify-between gap-2 text-xs text-muted pt-2.5 border-t border-line/50">
-          <span className="truncate text-faint">{subtext}</span>
-          {badge && <div className="shrink-0">{badge}</div>}
-        </div>
-      )}
-
-      {/* Optional Legacy rows if passed */}
-      {rows && rows.length > 0 && (
-        <div className="mt-auto pt-3 border-t border-line/50 space-y-1">
-          {rows.map((r) => (
-            <div key={r.text} className="flex items-center justify-between text-xs text-muted">
-              <span className="font-mono text-[11px] truncate">{r.text}</span>
-              {r.dot && (
-                <span
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0 ml-1.5",
-                    r.dot === "ok" && "bg-ok",
-                    r.dot === "danger" && "bg-danger",
-                    r.dot === "warn" && "bg-warn",
-                    r.dot === "info" && "bg-info"
-                  )}
-                />
-              )}
+      {/* Bottom Row: List with right-aligned colored dots / checkmark or Subtext & Badge */}
+      {rows && rows.length > 0 ? (
+        <div className="space-y-1 pt-1">
+          {rows.map((r, idx) => (
+            <div key={idx} className="flex items-center gap-2 text-xs text-[#a1a1aa]">
+              <span>{r.text}</span>
+              {r.check ? (
+                <span className="text-[#22c55e] font-bold text-xs">✓</span>
+              ) : r.dot === "ok" || r.dot === "green" ? (
+                <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" />
+              ) : r.dot === "danger" || r.dot === "red" ? (
+                <span className="w-2 h-2 rounded-full bg-[#ef4444] inline-block" />
+              ) : r.dot === "warn" || r.dot === "amber" ? (
+                <span className="w-2 h-2 rounded-full bg-[#f59e0b] inline-block" />
+              ) : r.dot === "info" || r.dot === "blue" ? (
+                <span className="w-2 h-2 rounded-full bg-[#38bdf8] inline-block" />
+              ) : null}
             </div>
           ))}
         </div>
-      )}
+      ) : (subtext || badge) ? (
+        <div className="flex items-center justify-between gap-2 text-xs text-[#a1a1aa] pt-1">
+          <span className="truncate">{subtext}</span>
+          {badge && <div className="shrink-0">{badge}</div>}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 const chipTones: Record<string, string> = {
-  ok: "bg-ok/10 text-ok border-ok/20",
-  danger: "bg-danger/10 text-danger border-danger/20",
-  warn: "bg-warn/15 text-warn border-warn/25",
-  info: "bg-info/10 text-info border-info/20",
-  violet: "bg-violet/10 text-violet border-violet/20",
-  accent: "bg-accent/10 text-accent border-accent/20",
-  neutral: "bg-surface text-muted border-line",
+  green: "bg-[#062414] text-[#22c55e] border-[#0d542c]",
+  ok: "bg-[#062414] text-[#22c55e] border-[#0d542c]",
+  blue: "bg-[#082238] text-[#38bdf8] border-[#0e4b7a]",
+  info: "bg-[#082238] text-[#38bdf8] border-[#0e4b7a]",
+  red: "bg-[#2f0814] text-[#fb7185] border-[#6b162f]",
+  danger: "bg-[#2f0814] text-[#fb7185] border-[#6b162f]",
+  amber: "bg-[#2e1905] text-[#fbbf24] border-[#6d3c0a]",
+  warn: "bg-[#2e1905] text-[#fbbf24] border-[#6d3c0a]",
+  purple: "bg-[#240a38] text-[#c084fc] border-[#581c87]",
+  violet: "bg-[#240a38] text-[#c084fc] border-[#581c87]",
+  neutral: "bg-[#18191d] text-[#d4d4d8] border-[#2d2f36]",
 };
 
 export function StatChip({
@@ -132,7 +131,7 @@ export function StatChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-mono font-semibold",
+        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs sm:text-[13px] font-medium tracking-tight shadow-xs transition-transform hover:scale-[1.02]",
         chipTones[tone] ?? chipTones.neutral,
         className
       )}

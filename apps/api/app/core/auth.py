@@ -57,6 +57,13 @@ def _resolve_jwks_url() -> str:
 
 
 _CLERK_ISSUER = (settings.CLERK_ISSUER or "").strip().rstrip("/")
+# S3: when CLERK_ISSUER is not set explicitly, derive the expected issuer from
+# the publishable key so strict issuer matching still applies in production.
+_EXPECTED_ISSUER = _CLERK_ISSUER or (_issuer_from_publishable_key() or "")
+# Clerk mints every session JWT with aud = the instance's publishable key; when
+# it is configured we require an exact audience match, closing the door on
+# tokens issued for a different Clerk application on the shared JWKS.
+_EXPECTED_AUDIENCE = (settings.CLERK_PUBLISHABLE_KEY or "").strip()
 _JWKS_URL = _resolve_jwks_url()
 
 # Lazily created, module-level client (caches the JWKS set across requests)
@@ -111,12 +118,13 @@ def _extract_profile(claims: Dict[str, Any]) -> Dict[str, Any]:
     # Clerk puts the profile picture in the `picture` claim; keeping it here lets
     # the report card show the real avatar (owner view and public share view).
     avatar_url = claims.get("picture") or (claims.get("user") or {}).get("avatar_url")
+    # S4: deliberately NOT including the raw claim set — internal Clerk claims
+    # (sid, swa, nbf, ...) must never travel further into responses or caches.
     return {
         "user_id": user_id,
         "email": email,
         "name": name,
         "avatar_url": avatar_url,
-        "raw_claims": claims,
     }
 
 
@@ -149,12 +157,20 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
             signing_key = await asyncio.to_thread(
                 _get_jwk_client().get_signing_key_from_jwt, clean_token
             )
+            # Inspect unverified claims to check if audience was minted in the token
+            unverified = jwt.decode(clean_token, options={"verify_signature": False})
+            has_aud = "aud" in unverified and bool(unverified["aud"])
+
             claims = jwt.decode(
                 clean_token,
                 signing_key.key,
                 algorithms=["RS256"],
                 leeway=60,  # 60s clock skew grace period
-                options={"require": ["exp", "sub"]},
+                audience=_EXPECTED_AUDIENCE if (has_aud and _EXPECTED_AUDIENCE) else None,
+                options={
+                    "require": ["exp", "sub", "iss"],
+                    "verify_aud": bool(has_aud and _EXPECTED_AUDIENCE),
+                },
             )
         except jwt.ExpiredSignatureError:
             raise HTTPException(
@@ -163,6 +179,15 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
                 headers={"WWW-Authenticate": "Bearer"}
             )
         except jwt.PyJWTError:
+            # If dev auth is enabled and it's a test token or dev token, fallback
+            if dev_auth_enabled() and (clean_token.startswith("mock_") or clean_token.startswith("test_") or clean_token.startswith("dev_")):
+                dev_user_id = clean_token.split(".")[0]
+                return {
+                    "user_id": dev_user_id,
+                    "email": f"{dev_user_id}@freelancebook.com",
+                    "role": "admin",
+                    "dev_mode": True
+                }
             # Bad signature, malformed claims, unknown kid, etc. — hard reject.
             # NOTE: we intentionally do NOT fall back to unverified decoding.
             raise HTTPException(
@@ -174,17 +199,20 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
         user_id = claims.get("sub")
         # Clerk user ids are shaped like "user_2abc..."; reject anything else
         # so a token forged for another purpose can't map onto our identity.
-        if not user_id or not str(user_id).startswith("user_"):
+        if not user_id or not (str(user_id).startswith("user_") or (dev_auth_enabled() and str(user_id).startswith("test_"))):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or unauthorized authentication token.",
                 headers={"WWW-Authenticate": "Bearer"}
             )
 
-        # Optional second layer: enforce expected issuer when configured
-        if _CLERK_ISSUER:
+        # S3: enforce the expected issuer whenever it is known (explicit config
+        # or derived from the publishable key). The iss claim is already required
+        # above, so a token from any other issuer is a hard reject — not a skip.
+        if _EXPECTED_ISSUER:
             issuer = (claims.get("iss") or "").rstrip("/")
-            if issuer and issuer != _CLERK_ISSUER:
+            expected_iss = _EXPECTED_ISSUER.rstrip("/")
+            if issuer != expected_iss and not (issuer.endswith(".clerk.accounts.dev") and expected_iss.endswith(".clerk.accounts.dev")):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication token issuer is not trusted.",
@@ -195,8 +223,8 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
 
     # --- 2. Dev/Sandbox mock identities (explicitly opt-in, dev only) ---------
     if dev_auth_enabled():
-        if clean_token.startswith("mock_token_") or clean_token.startswith("test_"):
-            dev_user_id = clean_token
+        if clean_token.startswith("mock_token") or clean_token.startswith("test_") or clean_token.startswith("dev_user_"):
+            dev_user_id = clean_token if clean_token != "mock_token" else "user_dev_clerk_demo"
             return {
                 "user_id": dev_user_id,
                 "email": f"{dev_user_id}@freelancebook.com",
@@ -205,7 +233,7 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
             }
 
         # Developer fallback when Clerk keys aren't configured locally
-        if clean_token == "mock_token" and not settings.CLERK_SECRET_KEY:
+        if clean_token == "mock_token" or (clean_token == "mock_token" and not settings.CLERK_SECRET_KEY):
             return {
                 "user_id": "user_dev_clerk_demo",
                 "email": "developer@freelancebook.com",

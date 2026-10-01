@@ -3,14 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional
+from datetime import datetime, date
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
-from app.models.project import Project, Task, Milestone
+from app.models.project import Project, Task, Milestone, ChangeRequest, ProjectFile, generate_share_token
 from app.models.contract import Contract
 from app.models.client import Client
 from app.models.workspace import Workspace
 from app.models.finance import TimeEntry
+from app.services.revenue_at_stake import compute_revenue_at_stake
 from app.schemas.domain import (
     ProjectCreate,
     ProjectOut,
@@ -22,6 +24,14 @@ from app.schemas.domain import (
     MilestoneOut,
     MilestoneUpdate,
     PublicProjectPortalOut,
+    ChangeRequestCreate,
+    ChangeRequestUpdate,
+    ChangeRequestOut,
+    ChangeRequestDecision,
+    PortalVerifyIn,
+    ProjectMilestoneSubmitIn,
+    ProjectFileIn,
+    ProjectFileOut,
 )
 
 router = APIRouter(prefix="/projects", tags=["Projects, Milestones & Client Portal"])
@@ -63,10 +73,106 @@ async def _client_name_map(db: AsyncSession, workspace_id: str, client_ids: list
     return {cid: name for cid, name in res.all()}
 
 
+def _as_date(value):
+    """Date columns surface as datetime.date, but the ORM annotation is datetime;
+    normalise so day maths never mixes a naive datetime with a date."""
+    if value is None:
+        return None
+    return value.date() if isinstance(value, datetime) else value
+
+
+def derive_deadline(project: Project, milestones: list, tasks: list, now: Optional[datetime] = None) -> Optional[dict]:
+    """P2 deadline risk verdict: due date vs elapsed schedule and completion.
+    Derived on read (never stored) so it is always live against the clock."""
+    due = _as_date(project.due_date)
+    if not due:
+        return None
+    now = now or datetime.utcnow()
+    days_left = (due - now.date()).days
+    progress = calculate_progress(milestones, tasks, project.status)
+    if project.status == "completed":
+        verdict = "completed"
+    elif days_left < 0:
+        verdict = "overdue"
+    elif days_left <= 3 and progress < 100:
+        verdict = "at_risk"
+    else:
+        verdict = "on_track"
+        start = _as_date(project.start_date)
+        if start:
+            total = max((due - start).days, 1)
+            elapsed = (now.date() - start).days
+            if elapsed / total >= 0.6 and progress < 50:
+                verdict = "at_risk"
+    return {
+        "verdict": verdict,
+        "days_left": days_left,
+        "due_date": due.isoformat(),
+        "progress_pct": progress,
+    }
+
+
+async def _unbilled_map(db: AsyncSession, project_ids: list) -> dict:
+    """P1 unbilled hours + value per project, one grouped pass (billable, not
+    yet invoiced). Powers the 'Unbilled: n hrs = $x' chip on the card."""
+    ids = [pid for pid in project_ids if pid]
+    if not ids:
+        return {}
+    rows = (await db.execute(
+        select(
+            TimeEntry.project_id,
+            func.coalesce(func.sum(TimeEntry.duration_seconds), 0),
+            func.coalesce(func.sum(TimeEntry.duration_seconds / 3600.0 * TimeEntry.hourly_rate), 0.0),
+        )
+        .where(
+            TimeEntry.project_id.in_(ids),
+            TimeEntry.is_billable.is_(True),
+            TimeEntry.is_invoiced.is_(False),
+        )
+        .group_by(TimeEntry.project_id)
+    )).all()
+    return {pid: (round((s or 0) / 3600.0, 2), round(float(v or 0.0), 2)) for pid, s, v in rows}
+
+
+async def _task_actual_hours_map(db: AsyncSession, task_ids: list) -> dict:
+    """P5 actual vs estimated: hours logged against each task via task_id."""
+    ids = [tid for tid in task_ids if tid]
+    if not ids:
+        return {}
+    rows = (await db.execute(
+        select(TimeEntry.task_id, func.coalesce(func.sum(TimeEntry.duration_seconds), 0))
+        .where(TimeEntry.task_id.in_(ids))
+        .group_by(TimeEntry.task_id)
+    )).all()
+    return {tid: round((s or 0) / 3600.0, 2) for tid, s in rows}
+
+
+def _serialize_tasks(tasks: list, task_hours: dict) -> list:
+    """Tasks as dicts enriched with the P5 actual-hours overlay."""
+    out = []
+    for t in tasks:
+        out.append({
+            "id": t.id,
+            "project_id": t.project_id,
+            "title": t.title,
+            "description": t.description,
+            "status": t.status,
+            "priority": t.priority,
+            "estimated_hours": t.estimated_hours,
+            "due_date": _as_date(t.due_date),
+            "actual_hours": task_hours.get(t.id, 0.0),
+            "created_at": t.created_at,
+        })
+    return out
+
+
 async def _project_payload(db: AsyncSession, project: Project) -> dict:
-    """Uniform ProjectOut shape (progress + real tracked hours)."""
+    """Uniform ProjectOut shape (progress + real tracked/unbilled hours)."""
     clients_map = await _client_name_map(db, project.workspace_id, [project.client_id])
     hours_map = await _tracked_hours_map(db, [project.id])
+    unbilled_map = await _unbilled_map(db, [project.id])
+    task_hours = await _task_actual_hours_map(db, [t.id for t in project.tasks])
+    uh, uv = unbilled_map.get(project.id, (0.0, 0.0))
     return {
         "id": project.id,
         "workspace_id": project.workspace_id,
@@ -80,7 +186,12 @@ async def _project_payload(db: AsyncSession, project: Project) -> dict:
         "share_token": project.share_token,
         "progress_pct": calculate_progress(project.milestones, project.tasks, project.status),
         "tracked_hours": hours_map.get(project.id, 0.0),
-        "tasks": project.tasks,
+        "unbilled_hours": uh,
+        "unbilled_value": uv,
+        "start_date": _as_date(project.start_date),
+        "due_date": _as_date(project.due_date),
+        "deadline": derive_deadline(project, project.milestones, project.tasks),
+        "tasks": _serialize_tasks(project.tasks, task_hours),
         "milestones": project.milestones,
         "created_at": project.created_at,
     }
@@ -119,9 +230,14 @@ async def list_projects(
 
     # Real tracked hours per project (from logged time entries)
     hours_map = await _tracked_hours_map(db, [p.id for p in projects])
+    # P1 unbilled + P5 task actuals, both bulk (never a query per project).
+    unbilled_map = await _unbilled_map(db, [p.id for p in projects])
+    all_task_ids = [t.id for p in projects for t in p.tasks]
+    task_hours = await _task_actual_hours_map(db, all_task_ids)
     out = []
     for p in projects:
         pct = calculate_progress(p.milestones, p.tasks, p.status)
+        uh, uv = unbilled_map.get(p.id, (0.0, 0.0))
         p_dict = {
             "id": p.id,
             "workspace_id": p.workspace_id,
@@ -135,12 +251,39 @@ async def list_projects(
             "share_token": p.share_token,
             "progress_pct": pct,
             "tracked_hours": hours_map.get(p.id, 0.0),
-            "tasks": p.tasks,
+            "unbilled_hours": uh,
+            "unbilled_value": uv,
+            "start_date": _as_date(p.start_date),
+            "due_date": _as_date(p.due_date),
+            "deadline": derive_deadline(p, p.milestones, p.tasks),
+            "tasks": _serialize_tasks(p.tasks, task_hours),
             "milestones": p.milestones,
             "created_at": p.created_at
         }
         out.append(p_dict)
     return out
+
+
+@router.get("/at-risk", response_model=Dict[str, Any])
+async def projects_at_risk(
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Where the money is stuck, project by project (P1 / F4).
+
+    Shares ``compute_revenue_at_stake`` with the contracts page so both read one
+    source of truth. Declared before ``/{project_id}`` so the literal path wins.
+    Only projects with something actually at stake are returned, biggest first.
+    """
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    agg = await compute_revenue_at_stake(db, workspace.id, workspace.currency)
+    projects = [p for p in agg["at_risk_projects"] if p["total_at_risk"] > 0]
+    return {
+        "currency": agg["currency"],
+        "totals": agg["totals"],
+        "projects": projects,
+        "generated_at": agg["generated_at"],
+    }
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
@@ -166,7 +309,9 @@ async def create_project(
         description=payload.description,
         status=payload.status,
         budget=payload.budget,
-        hourly_rate=payload.hourly_rate
+        hourly_rate=payload.hourly_rate,
+        start_date=payload.start_date,
+        due_date=payload.due_date
     )
     db.add(project)
     await db.commit()
@@ -213,6 +358,18 @@ async def create_project(
         "created_at": full_p.created_at
     }
 
+@router.get("/{project_id}", response_model=ProjectOut)
+async def get_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    project = await _project_with_relations(db, project_id, workspace.id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return await _project_payload(db, project)
+
 @router.post("/{project_id}/milestones", response_model=MilestoneOut, status_code=status.HTTP_201_CREATED)
 async def create_milestone(
     project_id: str,
@@ -233,6 +390,7 @@ async def create_milestone(
         description=payload.description,
         amount=payload.amount,
         deliverable_note=payload.deliverable_note,
+        due_date=payload.due_date,
         is_completed=False
     )
     db.add(milestone)
@@ -260,6 +418,7 @@ async def create_task(
         description=payload.description,
         priority=payload.priority,
         estimated_hours=payload.estimated_hours,
+        due_date=payload.due_date,
         status="todo"
     )
     db.add(task)
@@ -380,6 +539,27 @@ async def delete_milestone(
     return None
 
 
+@router.post("/{project_id}/rotate-share-token", response_model=ProjectOut)
+async def rotate_project_share_token(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """SE10: revoke a leaked client-portal link by minting a fresh share token.
+    The old portal URL stops resolving immediately (the public route keys on it).
+    """
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    stmt = select(Project).where(Project.id == project_id, Project.workspace_id == workspace.id)
+    project = (await db.execute(stmt)).scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.share_token = generate_share_token()
+    await db.commit()
+    # Re-load with relationships eager so the payload never triggers lazy IO.
+    project = await _project_with_relations(db, project_id, workspace.id)
+    return await _project_payload(db, project)
+
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: str,
@@ -395,21 +575,164 @@ async def delete_project(
     await db.delete(project)
     await db.commit()
 
+
+@router.get("/{project_id}/unbilled-time", response_model=Dict[str, Any])
+async def project_unbilled_time(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """P1 — the hours this project earned but never billed, with the individual
+    entries so the freelancer can select and bill them. Was only reachable from
+    the Invoices page; here it lives on the project that earned it."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    project = await _project_with_relations(db, project_id, workspace.id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    rows = (await db.execute(
+        select(TimeEntry)
+        .where(
+            TimeEntry.project_id == project.id,
+            TimeEntry.workspace_id == workspace.id,
+            TimeEntry.is_billable.is_(True),
+            TimeEntry.is_invoiced.is_(False),
+        )
+        .order_by(TimeEntry.start_time.desc())
+    )).scalars().all()
+    hours = round(sum((e.duration_seconds or 0) for e in rows) / 3600.0, 2)
+    value = round(sum((e.duration_seconds or 0) / 3600.0 * (e.hourly_rate or 0.0) for e in rows), 2)
+    entries = [
+        {
+            "id": e.id,
+            "description": e.description,
+            "start_time": e.start_time,
+            "duration_seconds": e.duration_seconds,
+            "hours": round((e.duration_seconds or 0) / 3600.0, 2),
+            "hourly_rate": e.hourly_rate,
+            "task_id": e.task_id,
+        }
+        for e in rows
+    ]
+    return {
+        "project_id": project.id,
+        "hours": hours,
+        "value": value,
+        "entries": entries,
+    }
+
+
+@router.post("/{project_id}/milestones/{milestone_id}/submit", response_model=MilestoneOut)
+async def submit_milestone(
+    project_id: str,
+    milestone_id: str,
+    payload: ProjectMilestoneSubmitIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """P6 — freelancer delivers the phase: stamp submitted_at (the client's
+    sign-off clock starts). Completion still only happens on client approval."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    milestone = await _get_child_in_workspace(db, Milestone, milestone_id, workspace.id)
+    if not milestone or milestone.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Milestone not found in this project")
+    milestone.submitted_at = datetime.utcnow()
+    if payload.note:
+        milestone.deliverable_note = payload.note
+    await db.commit()
+    await db.refresh(milestone)
+    return milestone
+
+
+# ------------------------------------------------------------------------------
+# Change Requests (P3 — priced, auditable scope changes; client decides in portal)
+# ------------------------------------------------------------------------------
+
+@router.get("/{project_id}/change-requests", response_model=List[ChangeRequestOut])
+async def list_change_requests(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    project = await _project_with_relations(db, project_id, workspace.id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    rows = (await db.execute(
+        select(ChangeRequest)
+        .where(ChangeRequest.project_id == project.id, ChangeRequest.workspace_id == workspace.id)
+        .order_by(ChangeRequest.created_at.desc())
+    )).scalars().all()
+    return rows
+
+
+@router.post("/{project_id}/change-requests", response_model=ChangeRequestOut, status_code=status.HTTP_201_CREATED)
+async def create_change_request(
+    project_id: str,
+    payload: ChangeRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    project = await _project_with_relations(db, project_id, workspace.id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    cr = ChangeRequest(
+        project_id=project.id,
+        workspace_id=workspace.id,
+        title=payload.title,
+        detail=payload.detail,
+        price=payload.price,
+        impact_days=payload.impact_days,
+        requested_by=payload.requested_by,
+        status="requested",
+    )
+    db.add(cr)
+    await db.commit()
+    await db.refresh(cr)
+    return cr
+
+
+@router.patch("/{project_id}/change-requests/{cr_id}", response_model=ChangeRequestOut)
+async def update_change_request(
+    project_id: str,
+    cr_id: str,
+    payload: ChangeRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Freelancer-side edits (re-price, mark implemented). Client approvals go
+    through the recipient-guarded portal route, not here."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    cr = (await db.execute(
+        select(ChangeRequest).where(
+            ChangeRequest.id == cr_id,
+            ChangeRequest.project_id == project_id,
+            ChangeRequest.workspace_id == workspace.id,
+        )
+    )).scalar_one_or_none()
+    if not cr:
+        raise HTTPException(status_code=404, detail="Change request not found")
+    changes = payload.model_dump(exclude_unset=True)
+    for key, value in changes.items():
+        setattr(cr, key, value)
+    await db.commit()
+    await db.refresh(cr)
+    return cr
+
 # ------------------------------------------------------------------------------
 # Public Client Portal Endpoints (Passwordless Share Token)
 # ------------------------------------------------------------------------------
 
-@router.get("/portal/{token}", response_model=PublicProjectPortalOut)
-async def get_public_project_portal(
-    token: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def _load_portal_project(db: AsyncSession, token: str) -> Project:
+    """Fetch the portal project with every relation the page renders, so the
+    read view and every approving mutation share one load path."""
     stmt = (
         select(Project)
         .options(
             selectinload(Project.milestones),
             selectinload(Project.tasks),
-            selectinload(Project.contracts)
+            selectinload(Project.contracts),
+            selectinload(Project.change_requests),
         )
         .where(Project.share_token == token)
     )
@@ -417,12 +740,22 @@ async def get_public_project_portal(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project portal link is invalid or expired")
+    return project
 
-    # Get Workspace / Freelancer info
+
+def _require_portal_recipient(project: Project, email: str) -> None:
+    """SE4 gate: an approving portal action needs a captured recipient email
+    that matches. A leaked token alone is inert until identity is proven."""
+    if not project.portal_recipient_email:
+        raise HTTPException(status_code=403, detail="Verify the recipient email for this project first")
+    if project.portal_recipient_email != email.lower().strip():
+        raise HTTPException(status_code=403, detail="Recipient email does not match this project")
+
+
+async def _portal_payload(db: AsyncSession, project: Project) -> dict:
     w_res = await db.execute(select(Workspace).where(Workspace.id == project.workspace_id))
     workspace = w_res.scalar_one_or_none()
 
-    # Get Client info
     client_name = None
     if project.client_id:
         c_res = await db.execute(select(Client).where(Client.id == project.client_id))
@@ -430,20 +763,14 @@ async def get_public_project_portal(
         if cl:
             client_name = cl.name
 
-    # Contract status
     contract_status = None
     contract_signed = False
-    if project.contracts and len(project.contracts) > 0:
+    if project.contracts:
         latest_c = project.contracts[-1]
         contract_status = latest_c.status
         contract_signed = latest_c.status == "signed"
 
-    completed_milestones = sum(1 for m in project.milestones if m.is_completed)
-    total_milestones = len(project.milestones)
-    progress_pct = calculate_progress(project.milestones, project.tasks, project.status)
-
-    active_tasks = sum(1 for t in project.tasks if t.status != "done")
-    completed_tasks = sum(1 for t in project.tasks if t.status == "done")
+    change_requests = sorted(project.change_requests, key=lambda c: c.created_at, reverse=True)
 
     return {
         "id": project.id,
@@ -452,100 +779,173 @@ async def get_public_project_portal(
         "status": project.status,
         "budget": project.budget,
         "share_token": project.share_token,
-        "progress_pct": progress_pct,
+        "progress_pct": calculate_progress(project.milestones, project.tasks, project.status),
         "freelancer_name": workspace.name if workspace else "",
         "client_name": client_name,
         "milestones": project.milestones,
-        "completed_milestones_count": completed_milestones,
-        "total_milestones_count": total_milestones,
-        "active_tasks_count": active_tasks,
-        "completed_tasks_count": completed_tasks,
+        "completed_milestones_count": sum(1 for m in project.milestones if m.is_completed),
+        "total_milestones_count": len(project.milestones),
+        "active_tasks_count": sum(1 for t in project.tasks if t.status != "done"),
+        "completed_tasks_count": sum(1 for t in project.tasks if t.status == "done"),
         "contract_status": contract_status,
         "contract_signed": contract_signed,
-        "created_at": project.created_at
+        "change_requests": change_requests,
+        "recipient_verified": bool(project.portal_recipient_email),
+        "created_at": project.created_at,
     }
+
+
+@router.get("/portal/{token}", response_model=PublicProjectPortalOut)
+async def get_public_project_portal(
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    project = await _load_portal_project(db, token)
+    return await _portal_payload(db, project)
+
+
+@router.post("/portal/{token}/verify", response_model=PublicProjectPortalOut)
+async def verify_portal_recipient(
+    token: str,
+    payload: PortalVerifyIn,
+    db: AsyncSession = Depends(get_db)
+):
+    """SE4 — the viewer proves they are the intended recipient by supplying the
+    email this project was shared with. Stored once; approving actions (milestone
+    sign-off, change-request decisions) require this exact address afterwards."""
+    project = await _load_portal_project(db, token)
+    email = payload.email.lower().strip()
+    if project.portal_recipient_email:
+        if project.portal_recipient_email != email:
+            raise HTTPException(status_code=403, detail="This email does not match the project's shared recipient")
+    else:
+        project.portal_recipient_email = email
+        await db.commit()
+    return await _portal_payload(db, project)
+
 
 @router.post("/portal/{token}/milestones/{milestone_id}/approve", response_model=PublicProjectPortalOut)
 async def approve_public_milestone(
     token: str,
     milestone_id: str,
+    payload: PortalVerifyIn,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = (
-        select(Project)
-        .options(
-            selectinload(Project.milestones),
-            selectinload(Project.tasks),
-            selectinload(Project.contracts)
-        )
-        .where(Project.share_token == token)
-    )
-    result = await db.execute(stmt)
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project portal link is invalid or expired")
+    """P6 client sign-off — gated by SE4: a leaked token can no longer approve a
+    deliverable on its own; the approver's email must match the recorded one."""
+    project = await _load_portal_project(db, token)
+    _require_portal_recipient(project, payload.email)
 
     milestone = next((m for m in project.milestones if m.id == milestone_id), None)
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found in this project")
 
     milestone.is_completed = True
+    milestone.approved_at = datetime.utcnow()
     await db.commit()
-    await db.refresh(project)
+    return await _portal_payload(db, project)
 
-    # Re-fetch full project
-    stmt_full = (
-        select(Project)
-        .options(
-            selectinload(Project.milestones),
-            selectinload(Project.tasks),
-            selectinload(Project.contracts)
-        )
-        .where(Project.id == project.id)
+
+@router.post("/portal/{token}/change-requests/{cr_id}/decide", response_model=PublicProjectPortalOut)
+async def decide_public_change_request(
+    token: str,
+    cr_id: str,
+    payload: ChangeRequestDecision,
+    db: AsyncSession = Depends(get_db)
+):
+    """P3 client approves/declines a priced scope change. SE4: recipient email
+    must match, and only an open (requested) change can be decided."""
+    project = await _load_portal_project(db, token)
+    _require_portal_recipient(project, payload.email)
+
+    cr = next((c for c in project.change_requests if c.id == cr_id), None)
+    if not cr:
+        raise HTTPException(status_code=404, detail="Change request not found in this project")
+    if cr.status != "requested":
+        raise HTTPException(status_code=409, detail="This change request has already been decided")
+
+    cr.status = payload.decision
+    cr.decided_at = datetime.utcnow()
+    cr.decision_note = payload.note
+    await db.commit()
+    return await _portal_payload(db, project)
+
+
+# ------------------------------------------------------------------------------
+# Project Files / Documents (Vault, Briefs, Specs, Assets, Deliverables)
+# ------------------------------------------------------------------------------
+@router.get("/{project_id}/files", response_model=List[ProjectFileOut])
+async def list_project_files(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    # Validate project exists in workspace
+    project = await db.scalar(
+        select(Project).where(Project.id == project_id, Project.workspace_id == workspace.id)
     )
-    r = await db.execute(stmt_full)
-    updated_p = r.scalar_one()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    w_res = await db.execute(select(Workspace).where(Workspace.id == updated_p.workspace_id))
-    workspace = w_res.scalar_one_or_none()
+    rows = (await db.execute(
+        select(ProjectFile).where(
+            ProjectFile.project_id == project_id,
+            ProjectFile.workspace_id == workspace.id
+        ).order_by(ProjectFile.created_at.desc())
+    )).scalars().all()
+    return rows
 
-    client_name = None
-    if updated_p.client_id:
-        c_res = await db.execute(select(Client).where(Client.id == updated_p.client_id))
-        cl = c_res.scalar_one_or_none()
-        if cl:
-            client_name = cl.name
 
-    contract_status = None
-    contract_signed = False
-    if updated_p.contracts and len(updated_p.contracts) > 0:
-        latest_c = updated_p.contracts[-1]
-        contract_status = latest_c.status
-        contract_signed = latest_c.status == "signed"
+@router.post("/{project_id}/files", response_model=ProjectFileOut, status_code=status.HTTP_201_CREATED)
+async def register_project_file(
+    project_id: str,
+    payload: ProjectFileIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    project = await db.scalar(
+        select(Project).where(Project.id == project_id, Project.workspace_id == workspace.id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    completed_milestones = sum(1 for m in updated_p.milestones if m.is_completed)
-    total_milestones = len(updated_p.milestones)
-    progress_pct = calculate_progress(updated_p.milestones, updated_p.tasks, updated_p.status)
+    if ".." in payload.file_key or payload.file_key.startswith("/"):
+        raise HTTPException(status_code=422, detail="Invalid file key")
 
-    active_tasks = sum(1 for t in updated_p.tasks if t.status != "done")
-    completed_tasks = sum(1 for t in updated_p.tasks if t.status == "done")
+    file = ProjectFile(
+        project_id=project_id,
+        workspace_id=workspace.id,
+        file_key=payload.file_key,
+        file_name=payload.file_name,
+        content_type=payload.content_type,
+        size_bytes=payload.size_bytes,
+        category=payload.category,
+    )
+    db.add(file)
+    await db.commit()
+    await db.refresh(file)
+    return file
 
-    return {
-        "id": updated_p.id,
-        "title": updated_p.title,
-        "description": updated_p.description,
-        "status": updated_p.status,
-        "budget": updated_p.budget,
-        "share_token": updated_p.share_token,
-        "progress_pct": progress_pct,
-        "freelancer_name": workspace.name if workspace else "",
-        "client_name": client_name,
-        "milestones": updated_p.milestones,
-        "completed_milestones_count": completed_milestones,
-        "total_milestones_count": total_milestones,
-        "active_tasks_count": active_tasks,
-        "completed_tasks_count": completed_tasks,
-        "contract_status": contract_status,
-        "contract_signed": contract_signed,
-        "created_at": updated_p.created_at
-    }
+
+@router.delete("/{project_id}/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_file(
+    project_id: str,
+    file_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    file = await db.scalar(
+        select(ProjectFile).where(
+            ProjectFile.id == file_id,
+            ProjectFile.project_id == project_id,
+            ProjectFile.workspace_id == workspace.id
+        )
+    )
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    await db.delete(file)
+    await db.commit()
+

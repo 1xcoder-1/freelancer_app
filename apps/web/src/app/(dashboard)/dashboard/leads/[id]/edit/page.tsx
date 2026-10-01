@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getLead, updateLead, type Lead, type LeadStage } from "@/lib/api";
+import { getLead, updateLead, closeLead, type Lead, type LeadStage } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -112,7 +112,7 @@ export default function EditLeadPage() {
   const [source, setSource] = useState("Referral");
   const [estimatedValue, setEstimatedValue] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  const [priority, setPriority] = useState<Lead["priority"]>("medium");
   const [stage, setStage] = useState<LeadStage>("new");
   const [followUpDays, setFollowUpDays] = useState("3");
   const [category, setCategory] = useState("Featured");
@@ -160,7 +160,7 @@ export default function EditLeadPage() {
             setCurrency(currMatch[1].trim());
           }
 
-          let cleanNotes = l.notes
+          const cleanNotes = l.notes
             .replace(/\[category:\s*[^\]]+\]/gi, "")
             .replace(/\[currency:\s*[^\]]+\]/gi, "")
             .replace(/\[object Object\]/gi, "")
@@ -223,22 +223,25 @@ export default function EditLeadPage() {
 
     try {
       const token = (await getToken()) || undefined;
-      await updateLead(
-        leadId,
-        {
-          name: name.trim(),
-          company: company.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          source,
-          stage,
-          priority,
-          estimated_value: numericVal,
-          next_follow_up_at: nextFollowUp,
-          notes: finalNotes,
-        },
-        token
-      );
+      const basePayload: Partial<Lead> = {
+        name: name.trim(),
+        company: company.trim() || undefined,
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        source,
+        priority,
+        estimated_value: numericVal,
+        next_follow_up_at: nextFollowUp,
+        notes: finalNotes,
+      };
+      if (stage === "won" || stage === "lost") {
+        // SE8: a terminal stage is a decision, not a field edit — the generic
+        // PATCH rejects it, so save the details then close through /close.
+        await updateLead(leadId, basePayload, token);
+        await closeLead(leadId, { outcome: stage }, token);
+      } else {
+        await updateLead(leadId, { ...basePayload, stage }, token);
+      }
 
       invalidateCache("leads:data");
       invalidateCache("leads:insights");
@@ -276,7 +279,7 @@ export default function EditLeadPage() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Lead</span>
           </Link>
-          <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-fg">
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
             Edit Lead
           </h1>
         </div>
@@ -510,12 +513,13 @@ export default function EditLeadPage() {
                 <div className="relative w-full">
                   <select
                     value={priority}
-                    onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
+                    onChange={(e) => setPriority(e.target.value as Lead["priority"])}
                     className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all capitalize"
                   >
                     <option value="low">Low Priority</option>
                     <option value="medium">Medium Priority</option>
                     <option value="high">High Priority</option>
+                    <option value="urgent">Urgent</option>
                   </select>
                   <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
                 </div>

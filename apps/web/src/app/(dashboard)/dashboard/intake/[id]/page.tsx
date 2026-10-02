@@ -18,6 +18,8 @@ import {
   Users,
   Target,
   ArrowUpRight,
+  Sparkles,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -173,7 +175,7 @@ export default function IntakeDetailPage() {
   const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/intake/${shareToken}` : `/intake/${shareToken}`;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
       {/* Top Navigation & Header */}
       <div className="space-y-4 pb-4 border-b border-line">
         <Link
@@ -186,7 +188,7 @@ export default function IntakeDetailPage() {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5">
-            {/* Colorful soft pill tags matching reference image */}
+            {/* Colorful soft pill tags matching Clients & Leads pattern */}
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1 capitalize">
                 {form.title}
@@ -194,7 +196,7 @@ export default function IntakeDetailPage() {
 
               {/* Status Pill */}
               <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 capitalize">
-                {form.status || "Active Form"}
+                {form.status || "Active Questionnaire"}
               </span>
 
               {/* Category Pill */}
@@ -209,7 +211,7 @@ export default function IntakeDetailPage() {
             </div>
 
             {cleanDescription && (
-              <p className="text-xs text-muted font-normal">
+              <p className="text-xs text-muted font-normal max-w-2xl">
                 {cleanDescription}
               </p>
             )}
@@ -233,7 +235,7 @@ export default function IntakeDetailPage() {
               size="sm"
               onClick={handleDelete}
               disabled={deleting}
-              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10"
+              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10 cursor-pointer"
               title="Delete Form"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -244,13 +246,13 @@ export default function IntakeDetailPage() {
 
       {/* Main Details Grid (2 Columns: Main 8 cols, Side 4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Public Link, Questions & Responses (8 cols) */}
+        {/* Left Column: Public Link, Fields & Answers (8 cols) */}
         <div className="lg:col-span-8 space-y-5">
           {/* Share Box Card */}
           <div className="p-5 rounded-2xl bg-card border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <span className="text-xs font-medium text-muted">Public Client Share Link</span>
-              <div className="text-sm font-mono text-fg break-all select-all">
+              <div className="text-xs sm:text-sm font-mono text-fg break-all select-all">
                 {publicUrl}
               </div>
             </div>
@@ -274,7 +276,7 @@ export default function IntakeDetailPage() {
                 href={`/intake/${shareToken}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center text-xs rounded-xl h-9 px-3.5 bg-accent hover:bg-accent-hi text-accent-fg font-medium transition-colors"
+                className="inline-flex items-center justify-center text-xs rounded-xl h-9 px-3.5 bg-accent hover:bg-accent-hi text-accent-fg font-medium transition-colors cursor-pointer"
               >
                 <span>Live View</span>
                 <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
@@ -287,7 +289,7 @@ export default function IntakeDetailPage() {
             <div className="flex items-center justify-between pb-2 border-b border-line">
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-accent" />
-                <h2 className="text-sm font-medium text-fg">
+                <h2 className="font-display text-base font-medium tracking-wide text-fg">
                   Questionnaire Fields ({questionsList.length})
                 </h2>
               </div>
@@ -303,10 +305,10 @@ export default function IntakeDetailPage() {
                   className="p-3.5 rounded-xl bg-surface/40 border border-line flex items-center justify-between gap-3 text-xs"
                 >
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    <span className="font-mono text-accent font-bold px-2 py-0.5 rounded-md bg-accent-soft shrink-0">
+                    <span className="font-mono text-accent font-bold px-2 py-0.5 rounded-md bg-accent-soft shrink-0 text-xs">
                       #{i + 1}
                     </span>
-                    <span className="text-fg font-medium truncate">
+                    <span className="text-fg font-medium truncate sm:text-xs text-[11px]">
                       {q.label}
                     </span>
                   </div>
@@ -331,7 +333,7 @@ export default function IntakeDetailPage() {
             <div className="flex items-center justify-between pb-2 border-b border-line">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-accent" />
-                <h2 className="text-sm font-medium text-fg">
+                <h2 className="font-display text-base font-medium tracking-wide text-fg">
                   Received Client Answers ({submissions.length})
                 </h2>
               </div>
@@ -348,9 +350,9 @@ export default function IntakeDetailPage() {
                 {submissions.map((sub) => (
                   <div
                     key={sub.id}
-                    className="p-4 rounded-2xl bg-surface/30 border border-line space-y-3"
+                    className="p-4 sm:p-5 rounded-2xl bg-surface/30 border border-line space-y-3.5"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line/60 pb-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line/60 pb-3">
                       <div>
                         <h4 className="text-sm font-medium text-fg">{sub.client_name || "Anonymous Prospect"}</h4>
                         <p className="text-xs text-accent font-mono">{sub.client_email || "No email"}</p>
@@ -358,31 +360,40 @@ export default function IntakeDetailPage() {
 
                       <div className="flex items-center gap-2 self-start sm:self-auto">
                         <span className="text-[11px] text-muted font-mono">
-                          {new Date(sub.created_at).toLocaleDateString()}
+                          {new Date(sub.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
                         </span>
-
-                        {sub.client_email && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleConvertToLead(sub)}
-                            disabled={convertingId === sub.id}
-                            className="text-xs rounded-xl h-8 px-3 border-accent/30 text-accent hover:bg-accent-soft"
-                          >
-                            <UserPlus className="w-3.5 h-3.5 mr-1" />
-                            {convertingId === sub.id ? "Converting..." : "Add to Leads"}
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleConvertToLead(sub)}
+                          disabled={convertingId === sub.id}
+                          className="text-xs rounded-xl h-8 px-3 border-line cursor-pointer"
+                        >
+                          {convertingId === sub.id ? (
+                            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Target className="w-3.5 h-3.5 mr-1.5 text-accent" />
+                          )}
+                          Convert to Lead
+                        </Button>
                       </div>
                     </div>
 
                     <div className="space-y-2 text-xs">
-                      {Object.entries(sub.answers || {}).map(([key, val]) => (
-                        <div key={key} className="p-2.5 rounded-xl bg-card border border-line">
-                          <span className="text-muted font-medium block mb-0.5">{key}:</span>
-                          <span className="text-fg whitespace-pre-wrap">{String(val)}</span>
-                        </div>
-                      ))}
+                      {Object.entries(sub.answers || {}).map(([key, val]) => {
+                        const matchedQuestion = questionsList.find((q: any) => q.id === key);
+                        const questionLabel = matchedQuestion?.label || `Question (${key})`;
+                        return (
+                          <div key={key} className="bg-card/70 p-3 rounded-xl border border-line/50 space-y-1">
+                            <span className="text-muted block text-[11px] font-medium">{questionLabel}</span>
+                            <p className="text-fg font-medium leading-relaxed whitespace-pre-wrap">{String(val)}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -391,68 +402,97 @@ export default function IntakeDetailPage() {
           </Card>
         </div>
 
-        {/* Right Column: Metadata & Quick Links (4 cols) */}
+        {/* Right Column: Questionnaire Details & Quick Actions (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
           <Card className="p-5 rounded-2xl border-line bg-card space-y-4">
-            <h2 className="text-sm font-medium text-fg pb-2 border-b border-line">
-              Form Overview
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2 border-b border-line">
+              Questionnaire Details
             </h2>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3">
               <div>
-                <span className="text-muted block mb-0.5">Assigned Category</span>
-                <span className="text-fg font-medium capitalize">{category}</span>
-              </div>
-
-              <div>
-                <span className="text-muted block mb-0.5">Total Questions</span>
-                <span className="text-fg font-mono font-medium">{questionsList.length}</span>
-              </div>
-
-              <div>
-                <span className="text-muted block mb-0.5">Responses Received</span>
-                <span className="text-fg font-mono font-medium">{submissions.length}</span>
-              </div>
-
-              <div>
-                <span className="text-muted block mb-0.5">Form Status</span>
-                <span className="text-fg font-medium capitalize">{form.status || "Active"}</span>
-              </div>
-
-              <div>
-                <span className="text-muted block mb-0.5">Created Date</span>
-                <span className="text-fg font-mono">
-                  {new Date(form.created_at).toLocaleDateString()}
+                <span className="text-[11px] font-medium text-muted uppercase tracking-wider block mb-0.5">
+                  Status
+                </span>
+                <span className="text-[13px] sm:text-sm text-emerald-500 font-medium capitalize block">
+                  {form.status || "Active"}
                 </span>
               </div>
+
+              <div>
+                <span className="text-[11px] font-medium text-muted uppercase tracking-wider block mb-0.5">
+                  Category
+                </span>
+                <span className="text-[13px] sm:text-sm text-fg font-medium block">
+                  {category}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-medium text-muted uppercase tracking-wider block mb-0.5">
+                  Fields Count
+                </span>
+                <span className="text-[13px] sm:text-sm text-fg font-mono font-medium block">
+                  {questionsList.length} Questions
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-medium text-muted uppercase tracking-wider block mb-0.5">
+                  Submissions
+                </span>
+                <span className="text-[13px] sm:text-sm text-fg font-mono font-medium block">
+                  {submissions.length} Responses Received
+                </span>
+              </div>
+
+              {form.created_at && (
+                <div>
+                  <span className="text-[11px] font-medium text-muted uppercase tracking-wider block mb-0.5">
+                    Created On
+                  </span>
+                  <span className="text-[13px] sm:text-sm text-fg font-medium block">
+                    {new Date(form.created_at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+              )}
             </div>
           </Card>
 
-          {/* Quick Module Links */}
+          {/* Quick Shortcuts matching Client & Lead pages */}
           <div className="space-y-2">
-            <Link href="/dashboard/leads" className="block">
+            <a
+              href={`/intake/${shareToken}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-between text-xs font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
+                className="w-full justify-between h-10 px-3.5 text-xs sm:text-[13px] font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
               >
-                <span className="flex items-center gap-2 text-fg">
-                  <Target className="w-3.5 h-3.5 text-accent" />
-                  Pipeline Leads
+                <span className="flex items-center gap-2.5 text-fg font-medium">
+                  <ExternalLink className="w-4 h-4 text-accent" />
+                  Preview Live Form
                 </span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors" />
               </Button>
-            </Link>
+            </a>
 
-            <Link href="/dashboard/clients" className="block">
+            <Link href={`/dashboard/intake/${form.id}/edit`} className="block">
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-between text-xs font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
+                className="w-full justify-between h-10 px-3.5 text-xs sm:text-[13px] font-medium rounded-xl border-line bg-card hover:bg-surface/60 group transition-all cursor-pointer"
               >
-                <span className="flex items-center gap-2 text-fg">
-                  <Users className="w-3.5 h-3.5 text-accent" />
-                  Clients Roster
+                <span className="flex items-center gap-2.5 text-fg font-medium">
+                  <Pencil className="w-4 h-4 text-accent" />
+                  Edit Questionnaire
                 </span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors" />
               </Button>

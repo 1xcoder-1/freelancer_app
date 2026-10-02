@@ -7,22 +7,20 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  FileText,
+  ClipboardCheck,
+  MessageSquare,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/dashboard/patterns";
 import { getIntakeForms, type IntakeForm } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
-
-const DEFAULT_CATEGORIES = [
-  "Featured",
-  "Client Onboarding",
-  "Project Discovery",
-  "Feedback & Reviews",
-  "Design Sprints",
-];
 
 const CARDS_PER_PAGE = 20;
 
@@ -74,46 +72,103 @@ export function IntakePanel() {
     categoriesPresent.push("Featured");
   }
 
+  const totalForms = forms.length;
+  const activeForms = forms.filter((f) => f.status !== "archived").length;
+  const totalSubmissions = forms.reduce((sum, f) => sum + (f.submissions_count || 0), 0);
+  const categoriesCount = categoriesPresent.length;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-              Intake Questionnaires
-            </h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
-              {loading ? "Loading..." : `${forms.length} Total`}
-            </Badge>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Categorized intake flows to collect project scope, goals, and assets from clients.
-          </p>
+    <div className="space-y-6 animate-in fade-in duration-300 no-scrollbar scrollbar-none">
+      {/* 4 Headline Cards at the top matching Dashboard, Leads & Clients */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        {loading && forms.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Questionnaires"
+              value={totalForms}
+              icon={FileText}
+              rows={[
+                {
+                  text: `${activeForms} Active · ${totalForms - activeForms} Drafts`,
+                  dot: "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Active Flows"
+              value={activeForms}
+              icon={ClipboardCheck}
+              rows={[
+                {
+                  text: activeForms > 0 ? `${activeForms} Published Live` : "No Active Flows",
+                  dot: activeForms > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Responses"
+              value={totalSubmissions}
+              icon={MessageSquare}
+              rows={[
+                {
+                  text: totalSubmissions > 0 ? `${totalSubmissions} Client Answers` : "No Responses Yet",
+                  dot: totalSubmissions > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Categories"
+              value={categoriesCount}
+              icon={Layers}
+              rows={[
+                {
+                  text: `${categoriesCount} Flow Groups`,
+                  dot: "info",
+                },
+              ]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row matching Clients & Leads layout */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {totalForms} Total Questionnaire{totalForms === 1 ? "" : "s"}
+          </Badge>
+          <span className="text-xs font-mono text-muted hidden sm:inline">
+            across {categoriesCount} categor{categoriesCount === 1 ? "y" : "ies"}
+          </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => fetchForms(true)}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            className="rounded-xl bg-card border-line text-fg w-9 h-9 p-0 flex items-center justify-center shrink-0 cursor-pointer"
             title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
-          <button
+          <Button
+            size="sm"
             onClick={() => handleOpenCreate()}
-            className="relative group overflow-hidden rounded-xl p-[1px] font-semibold text-xs transition-all duration-300 shadow-sm hover:shadow-accent/25 hover:shadow-md active:scale-[0.98]"
+            className="rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-medium text-xs px-4 h-9 shadow-xs cursor-pointer"
           >
-            <span className="absolute inset-0 bg-gradient-to-r from-accent via-amber-400 to-accent rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
-            <span className="relative flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-accent group-hover:bg-accent-hi text-accent-fg transition-colors duration-200 font-bold">
-              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
-              <span>Add Questionnaire</span>
-            </span>
-          </button>
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Add Questionnaire
+          </Button>
         </div>
       </div>
 
@@ -142,7 +197,7 @@ export function IntakePanel() {
           </p>
           <Button
             onClick={() => handleOpenCreate()}
-            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
+            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold rounded-xl"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Create First Questionnaire
@@ -178,83 +233,76 @@ export function IntakePanel() {
             return (
               <div key={cat} className="space-y-4">
                 {/* Category Header with Title, Count, Underline & Sliding Navigation */}
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-                  <div className="inline-flex flex-col items-start space-y-1.5">
-                    <h3 className="font-display text-base md:text-lg font-medium tracking-wide text-fg">
-                      {cat}
+                <div className="flex items-center justify-between gap-4 pb-2 border-b border-line/60">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-display text-lg font-medium text-fg flex items-center gap-2">
+                      <span>{cat}</span>
+                      <span className="text-xs font-mono font-normal text-muted">
+                        ({catForms.length})
+                      </span>
                     </h3>
-                    {/* Straight orange line under category title */}
-                    <div className="w-full h-[2.5px] bg-accent rounded-full shadow-xs" />
                   </div>
 
-                  {/* Sliding Pagination Controls (Shown when category has > 20 cards or multi-page) */}
+                  {/* Pagination Controls (if > 20 cards) */}
                   {totalPages > 1 && (
-                    <div className="flex items-center gap-2 self-start sm:self-auto bg-card/90 backdrop-blur-md border border-line/80 px-3 py-1.5 rounded-2xl shadow-sm">
-                      <span className="text-xs font-mono text-muted hidden sm:inline mr-1">
-                        Showing <strong className="text-fg">{startIndex + 1}–{endIndex}</strong> of {catForms.length}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-muted">
+                        Page {currentPage} of {totalPages}
                       </span>
-
-                      {/* Slider Navigation Buttons */}
-                      <div className="flex items-center gap-1 bg-surface/90 p-0.5 rounded-xl border border-line/70">
-                        <button
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={handlePrevPage}
-                          disabled={currentPage <= 1}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
-                          title="Previous 20 Cards"
-                          aria-label="Previous page"
+                          disabled={currentPage === 1}
+                          className="h-7 w-7 p-0 rounded-lg border-line"
                         >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-
-                        <div className="px-2.5 py-0.5 text-xs font-mono font-bold text-accent bg-accent/10 rounded-md">
-                          {currentPage} / {totalPages}
-                        </div>
-
-                        <button
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={handleNextPage}
-                          disabled={currentPage >= totalPages}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
-                          title="Next 20 Cards"
-                          aria-label="Next page"
+                          disabled={currentPage === totalPages}
+                          className="h-7 w-7 p-0 rounded-lg border-line"
                         >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
+                {/* Cards Grid with Category Visual Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
                   {visibleForms.map((form) => {
-                    const questionsList = Array.isArray(form.questions) ? form.questions : [];
-                    const submissionsCount = form.submissions_count || 0;
+                    const qCount = Array.isArray(form.questions) ? form.questions.length : 0;
+                    const subCount = form.submissions_count || 0;
 
                     return (
-                      <CategoryVisualCard
+                      <div
                         key={form.id}
-                        title={form.title}
-                        currentCount={submissionsCount}
-                        totalCount={questionsList.length || 1}
-                        subtitle={`By ${cat}`}
-                        category={cat}
                         onClick={() => handleOpenDetail(form)}
-                        tags={
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/10 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25 capitalize">
-                              {cat}
-                            </span>
-                            <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
-                              {questionsList.length} Question{questionsList.length === 1 ? "" : "s"}
-                            </span>
-                            {submissionsCount > 0 && (
-                              <span className="text-[11px] font-mono font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/20 dark:border-emerald-500/25">
-                                {submissionsCount} Answer{submissionsCount === 1 ? "" : "s"}
+                        className="cursor-pointer group block"
+                      >
+                        <CategoryVisualCard
+                          title={form.title}
+                          currentCount={subCount}
+                          totalCount={qCount}
+                          subtitle={`${subCount} submission${subCount === 1 ? "" : "s"}`}
+                          category={cat}
+                          tags={
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25">
+                                {form.status || "active"}
                               </span>
-                            )}
-                          </div>
-                        }
-                      />
+                              <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
+                                {qCount} Questions
+                              </span>
+                            </div>
+                          }
+                        />
+                      </div>
                     );
                   })}
                 </div>

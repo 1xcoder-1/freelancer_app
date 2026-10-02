@@ -10,6 +10,9 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  ClipboardList,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +30,13 @@ const DEFAULT_CATEGORIES = [
   "Design Sprints",
 ];
 
+const RESPONSE_TYPES = [
+  { value: "text", label: "Short Text" },
+  { value: "textarea", label: "Long Paragraph" },
+  { value: "number", label: "Numeric Value" },
+  { value: "file", label: "File Upload / Link" },
+];
+
 const intakeFormSchema = z.object({
   title: z
     .string()
@@ -41,6 +51,56 @@ interface QuestionItem {
   label: string;
   type: string;
   required: boolean;
+}
+
+function CustomTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = RESPONSE_TYPES.find((t) => t.value === value) || RESPONSE_TYPES[0];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="h-8 px-2.5 rounded-lg border border-line bg-card hover:bg-surface/70 text-fg text-xs flex items-center justify-between gap-2 min-w-[130px] transition-all cursor-pointer"
+      >
+        <span className="truncate">{selected.label}</span>
+        <ChevronDown className="w-3.5 h-3.5 text-muted shrink-0" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 w-44 rounded-xl border border-line bg-card p-1 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+            {RESPONSE_TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => {
+                  onChange(t.value);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors text-left cursor-pointer ${
+                  value === t.value
+                    ? "bg-accent-soft text-accent font-medium"
+                    : "text-fg hover:bg-surface"
+                }`}
+              >
+                <span>{t.label}</span>
+                {value === t.value && <Check className="w-3.5 h-3.5 text-accent shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function EditIntakeFormPage() {
@@ -181,7 +241,7 @@ export default function EditIntakeFormPage() {
       const formattedQuestions = questions.map((q, idx) => ({
         id: q.id || `q_${idx + 1}`,
         label: q.label.trim(),
-        type: q.type as "text" | "textarea" | "select" | "file",
+        type: q.type as "text" | "textarea" | "number" | "file",
         required: q.required,
       }));
 
@@ -212,7 +272,7 @@ export default function EditIntakeFormPage() {
     return (
       <div className="max-w-5xl mx-auto py-24 text-center space-y-3">
         <Loader2 className="w-7 h-7 animate-spin text-accent mx-auto" />
-        <p className="text-xs text-muted font-medium">Loading form editor...</p>
+        <p className="text-xs text-muted font-medium">Loading questionnaire for editing...</p>
       </div>
     );
   }
@@ -221,9 +281,7 @@ export default function EditIntakeFormPage() {
     return (
       <div className="max-w-md mx-auto py-24 text-center space-y-4">
         <h2 className="text-lg font-medium text-fg">Questionnaire Not Found</h2>
-        <p className="text-xs text-muted">
-          This questionnaire may have been removed.
-        </p>
+        <p className="text-xs text-muted">This questionnaire could not be found.</p>
         <Link href="/dashboard/intake">
           <Button className="rounded-xl px-4 text-xs bg-accent hover:bg-accent-hi text-accent-fg font-medium cursor-pointer">
             Back to Intake Forms
@@ -234,7 +292,7 @@ export default function EditIntakeFormPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div className="space-y-1">
@@ -243,33 +301,33 @@ export default function EditIntakeFormPage() {
             className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors mb-1"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Questionnaire</span>
+            <span>Back to Questionnaire Preview</span>
           </Link>
           <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-            Edit Questionnaire
+            Edit Intake Questionnaire
           </h1>
           <p className="text-xs text-muted">
-            Update questions, category, or welcome message.
+            Update questionnaire title, welcome message, and requirement fields.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Link href={`/dashboard/intake/${formId}`}>
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line">
+            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line cursor-pointer">
               Cancel
             </Button>
           </Link>
           <Button
             size="sm"
             type="submit"
-            form="edit-intake-form"
+            form="intake-edit-form"
             disabled={saving}
-            className="text-xs rounded-xl h-9 px-5 bg-accent hover:bg-accent-hi text-accent-fg font-medium shadow-xs"
+            className="text-xs rounded-xl h-9 px-5 bg-accent hover:bg-accent-hi text-accent-fg font-medium shadow-xs cursor-pointer"
           >
             {saving ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                Saving...
+                Saving Changes...
               </>
             ) : (
               <span>Save Changes</span>
@@ -279,13 +337,13 @@ export default function EditIntakeFormPage() {
       </div>
 
       {/* Main Form Grid */}
-      <form id="edit-intake-form" onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <form id="intake-edit-form" onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Form Fields (7 cols) */}
         <div className="lg:col-span-7 space-y-5">
           {/* 1. General & Category */}
           <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
             <h2 className="text-sm font-medium text-fg">
-              Form Details & Category
+              Form Details &amp; Category
             </h2>
 
             <div className="space-y-4">
@@ -302,7 +360,7 @@ export default function EditIntakeFormPage() {
                     if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
                   }}
                   placeholder="e.g. Website Discovery & Scope Questionnaire"
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-xs sm:text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
                     errors.title ? "border-danger" : "border-line"
                   }`}
                 />
@@ -322,7 +380,7 @@ export default function EditIntakeFormPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   placeholder="e.g. Please fill out this brief questionnaire so we can prepare your quote and timeline."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs focus:border-accent focus:bg-card focus:outline-none transition-all resize-none no-scrollbar scrollbar-none"
                 />
               </div>
 
@@ -342,7 +400,7 @@ export default function EditIntakeFormPage() {
                           setCategory(c);
                           setCustomCategory("");
                         }}
-                        className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all ${
+                        className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all cursor-pointer ${
                           active
                             ? "bg-accent text-accent-fg border-accent shadow-xs font-semibold"
                             : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
@@ -367,16 +425,19 @@ export default function EditIntakeFormPage() {
 
           {/* 2. Questions Builder */}
           <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-fg">
-                Questionnaire Fields ({questions.length})
-              </h2>
+            <div className="flex items-center justify-between pb-2 border-b border-line">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-accent" />
+                <h2 className="text-sm font-medium text-fg">
+                  Questionnaire Fields ({questions.length})
+                </h2>
+              </div>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={handleAddQuestion}
-                className="text-xs rounded-xl h-8 px-3 border-accent/30 text-accent hover:bg-accent-soft"
+                className="text-xs rounded-xl h-8 px-3 border-accent/30 text-accent hover:bg-accent-soft cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 mr-1" />
                 Add Field
@@ -390,7 +451,7 @@ export default function EditIntakeFormPage() {
                   className="p-3.5 rounded-2xl bg-surface/40 border border-line space-y-3"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-accent px-2 py-0.5 rounded-md bg-accent-soft">
+                    <span className="text-xs font-mono font-bold text-accent px-2 py-0.5 rounded-md bg-accent-soft shrink-0">
                       #{idx + 1}
                     </span>
                     <input
@@ -399,7 +460,7 @@ export default function EditIntakeFormPage() {
                       placeholder="Enter question prompt..."
                       value={q.label}
                       onChange={(e) => handleQuestionChange(idx, "label", e.target.value)}
-                      className="flex-1 h-9 px-3 rounded-xl bg-card border border-line text-fg text-xs sm:text-sm focus:outline-none focus:border-accent"
+                      className="flex-1 h-9 px-3 rounded-xl bg-card border border-line text-fg text-xs focus:outline-none focus:border-accent"
                     />
                     {questions.length > 1 && (
                       <Button
@@ -407,7 +468,7 @@ export default function EditIntakeFormPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => handleRemoveQuestion(idx)}
-                        className="text-muted hover:text-danger hover:bg-danger/10 p-1.5 h-8 w-8 rounded-lg"
+                        className="text-muted hover:text-danger hover:bg-danger/10 p-1.5 h-8 w-8 rounded-lg shrink-0 cursor-pointer"
                         title="Remove Question"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -417,27 +478,21 @@ export default function EditIntakeFormPage() {
 
                   <div className="flex items-center justify-between gap-4 text-xs pt-1 border-t border-line/40">
                     <div className="flex items-center gap-2">
-                      <span className="text-muted">Response Type:</span>
-                      <select
+                      <span className="text-muted text-[11px]">Type:</span>
+                      <CustomTypeSelect
                         value={q.type}
-                        onChange={(e) => handleQuestionChange(idx, "type", e.target.value)}
-                        className="h-8 px-2.5 rounded-lg bg-card border border-line text-fg text-xs focus:outline-none cursor-pointer"
-                      >
-                        <option value="text">Short Text</option>
-                        <option value="textarea">Long Paragraph</option>
-                        <option value="number">Numeric</option>
-                        <option value="file">File Upload / Link</option>
-                      </select>
+                        onChange={(val) => handleQuestionChange(idx, "type", val)}
+                      />
                     </div>
 
-                    <label className="flex items-center gap-1.5 text-muted cursor-pointer select-none">
+                    <label className="flex items-center gap-1.5 text-muted cursor-pointer select-none text-xs">
                       <input
                         type="checkbox"
                         checked={q.required}
                         onChange={(e) => handleQuestionChange(idx, "required", e.target.checked)}
-                        className="rounded border-line text-accent focus:ring-0"
+                        className="rounded border-line text-accent focus:ring-0 accent-accent"
                       />
-                      <span>Required</span>
+                      <span>Required Field</span>
                     </label>
                   </div>
                 </div>
@@ -457,7 +512,7 @@ export default function EditIntakeFormPage() {
             title={title.trim() || "Website Discovery & Scope"}
             currentCount={submissionsCount}
             totalCount={questions.length}
-            subtitle={`By ${effectiveCategory}`}
+            subtitle={`${submissionsCount} submission${submissionsCount === 1 ? "" : "s"}`}
             category={effectiveCategory}
             tags={
               <div className="flex flex-wrap items-center gap-1.5">

@@ -60,17 +60,17 @@ export function StatCard({
     >
       {/* Top Header Row */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-[17px] font-medium text-[#f4f4f5] leading-snug whitespace-pre-line tracking-wide">
+        <h3 className="font-display text-sm sm:text-[15px] font-medium text-[#f4f4f5] leading-snug whitespace-pre-line tracking-wide">
           {label}
         </h3>
         {Icon && (
-          <Icon className="w-5 h-5 text-[#d4d4d8] opacity-90 shrink-0 mt-0.5" />
+          <Icon className="w-4 h-4 text-[#d4d4d8] opacity-90 shrink-0 mt-0.5" />
         )}
       </div>
 
       {/* Primary Value */}
       <div className="my-auto py-1">
-        <div className="font-display text-4xl sm:text-[40px] font-medium text-white tracking-tight leading-none">
+        <div className="font-display text-2xl sm:text-3xl font-medium text-white tracking-tight leading-none">
           {value}
         </div>
       </div>

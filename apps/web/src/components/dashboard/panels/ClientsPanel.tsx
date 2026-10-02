@@ -10,17 +10,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  Crown,
+  Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getClients, type Client } from "@/lib/api";
+import { StatCard } from "@/components/dashboard/patterns";
+import { getClients, getProjects, type Client, type Project } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
-import { invalidateCache } from "@/lib/cache";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
-const DEFAULT_CATEGORIES = ["Featured", "VIP & Enterprise", "Active Retainers", "General Clients"];
+const DEFAULT_CATEGORIES = ["Featured", "VIP & Enterprise", "Repeat Clients", "Active Retainers", "General Clients"];
 const CARDS_PER_PAGE = 20;
 
 export function ClientsPanel() {
@@ -36,7 +38,16 @@ export function ClientsPanel() {
     { pollMs: 20000, reportContext: "clients" }
   );
 
+  const { data: projectsData, refresh: loadProjects } = useApiData<Project[]>(
+    "projects:data",
+    async (token) => {
+      return await getProjects(token);
+    },
+    { pollMs: 20000, reportContext: "clients-projects" }
+  );
+
   const clients = clientsData ?? [];
+  const projects = projectsData ?? [];
 
   // Helper to get effective category for a client
   const getClientCategory = (c: Client): string => {
@@ -118,29 +129,108 @@ export function ClientsPanel() {
     return { rateDisplay, clientCurrency, isVip };
   };
 
+  const totalClients = clients.length;
+  const vipClients = clients.filter((c) => c.status === "vip" || (c.notes && c.notes.includes("[vip: true]"))).length;
+
+  // Real-time calculation: Count projects per client
+  const projectsByClientId: Record<string, number> = {};
+  for (const p of projects) {
+    if (p.client_id) {
+      projectsByClientId[p.client_id] = (projectsByClientId[p.client_id] || 0) + 1;
+    }
+  }
+
+  const repeatClients = clients.filter(
+    (c) =>
+      (projectsByClientId[c.id] && projectsByClientId[c.id] >= 2) ||
+      getClientCategory(c).toLowerCase().includes("repeat") ||
+      (c.notes && c.notes.toLowerCase().includes("repeat"))
+  ).length;
+
+  const categoriesCount = categoriesPresent.length;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Clients Roster</h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
-              {loading ? "Loading..." : `${clients.length} Total`}
-            </Badge>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Categorized roster of clients, retainers, and enterprise accounts.
-          </p>
+    <div className="space-y-6 animate-in fade-in duration-300 no-scrollbar scrollbar-none">
+      {/* 4 Headline Cards at the top */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        {loading && clients.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Clients"
+              value={totalClients}
+              icon={Users}
+              rows={[
+                {
+                  text: `${vipClients} VIP · ${totalClients - vipClients} Standard`,
+                  dot: "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="VIP Accounts"
+              value={vipClients}
+              icon={Crown}
+              rows={[
+                {
+                  text: vipClients > 0 ? `${vipClients} Active VIPs` : "No VIPs",
+                  dot: vipClients > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Repeat Clients"
+              value={repeatClients}
+              icon={Repeat}
+              rows={[
+                {
+                  text: repeatClients > 0 ? `${repeatClients} Returning Clients` : "No Repeat Clients",
+                  dot: repeatClients > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Categories"
+              value={categoriesCount}
+              icon={Layers}
+              rows={[
+                {
+                  text: `${categoriesCount} Roster Groups`,
+                  dot: "info",
+                },
+              ]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {totalClients} Total Client{totalClients === 1 ? "" : "s"}
+          </Badge>
+          <span className="text-xs font-mono text-muted hidden sm:inline">
+            across {categoriesCount} categor{categoriesCount === 1 ? "y" : "ies"}
+          </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => loadData(true)}
+            onClick={() => {
+              loadData(true);
+              loadProjects(true);
+            }}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -148,7 +238,7 @@ export function ClientsPanel() {
 
           <button
             onClick={() => handleOpenCreate()}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Client</span>

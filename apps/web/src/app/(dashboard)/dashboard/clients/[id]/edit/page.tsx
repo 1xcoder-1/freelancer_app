@@ -74,6 +74,7 @@ const clientFormSchema = z.object({
 const DEFAULT_CATEGORIES = [
   "Featured",
   "VIP & Enterprise",
+  "Repeat Clients",
   "Active Retainers",
   "High Growth",
   "Strategy & Consulting",

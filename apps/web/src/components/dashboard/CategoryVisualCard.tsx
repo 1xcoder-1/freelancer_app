@@ -107,11 +107,11 @@ export function CategoryVisualCard({
   return (
     <div
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-[20px] border border-zinc-200/90 dark:border-white/10 bg-[#faf9f6] dark:bg-[#141416] hover:bg-white dark:hover:bg-[#18181c] p-5 sm:p-6 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:shadow-md hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/50 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none transition-all duration-200 ease-out hover:-translate-y-1 ${className}`}
+      className={`group relative overflow-hidden rounded-2xl border border-line dark:border-[#26272d] bg-card dark:bg-[#141518] hover:bg-surface/50 dark:hover:bg-[#18181c] hover:border-line-strong dark:hover:border-[#383942] p-5 sm:p-6 shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none transition-all duration-200 ease-out hover:-translate-y-0.5 no-scrollbar scrollbar-none ${className}`}
     >
       {/* Background Subtle Grid & Pixel Block Texture */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.09] transition-opacity duration-300 group-hover:opacity-[0.07] dark:group-hover:opacity-[0.12]"
+        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.08] transition-opacity duration-300 group-hover:opacity-[0.06] dark:group-hover:opacity-[0.11]"
         style={{
           backgroundImage: `
             linear-gradient(to right, #ea580c 1px, transparent 1px),
@@ -124,12 +124,12 @@ export function CategoryVisualCard({
       />
 
       {/* Subtle Warm Amber/Orange Ambient Glow at bottom right corner */}
-      <div className="pointer-events-none absolute -bottom-10 -right-10 w-48 h-48 rounded-full bg-gradient-to-tl from-orange-400/25 via-amber-300/15 to-transparent dark:from-orange-500/25 dark:via-amber-500/10 dark:to-transparent blur-2xl opacity-75 dark:opacity-60 group-hover:opacity-95 dark:group-hover:opacity-85 transition-opacity duration-300" />
+      <div className="pointer-events-none absolute -bottom-10 -right-10 w-48 h-48 rounded-full bg-gradient-to-tl from-orange-400/20 via-amber-300/10 to-transparent dark:from-orange-500/20 dark:via-amber-500/10 dark:to-transparent blur-2xl opacity-70 dark:opacity-60 group-hover:opacity-90 dark:group-hover:opacity-80 transition-opacity duration-300" />
 
       {/* Top Section: Title & Fraction Counter or Top-Right Badge */}
       <div className="relative z-10 flex items-start justify-between gap-3">
         <div className="space-y-1.5 flex-1 min-w-0 pr-2">
-          <h4 className="text-[18px] sm:text-[19.5px] font-medium text-zinc-900 dark:text-white tracking-wide line-clamp-2 transition-colors leading-snug capitalize">
+          <h4 className="font-display text-[15px] sm:text-[16.5px] font-medium text-fg dark:text-[#f4f4f5] tracking-wide line-clamp-2 transition-colors leading-snug capitalize">
             {safeTitle}
           </h4>
           {tags && <div className="flex flex-wrap items-center gap-1.5">{tags}</div>}
@@ -143,8 +143,8 @@ export function CategoryVisualCard({
         ) : hasCounter ? (
           <div className="flex items-center shrink-0 pt-0.5">
             <div className="font-mono text-sm sm:text-base font-semibold tracking-tight flex items-baseline">
-              <span className="text-[#ea580c] dark:text-[#f97316] text-base sm:text-[17px] font-bold">{safeCurrent}</span>
-              <span className="text-zinc-500 dark:text-zinc-400 font-medium text-xs sm:text-sm">/{safeTotal}</span>
+              <span className="text-accent text-base sm:text-[17px] font-bold">{safeCurrent}</span>
+              <span className="text-muted font-medium text-xs sm:text-sm">/{safeTotal}</span>
             </div>
           </div>
         ) : null}
@@ -152,7 +152,7 @@ export function CategoryVisualCard({
 
       {/* Bottom Section: "By Subtitle" & Chai Cup */}
       <div className="relative z-10 flex items-end justify-between gap-2 pt-2">
-        <span className="text-xs sm:text-[13px] text-zinc-500 dark:text-zinc-400 font-normal tracking-wide truncate max-w-[75%] group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors capitalize">
+        <span className="font-display text-xs sm:text-[13px] text-muted dark:text-[#a1a1aa] font-normal tracking-wide truncate max-w-[75%] group-hover:text-fg transition-colors capitalize">
           {displaySubtitle}
         </span>
         <div className="shrink-0 transition-transform duration-300 ease-out group-hover:scale-115 group-hover:rotate-3">

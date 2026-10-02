@@ -10,6 +10,9 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  ClipboardList,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +30,13 @@ const DEFAULT_CATEGORIES = [
   "Design Sprints",
 ];
 
+const RESPONSE_TYPES = [
+  { value: "text", label: "Short Text" },
+  { value: "textarea", label: "Long Paragraph" },
+  { value: "number", label: "Numeric Value" },
+  { value: "file", label: "File Upload / Link" },
+];
+
 const intakeFormSchema = z.object({
   title: z
     .string()
@@ -41,6 +51,55 @@ interface QuestionItem {
   label: string;
   type: string;
   required: boolean;
+}
+
+function CustomTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = RESPONSE_TYPES.find((t) => t.value === value) || RESPONSE_TYPES[0];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="h-8 px-2.5 rounded-lg border border-line bg-card hover:bg-surface/70 text-fg text-xs flex items-center justify-between gap-2 min-w-[130px] transition-all cursor-pointer"
+      >
+        <span className="truncate">{selected.label}</span>
+        <ChevronDown className="w-3.5 h-3.5 text-muted shrink-0" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 w-44 rounded-xl border border-line bg-card p-1 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+            {RESPONSE_TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => {
+                  onChange(t.value);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors text-left cursor-pointer ${value === t.value
+                    ? "bg-accent-soft text-accent font-medium"
+                    : "text-fg hover:bg-surface"
+                  }`}
+              >
+                <span>{t.label}</span>
+                {value === t.value && <Check className="w-3.5 h-3.5 text-accent shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function NewIntakeFormPage() {
@@ -102,7 +161,6 @@ export default function NewIntakeFormPage() {
       return;
     }
 
-    // Validate that questions have labels
     const emptyQ = questions.some((q) => !q.label.trim());
     if (emptyQ) {
       toast.error("Please enter a question prompt for all question items");
@@ -119,7 +177,7 @@ export default function NewIntakeFormPage() {
       const formattedQuestions = questions.map((q, idx) => ({
         id: q.id || `q_${idx + 1}`,
         label: q.label.trim(),
-        type: q.type as "text" | "textarea" | "select" | "file",
+        type: q.type as "text" | "textarea" | "number" | "file",
         required: q.required,
       }));
 
@@ -145,7 +203,7 @@ export default function NewIntakeFormPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div className="space-y-1">
@@ -159,14 +217,13 @@ export default function NewIntakeFormPage() {
           <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
             New Intake Questionnaire
           </h1>
-          <p className="text-xs text-muted">
-            Create a custom client intake form with scope questions and shareable link.
-          </p>
+
+
         </div>
 
         <div className="flex items-center gap-2">
           <Link href="/dashboard/intake">
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line">
+            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line cursor-pointer">
               Cancel
             </Button>
           </Link>
@@ -175,7 +232,7 @@ export default function NewIntakeFormPage() {
             type="submit"
             form="intake-form"
             disabled={saving}
-            className="text-xs rounded-xl h-9 px-5 bg-accent hover:bg-accent-hi text-accent-fg font-medium shadow-xs"
+            className="text-xs rounded-xl h-9 px-5 bg-accent hover:bg-accent-hi text-accent-fg font-medium shadow-xs cursor-pointer"
           >
             {saving ? (
               <>
@@ -196,7 +253,7 @@ export default function NewIntakeFormPage() {
           {/* 1. General & Category */}
           <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
             <h2 className="text-sm font-medium text-fg">
-              Form Details & Category
+              Form Details &amp; Category
             </h2>
 
             <div className="space-y-4">
@@ -213,9 +270,8 @@ export default function NewIntakeFormPage() {
                     if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
                   }}
                   placeholder="e.g. Website Discovery & Scope Questionnaire"
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
-                    errors.title ? "border-danger" : "border-line"
-                  }`}
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-xs sm:text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${errors.title ? "border-danger" : "border-line"
+                    }`}
                 />
                 {errors.title && (
                   <p className="text-[11px] text-danger flex items-center gap-1">
@@ -233,7 +289,7 @@ export default function NewIntakeFormPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   placeholder="e.g. Please fill out this brief questionnaire so we can prepare your quote and timeline."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs focus:border-accent focus:bg-card focus:outline-none transition-all resize-none no-scrollbar scrollbar-none"
                 />
               </div>
 
@@ -253,11 +309,10 @@ export default function NewIntakeFormPage() {
                           setCategory(c);
                           setCustomCategory("");
                         }}
-                        className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all ${
-                          active
+                        className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all cursor-pointer ${active
                             ? "bg-accent text-accent-fg border-accent shadow-xs font-semibold"
                             : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
-                        }`}
+                          }`}
                       >
                         {c}
                       </button>
@@ -278,16 +333,19 @@ export default function NewIntakeFormPage() {
 
           {/* 2. Questions Builder */}
           <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-fg">
-                Questionnaire Fields ({questions.length})
-              </h2>
+            <div className="flex items-center justify-between pb-2 border-b border-line">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-accent" />
+                <h2 className="text-sm font-medium text-fg">
+                  Questionnaire Fields ({questions.length})
+                </h2>
+              </div>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={handleAddQuestion}
-                className="text-xs rounded-xl h-8 px-3 border-accent/30 text-accent hover:bg-accent-soft"
+                className="text-xs rounded-xl h-8 px-3 border-accent/30 text-accent hover:bg-accent-soft cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 mr-1" />
                 Add Field
@@ -301,7 +359,7 @@ export default function NewIntakeFormPage() {
                   className="p-3.5 rounded-2xl bg-surface/40 border border-line space-y-3"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-accent px-2 py-0.5 rounded-md bg-accent-soft">
+                    <span className="text-xs font-mono font-bold text-accent px-2 py-0.5 rounded-md bg-accent-soft shrink-0">
                       #{idx + 1}
                     </span>
                     <input
@@ -310,7 +368,7 @@ export default function NewIntakeFormPage() {
                       placeholder="Enter question prompt..."
                       value={q.label}
                       onChange={(e) => handleQuestionChange(idx, "label", e.target.value)}
-                      className="flex-1 h-9 px-3 rounded-xl bg-card border border-line text-fg text-xs sm:text-sm focus:outline-none focus:border-accent"
+                      className="flex-1 h-9 px-3 rounded-xl bg-card border border-line text-fg text-xs focus:outline-none focus:border-accent"
                     />
                     {questions.length > 1 && (
                       <Button
@@ -318,7 +376,7 @@ export default function NewIntakeFormPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => handleRemoveQuestion(idx)}
-                        className="text-muted hover:text-danger hover:bg-danger/10 p-1.5 h-8 w-8 rounded-lg"
+                        className="text-muted hover:text-danger hover:bg-danger/10 p-1.5 h-8 w-8 rounded-lg shrink-0 cursor-pointer"
                         title="Remove Question"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -328,27 +386,21 @@ export default function NewIntakeFormPage() {
 
                   <div className="flex items-center justify-between gap-4 text-xs pt-1 border-t border-line/40">
                     <div className="flex items-center gap-2">
-                      <span className="text-muted">Response Type:</span>
-                      <select
+                      <span className="text-muted text-[11px]">Type:</span>
+                      <CustomTypeSelect
                         value={q.type}
-                        onChange={(e) => handleQuestionChange(idx, "type", e.target.value)}
-                        className="h-8 px-2.5 rounded-lg bg-card border border-line text-fg text-xs focus:outline-none cursor-pointer"
-                      >
-                        <option value="text">Short Text</option>
-                        <option value="textarea">Long Paragraph</option>
-                        <option value="number">Numeric</option>
-                        <option value="file">File Upload / Link</option>
-                      </select>
+                        onChange={(val) => handleQuestionChange(idx, "type", val)}
+                      />
                     </div>
 
-                    <label className="flex items-center gap-1.5 text-muted cursor-pointer select-none">
+                    <label className="flex items-center gap-1.5 text-muted cursor-pointer select-none text-xs">
                       <input
                         type="checkbox"
                         checked={q.required}
                         onChange={(e) => handleQuestionChange(idx, "required", e.target.checked)}
-                        className="rounded border-line text-accent focus:ring-0"
+                        className="rounded border-line text-accent focus:ring-0 accent-accent"
                       />
-                      <span>Required</span>
+                      <span>Required Field</span>
                     </label>
                   </div>
                 </div>

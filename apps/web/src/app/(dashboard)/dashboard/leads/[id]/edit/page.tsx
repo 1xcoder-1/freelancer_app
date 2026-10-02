@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { getLead, updateLead, closeLead, type Lead, type LeadStage } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
@@ -55,14 +56,31 @@ const DEFAULT_CATEGORIES = [
   "Design & Dev Sprints",
 ];
 
-const SOURCES = [
-  "Referral",
-  "Platform / Upwork",
-  "Outreach & Cold Email",
-  "Website Inbound",
-  "Social Media",
-  "Past Client",
-  "Other",
+const CURRENCY_OPTIONS = [
+  { value: "USD", label: "USD ($)" },
+  { value: "PKR", label: "PKR (₨)" },
+  { value: "EUR", label: "EUR (€)" },
+  { value: "GBP", label: "GBP (£)" },
+  { value: "AED", label: "AED (د.إ)" },
+  { value: "CAD", label: "CAD ($)" },
+  { value: "AUD", label: "AUD ($)" },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: "low", label: "Low Priority" },
+  { value: "medium", label: "Medium Priority" },
+  { value: "high", label: "High Priority" },
+  { value: "urgent", label: "Urgent Priority" },
+];
+
+const SOURCE_OPTIONS = [
+  { value: "Referral", label: "Referral" },
+  { value: "Platform / Upwork", label: "Platform / Upwork" },
+  { value: "Outreach & Cold Email", label: "Outreach & Cold Email" },
+  { value: "Website Inbound", label: "Website Inbound" },
+  { value: "Social Media", label: "Social Media" },
+  { value: "Past Client", label: "Past Client" },
+  { value: "Other", label: "Other" },
 ];
 
 const STAGES: Array<{ key: LeadStage; label: string; step: number; tone: string }> = [
@@ -268,7 +286,7 @@ export default function EditLeadPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
@@ -337,9 +355,8 @@ export default function EditLeadPage() {
                     if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
                   }}
                   placeholder="e.g. Alex Morgan"
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
-                    errors.name ? "border-danger" : "border-line"
-                  }`}
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${errors.name ? "border-danger" : "border-line"
+                    }`}
                 />
                 {errors.name && (
                   <p className="text-[11px] text-danger flex items-center gap-1">
@@ -373,9 +390,8 @@ export default function EditLeadPage() {
                     if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
                   }}
                   placeholder="alex@acme.com"
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${
-                    errors.email ? "border-danger" : "border-line"
-                  }`}
+                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${errors.email ? "border-danger" : "border-line"
+                    }`}
                 />
                 {errors.email && (
                   <p className="text-[11px] text-danger flex items-center gap-1">
@@ -421,11 +437,10 @@ export default function EditLeadPage() {
                         setCategory(c);
                         setCustomCategory("");
                       }}
-                      className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all ${
-                        active
+                      className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition-all ${active
                           ? "bg-accent text-accent-fg border-accent shadow-xs"
                           : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
-                      }`}
+                        }`}
                     >
                       {c}
                     </button>
@@ -460,11 +475,10 @@ export default function EditLeadPage() {
                       key={s.key}
                       type="button"
                       onClick={() => setStage(s.key)}
-                      className={`h-10 rounded-xl border text-center text-xs font-medium transition-all flex items-center justify-center ${
-                        active
+                      className={`h-10 rounded-xl border text-center text-xs font-medium transition-all flex items-center justify-center ${active
                           ? "bg-accent text-accent-fg border-accent shadow-xs font-semibold"
                           : "bg-surface/50 text-muted border-line hover:border-accent/40 hover:text-fg"
-                      }`}
+                        }`}
                     >
                       {s.label}
                     </button>
@@ -473,110 +487,123 @@ export default function EditLeadPage() {
               </div>
             </div>
 
-            {/* Value, Priority, Source, Follow-Up */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-line/60">
-              <div className="space-y-1.5 min-w-0">
+            {/* Value, Strategy & Follow-Up */}
+            <div className="space-y-4 pt-3 border-t border-line/60">
+              {/* Estimated Deal Value - Wide Row */}
+              <div className="space-y-1.5">
                 <label className="text-xs font-medium text-fg block">
                   Estimated Deal Value
                 </label>
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-32 sm:w-36 shrink-0">
+                    <CustomSelect
+                      value={currency}
+                      onChange={setCurrency}
+                      options={CURRENCY_OPTIONS}
+                    />
+                  </div>
                   <input
                     type="text"
                     value={estimatedValue}
                     onChange={handleRateChange}
                     placeholder="2,500"
-                    className="flex-1 min-w-0 w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all"
+                    className="flex-1 min-w-0 w-full h-11 px-4 rounded-xl border border-line bg-surface/60 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all placeholder:text-muted/50"
                   />
-                  <div className="relative w-24 sm:w-28 shrink-0">
-                    <select
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value)}
-                      className="w-full h-10 appearance-none px-2.5 sm:px-3 pr-7 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
-                    >
-                      <option value="USD">USD ($)</option>
-                      <option value="PKR">PKR (₨)</option>
-                      <option value="EUR">EUR (€)</option>
-                      <option value="GBP">GBP (£)</option>
-                      <option value="AED">AED (د.إ)</option>
-                      <option value="CAD">CAD ($)</option>
-                      <option value="AUD">AUD ($)</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              {/* Priority & Source in clean 2-column grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 min-w-0">
+                  <label className="text-xs font-medium text-fg block">
+                    Priority Level
+                  </label>
+                  <CustomSelect
+                    value={priority}
+                    onChange={(val) => setPriority(val as Lead["priority"])}
+                    options={PRIORITY_OPTIONS}
+                  />
+                </div>
+
+                <div className="space-y-1.5 min-w-0">
+                  <label className="text-xs font-medium text-fg block">
+                    Source Channel
+                  </label>
+                  <CustomSelect
+                    value={source}
+                    onChange={setSource}
+                    options={SOURCE_OPTIONS}
+                  />
+                </div>
+              </div>
+
+              {/* Follow-Up Schedule Row */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-fg block">
+                    Follow Up Schedule
+                  </label>
+                  <span className="text-[11px] text-muted">
+                    {followUpDays ? `Reminder in ${followUpDays} day${Number(followUpDays) === 1 ? "" : "s"}` : "No reminder"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {["1", "3", "7", "14", "30"].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setFollowUpDays(d)}
+                        className={`text-xs px-3 py-2 rounded-xl border font-medium transition-all cursor-pointer ${
+                          followUpDays === d
+                            ? "bg-accent text-accent-fg border-accent shadow-xs"
+                            : "bg-surface/60 text-muted border-line hover:border-line-strong hover:text-fg"
+                        }`}
+                      >
+                        {d}d
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative flex-1 min-w-[110px]">
+                    <input
+                      type="number"
+                      min="1"
+                      max="90"
+                      value={followUpDays}
+                      onChange={(e) => setFollowUpDays(e.target.value)}
+                      placeholder="Custom"
+                      className="w-full h-11 px-3.5 pr-12 rounded-xl border border-line bg-surface/60 text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-muted pointer-events-none">
+                      days
+                    </span>
                   </div>
                 </div>
-              </div>
-
-              <div className="space-y-1.5 min-w-0">
-                <label className="text-xs font-medium text-fg block">
-                  Priority Level
-                </label>
-                <div className="relative w-full">
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as Lead["priority"])}
-                    className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all capitalize"
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-
-              <div className="space-y-1.5 min-w-0">
-                <label className="text-xs font-medium text-fg block">
-                  Source Channel
-                </label>
-                <div className="relative w-full">
-                  <select
-                    value={source}
-                    onChange={(e) => setSource(e.target.value)}
-                    className="w-full h-10 appearance-none px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-xs font-medium focus:border-accent focus:bg-card focus:outline-none cursor-pointer transition-all"
-                  >
-                    {SOURCES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-
-              <div className="space-y-1.5 min-w-0">
-                <label className="text-xs font-medium text-fg block">
-                  Follow-Up Reminder (Days)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="90"
-                  value={followUpDays}
-                  onChange={(e) => setFollowUpDays(e.target.value)}
-                  placeholder="3"
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
-                />
               </div>
             </div>
           </Card>
 
           {/* 3. Notes */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-3">
+          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
             <h2 className="text-sm font-medium text-fg">
-              Notes & Background (Optional)
+              Notes & Instructions
             </h2>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              placeholder="Scope details, discussion summary, or follow-up reminders..."
-              className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
-            />
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={7}
+                  placeholder="Scope details, discussion summary, or follow-up reminders..."
+                  className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg no-scrollbar scrollbar-none placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                />
+              </div>
+            </div>
           </Card>
         </div>
 
         {/* Right Column: Clean Sticky Card Preview (5 cols) */}
-        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
+        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6 no-scrollbar scrollbar-none">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-medium text-muted">Card Preview</span>
             <span className="text-[11px] font-mono text-muted">{effectiveCategory}</span>

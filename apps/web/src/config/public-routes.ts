@@ -7,7 +7,6 @@ export const publicRoutes = [
   "/features(.*)",
   "/architecture(.*)",
   "/ai(.*)",
-  "/pricing(.*)",
   "/about(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",

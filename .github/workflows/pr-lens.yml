@@ -1,0 +1,36 @@
+# PR Lens — draws each pull request as animated architecture / data-flow diagrams
+# and posts them in one sticky comment. Runs from your CI with your own model key.
+#
+# Before enabling:
+#   1. Create a Gemini API key at https://aistudio.google.com/apikey
+#   2. Save it as a repository secret named GEMINI_API_KEY
+#      (Repo → Settings → Secrets and variables → Actions → New repository secret)
+#      Or with gh:  gh secret set GEMINI_API_KEY
+#   3. To use OpenAI or any /chat/completions-compatible endpoint instead, pass
+#      provider/model/base-url inputs (see packages/action in the pr-lens repo).
+#
+# If you install the GitHub App instead (https://github.com/apps/coldtea-pr-lens),
+# delete this file — the App does the same thing with no key of yours.
+name: PR Lens
+
+on:
+  pull_request:
+
+permissions:
+  contents: write # to publish the rendered SVGs
+  pull-requests: write # to post the comment
+
+concurrency: # one run per pull request; a push supersedes the last
+  group: pr-lens-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the diff is between two commits, so both must be here
+      - uses: coldteadotai/pr-lens/packages/action@v0
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}

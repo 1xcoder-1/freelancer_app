@@ -24,13 +24,44 @@ import {
   Receipt,
   FileSignature,
   RotateCcw,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { useSearchParams } from "next/navigation";
+import { createPortal } from "react-dom";
 
 interface SubNavItem {
   title: string;
   href: string;
   icon: React.ElementType;
+  // Precise active detection: handles both the ?tab= URL style used by the
+  // panels/command menu and the legacy standalone routes (/dashboard/leads…).
+  active: (path: string, tab: string) => boolean;
+}
+
+const onPath = (path: string, prefix: string) =>
+  path === prefix || path.startsWith(`${prefix}/`);
+
+// Row-level play: moving the pointer anywhere onto a nav row sets its icon
+// animating, not just a hover landing on the small glyph itself. Icons that
+// stayed lucide re-exports have no handle and simply keep their CSS styles.
+function NavIcon({ icon: Icon, className }: { icon: React.ElementType; className?: string }) {
+  const wrapRef = useRef<HTMLSpanElement>(null);
+  const handleRef = useRef<unknown>(null);
+  useEffect(() => {
+    const row = wrapRef.current?.closest<HTMLElement>("[data-nav-row]");
+    if (!row) return;
+    const play = () => {
+      const h = handleRef.current as { play?: () => void } | null;
+      if (typeof h?.play === "function") h.play();
+    };
+    row.addEventListener("pointerenter", play);
+    return () => row.removeEventListener("pointerenter", play);
+  }, [Icon]);
+  const AnyIcon = Icon as React.ComponentType<Record<string, unknown>>;
+  return (
+    <span ref={wrapRef} className="contents">
+      <AnyIcon ref={handleRef} className={className} />
+    </span>
+  );
 }
 
 interface NavItem {
@@ -47,9 +78,28 @@ const navItems: NavItem[] = [
     href: "/dashboard/clients",
     icon: Users,
     children: [
-      { title: "Clients Roster", href: "/dashboard/clients", icon: Users },
-      { title: "Leads Pipeline", href: "/dashboard/leads", icon: Target },
-      { title: "Intake Forms", href: "/dashboard/intake", icon: ClipboardList },
+      {
+        title: "Clients Roster",
+        href: "/dashboard/clients",
+        icon: Users,
+        active: (p, t) => onPath(p, "/dashboard/clients") && (t === "" || t === "clients"),
+      },
+      {
+        title: "Leads Pipeline",
+        href: "/dashboard/clients?tab=leads",
+        icon: Target,
+        active: (p, t) =>
+          (p === "/dashboard/clients" && t === "leads") || onPath(p, "/dashboard/leads"),
+      },
+      {
+        title: "Intake Forms",
+        href: "/dashboard/clients?tab=forms",
+        icon: ClipboardList,
+        active: (p, t) =>
+          (p === "/dashboard/clients" && (t === "forms" || t === "intake")) ||
+          onPath(p, "/dashboard/intake") ||
+          onPath(p, "/dashboard/forms"),
+      },
     ],
   },
   {
@@ -57,9 +107,26 @@ const navItems: NavItem[] = [
     href: "/dashboard/projects",
     icon: LayoutGrid,
     children: [
-      { title: "Projects Roster", href: "/dashboard/projects", icon: LayoutGrid },
-      { title: "Invoices & Billing", href: "/dashboard/invoices", icon: Receipt },
-      { title: "Contracts", href: "/dashboard/contracts", icon: FileSignature },
+      {
+        title: "Projects Roster",
+        href: "/dashboard/projects",
+        icon: LayoutGrid,
+        active: (p, t) => onPath(p, "/dashboard/projects") && (t === "" || t === "projects"),
+      },
+      {
+        title: "Invoices & Billing",
+        href: "/dashboard/projects?tab=invoices",
+        icon: Receipt,
+        active: (p, t) =>
+          (p === "/dashboard/projects" && t === "invoices") || onPath(p, "/dashboard/invoices"),
+      },
+      {
+        title: "Contracts",
+        href: "/dashboard/projects?tab=contracts",
+        icon: FileSignature,
+        active: (p, t) =>
+          (p === "/dashboard/projects" && t === "contracts") || onPath(p, "/dashboard/contracts"),
+      },
     ],
   },
   { title: "Time", href: "/dashboard/time-tracker", icon: Clock },
@@ -80,10 +147,27 @@ export function DashboardSidebar() {
 
   // Submenu state for flyout & accordion
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const portalRef = useRef<HTMLDivElement | null>(null);
 
   const currentSearchStr = searchParams?.toString() ? `?${searchParams.toString()}` : "";
   const fullCurrentPath = `${pathname}${currentSearchStr}`;
+  const currentTab = searchParams?.get("tab") ?? "";
+
+  const isChildActive = (child: SubNavItem) => child.active(pathname, currentTab);
+
+  // The collapsed flyout is portalled to <body> (the nav list's overflow-y-auto
+  // would otherwise clip it), so its position is anchored from the button rect.
+  const openSubmenuAt = (key: string, el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const estHeight = 210;
+    setFlyoutPos({
+      left: rect.right + 8,
+      top: Math.max(8, Math.min(rect.top, window.innerHeight - estHeight)),
+    });
+    setOpenSubmenu(key);
+  };
 
   const isLinkActive = (href: string) => {
     if (href.includes("?")) {
@@ -117,10 +201,15 @@ export function DashboardSidebar() {
     setOpenSubmenu(null);
   }, [pathname, searchParams]);
 
-  // Close flyout on outside click
+  // Close flyout on outside click (the portalled flyout lives outside flyoutRef)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (flyoutRef.current && !flyoutRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        flyoutRef.current &&
+        !flyoutRef.current.contains(target) &&
+        !portalRef.current?.contains(target)
+      ) {
         setOpenSubmenu(null);
       }
     };
@@ -137,20 +226,28 @@ export function DashboardSidebar() {
   const userName = mounted ? (user?.firstName || user?.fullName || "Freelancer") : "Freelancer";
   const userImageUrl = mounted ? user?.imageUrl : undefined;
 
+  const submenuItem =
+    navItems.find((n) => n.children?.length && n.title === openSubmenu) ?? null;
+
   return (
     <>
-      {/* Dismiss backdrop for the expanded mobile overlay */}
-      {isMobile && !isCollapsed && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-          onClick={() => setIsCollapsed(true)}
-          aria-hidden
-        />
-      )}
+      {/* Dismiss backdrop for the expanded mobile overlay — wrapped in
+          AnimatePresence so its exit fade actually runs (better-ui exits are
+          shorter than enters: 150ms ease-out). */}
+      <AnimatePresence>
+        {isMobile && !isCollapsed && (
+          <motion.div
+            key="sidebar-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsCollapsed(true)}
+            aria-hidden
+          />
+        )}
+      </AnimatePresence>
 
       <motion.aside
         initial={false}
@@ -184,15 +281,19 @@ export function DashboardSidebar() {
         </div>
 
         {/* Main Navigation List */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 relative scrollbar-none" ref={flyoutRef}>
+        <div
+          className="flex-1 overflow-y-auto px-3 py-4 space-y-1 relative scrollbar-none"
+          ref={flyoutRef}
+          onScroll={() => setOpenSubmenu(null)}
+        >
           {navItems.map((item) => {
             const hasChildren = item.children && item.children.length > 0;
-            const isChildActive = hasChildren
-              ? item.children?.some((c) => isLinkActive(c.href))
+            const isChildActiveItem = hasChildren
+              ? item.children!.some(isChildActive)
               : false;
 
             const isActive =
-              isChildActive ||
+              isChildActiveItem ||
               isLinkActive(item.href);
 
             const Icon = item.icon;
@@ -202,87 +303,47 @@ export function DashboardSidebar() {
             if (hasChildren) {
               return (
                 <div key={item.title} className="relative">
-                  {/* Collapsed Mode with Floating Flyout Menu */}
+                  {/* Collapsed Mode (flyout rendered via portal, see bottom) */}
                   {isCollapsed ? (
                     <div>
                       <button
                         type="button"
-                        onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.title)}
-                        onMouseEnter={() => setOpenSubmenu(item.title)}
-                        className={`relative flex items-center rounded-full text-sm transition-all duration-200 w-11 h-11 mx-auto justify-center ${isActive
+                        data-nav-row
+                        onClick={(e) => {
+                          if (isSubmenuOpen) {
+                            setOpenSubmenu(null);
+                            return;
+                          }
+                          openSubmenuAt(item.title, e.currentTarget);
+                        }}
+                        onMouseEnter={(e) => openSubmenuAt(item.title, e.currentTarget)}
+                        className={`press relative flex items-center rounded-full text-sm w-11 h-11 mx-auto justify-center ${isActive
                             ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                             : "text-muted font-medium hover:bg-surface hover:text-fg"
                           }`}
                         title={item.title}
                       >
-                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
+                        <NavIcon icon={Icon} className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
                         {/* Tiny active accent dot */}
                         {isActive && (
                           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent" />
                         )}
                       </button>
-
-                      {/* Smooth Flyout Submenu in Collapsed Mode */}
-                      <AnimatePresence>
-                        {isSubmenuOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, x: -10, scale: 0.94 }}
-                            animate={{ opacity: 1, x: 0, scale: 1 }}
-                            exit={{ opacity: 0, x: -10, scale: 0.94 }}
-                            transition={{ duration: 0.18, ease: "easeOut" }}
-                            onMouseLeave={() => setOpenSubmenu(null)}
-                            className="absolute left-16 top-0 z-50 min-w-[210px] p-2 rounded-2xl bg-card border border-line shadow-2xl space-y-1.5 backdrop-blur-md"
-                          >
-                            <div className="px-3 py-1.5 border-b border-line/60 flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-fg uppercase tracking-wider">
-                                {item.title} Features
-                              </span>
-                              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                            </div>
-
-                            <div className="space-y-1">
-                              {item.children?.map((child) => {
-                                const ChildIcon = child.icon;
-                                const isCurrent = isLinkActive(child.href);
-
-                                return (
-                                  <Link
-                                    key={child.title}
-                                    href={child.href}
-                                    onClick={() => setOpenSubmenu(null)}
-                                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${isCurrent
-                                        ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                                        : "text-fg hover:bg-surface hover:text-accent"
-                                      }`}
-                                  >
-                                    <div className="flex items-center gap-2.5">
-                                      <ChildIcon className={`w-4 h-4 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
-                                      <span className="text-fg font-semibold">{child.title}</span>
-                                    </div>
-                                    {isCurrent && (
-                                      <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
-                                    )}
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                     </div>
                   ) : (
                     /* Expanded Accordion Mode */
                     <div className="space-y-1">
                       <button
                         type="button"
+                        data-nav-row
                         onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.title)}
-                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-full text-sm transition-all duration-200 ${isActive
+                        className={`press w-full flex items-center justify-between px-4 py-2.5 rounded-full text-sm ${isActive
                             ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                             : "text-muted font-medium hover:bg-surface hover:text-fg"
                           }`}
                       >
                         <div className="flex items-center gap-3">
-                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
+                          <NavIcon icon={Icon} className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
                           <span className="truncate text-fg font-semibold">{item.title}</span>
                         </div>
                         <ChevronDown
@@ -302,19 +363,20 @@ export function DashboardSidebar() {
                           >
                             {item.children?.map((child) => {
                               const ChildIcon = child.icon;
-                              const isCurrent = isLinkActive(child.href);
+                              const isCurrent = isChildActive(child);
 
                               return (
                                 <Link
                                   key={child.title}
                                   href={child.href}
-                                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all duration-150 ${isCurrent
+                                  data-nav-row
+                                  className={`press flex items-center justify-between px-3 py-2 rounded-xl text-xs ${isCurrent
                                       ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                                       : "text-muted hover:bg-surface hover:text-fg font-medium"
                                     }`}
                                 >
                                   <div className="flex items-center gap-2.5">
-                                    <ChildIcon className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
+                                    <NavIcon icon={ChildIcon} className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
                                     <span className="text-fg font-medium">{child.title}</span>
                                   </div>
                                   {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-accent" />}
@@ -334,13 +396,14 @@ export function DashboardSidebar() {
             return (
               <Link key={item.title} href={item.href} className="block">
                 <div
-                  className={`flex items-center gap-3 rounded-full text-sm transition-all duration-200 ${isActive
+                  data-nav-row
+                  className={`press flex items-center gap-3 rounded-full text-sm ${isActive
                       ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                       : "text-muted font-medium hover:bg-surface hover:text-fg"
                     } ${isCollapsed ? "w-11 h-11 mx-auto justify-center px-0" : "px-4 py-2.5"}`}
                   title={item.title}
                 >
-                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
+                  <NavIcon icon={Icon} className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : ""}`} />
 
                   {!isCollapsed && (
                     <div className="flex items-center justify-between flex-1 overflow-hidden">
@@ -407,6 +470,62 @@ export function DashboardSidebar() {
           )}
         </div>
       </motion.aside>
+
+      {/* Smooth Flyout Submenu in Collapsed Mode — portalled to <body> so the
+          nav list's overflow clipping can't cut it off next to the 72px rail */}
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {isCollapsed && submenuItem && flyoutPos && (
+              <motion.div
+                ref={portalRef}
+                initial={{ opacity: 0, x: -10, scale: 0.94 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -10, scale: 0.94 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onMouseLeave={() => setOpenSubmenu(null)}
+                style={{ position: "fixed", top: flyoutPos.top, left: flyoutPos.left, zIndex: 100 }}
+                className="min-w-[210px] p-2 rounded-2xl bg-card border border-line shadow-2xl space-y-1.5 backdrop-blur-md"
+              >
+                <div className="px-3 py-1.5 border-b border-line/60 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-fg uppercase tracking-wider">
+                    {submenuItem.title} Features
+                  </span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                </div>
+
+                <div className="space-y-1">
+                  {submenuItem.children?.map((child) => {
+                    const ChildIcon = child.icon;
+                    const isCurrent = isChildActive(child);
+
+                    return (
+                      <Link
+                        key={child.title}
+                        href={child.href}
+                        data-nav-row
+                        onClick={() => setOpenSubmenu(null)}
+                        className={`press flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${isCurrent
+                            ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                            : "text-fg hover:bg-surface hover:text-accent"
+                          }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <NavIcon icon={ChildIcon} className={`w-4 h-4 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
+                          <span className="text-fg font-semibold">{child.title}</span>
+                        </div>
+                        {isCurrent && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </>
   );
 }

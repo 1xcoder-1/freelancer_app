@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { X } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { X } from "@/components/animated-icons";
 import { cn } from "@/lib/utils";
 
 interface DialogContextType {
@@ -10,6 +11,13 @@ interface DialogContextType {
 }
 
 const DialogContext = React.createContext<DialogContextType | undefined>(undefined);
+
+// Skill timing: enter 300ms ease-out, exit is shorter and smaller (150ms).
+// The exit is driven by animating to the hidden targets while the panel is
+// still mounted, then unmounting after the exit duration — this keeps the
+// content rendered through the fade instead of flashing an empty panel.
+const ENTER_MS = 300;
+const EXIT_MS = 150;
 
 export function Dialog({
   open,
@@ -20,6 +28,16 @@ export function Dialog({
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
 }) {
+  // Escape closes the top-most dialog (same contract ConfirmDialog promises).
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
+
   return (
     <DialogContext.Provider value={{ open, onOpenChange }}>
       {children}
@@ -37,19 +55,54 @@ export function DialogContent({
   const context = React.useContext(DialogContext);
   if (!context) throw new Error("DialogContent must be used within Dialog");
 
-  if (!context.open) return null;
+  const { open } = context;
+  const reduceMotion = useReducedMotion();
+
+  // Stay mounted briefly after close so the exit animation is visible.
+  const [mounted, setMounted] = React.useState(open);
+  React.useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    if (mounted) {
+      const t = setTimeout(() => setMounted(false), EXIT_MS + 30);
+      return () => clearTimeout(t);
+    }
+  }, [open, mounted]);
+
+  if (!mounted) return null;
+
+  // Under reduced motion only the cross-fade runs (no rise, scale or blur).
+  const panelVisible = {
+    opacity: open ? 1 : 0,
+    y: open ? 0 : reduceMotion ? 0 : -12,
+    scale: open ? 1 : reduceMotion ? 1 : 0.97,
+    filter: open ? "blur(0px)" : reduceMotion ? "blur(0px)" : "blur(4px)",
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ pointerEvents: open ? undefined : "none" }}
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Backdrop — cross-fade both ways */}
+      <motion.div
+        initial={false}
+        animate={{ opacity: open ? 1 : 0 }}
+        transition={{ duration: (open ? ENTER_MS : EXIT_MS) / 1000, ease: "easeOut" }}
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm"
         onClick={() => context.onOpenChange(false)}
       />
-      {/* Modal Dialog Body */}
-      <div
+      {/* Modal Dialog Body — rises in, exits upward and smaller */}
+      <motion.div
+        initial={false}
+        animate={panelVisible}
+        transition={{ duration: (open ? ENTER_MS : EXIT_MS) / 1000, ease: "easeOut" }}
         className={cn(
-          "relative z-50 w-full rounded-xl bg-card border border-line p-6 shadow-2xl animate-in zoom-in-95 duration-200",
+          "dialog-scroll relative z-50 w-full rounded-xl bg-card border border-line p-6 shadow-2xl",
           className
         )}
       >
@@ -61,7 +114,7 @@ export function DialogContent({
           <span className="sr-only">Close</span>
         </button>
         {children}
-      </div>
+      </motion.div>
     </div>
   );
 }

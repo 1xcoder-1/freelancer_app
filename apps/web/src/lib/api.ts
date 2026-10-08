@@ -139,6 +139,27 @@ export interface ApiError extends Error {
 }
 
 // ------------------------------------------------------------------------------
+// Duplicate-person conflict (409) — shared by the clients/leads forms.
+// The API raises {code:'duplicate_person', match, strict, person} so the UI
+// can branch: strict (email) hits offer to open the existing record, weak
+// (name/phone) hits can be overridden with allow_duplicate.
+// ------------------------------------------------------------------------------
+export interface DuplicatePersonConflict {
+  kind: 'client' | 'lead';
+  match: 'email' | 'name' | 'phone';
+  strict: boolean;
+  person: { id: string; name: string; email?: string | null; company?: string | null };
+}
+
+export function getDuplicateConflict(err: unknown): DuplicatePersonConflict | null {
+  const detail = (err as { response?: { data?: { detail?: any } } })?.response?.data?.detail;
+  if (detail && typeof detail === 'object' && detail.code === 'duplicate_person' && detail.person?.id) {
+    return detail as DuplicatePersonConflict;
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------------------
 // Dashboard Overview & Stats
 // ------------------------------------------------------------------------------
 export interface DashboardStats {
@@ -244,7 +265,7 @@ export const getClient = async (clientId: string, token?: string): Promise<Clien
   return response.data;
 };
 
-export const createClient = async (payload: Partial<Client>, token?: string): Promise<Client> => {
+export const createClient = async (payload: Partial<Client> & { allow_duplicate?: boolean }, token?: string): Promise<Client> => {
   const response = await apiClient.post<Client>('/clients', payload, authHeaders(token));
   return response.data;
 };
@@ -484,7 +505,7 @@ export const getLead = async (leadId: string, token?: string): Promise<Lead> => 
   return response.data;
 };
 
-export const createLead = async (payload: Partial<Lead>, token?: string): Promise<Lead> => {
+export const createLead = async (payload: Partial<Lead> & { allow_duplicate?: boolean }, token?: string): Promise<Lead> => {
   const response = await apiClient.post<Lead>('/leads', payload, authHeaders(token));
   return response.data;
 };
@@ -520,9 +541,29 @@ export const deleteLead = async (leadId: string, token?: string): Promise<void> 
 };
 
 // One action turns a prospect into a roster client (idempotent by email —
-// re-converting returns the existing client, never a duplicate).
-export const convertLeadToClient = async (leadId: string, token?: string): Promise<Client> => {
-  const response = await apiClient.post<Client>(`/leads/${leadId}/convert-to-client`, {}, authHeaders(token));
+// re-converting returns the existing client and fills its empty fields,
+// never a duplicate). mergeIntoClientId targets a specific roster row after
+// convert-preview flagged a same-name/phone candidate as "the same person".
+export const convertLeadToClient = async (leadId: string, token?: string, mergeIntoClientId?: string): Promise<Client> => {
+  const response = await apiClient.post<Client>(
+    `/leads/${leadId}/convert-to-client`,
+    mergeIntoClientId ? { merge_into_client_id: mergeIntoClientId } : {},
+    authHeaders(token)
+  );
+  return response.data;
+};
+
+// Pre-flight for the convert dialog: what will happen before the user commits.
+export interface LeadConvertPreview {
+  match: 'email' | 'weak' | 'none';
+  client_id?: string | null;
+  client_name?: string | null;
+  client_email?: string | null;
+  same_person: boolean;
+}
+
+export const getLeadConvertPreview = async (leadId: string, token?: string): Promise<LeadConvertPreview> => {
+  const response = await apiClient.get<LeadConvertPreview>(`/leads/${leadId}/convert-preview`, authHeaders(token));
   return response.data;
 };
 

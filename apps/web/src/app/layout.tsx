@@ -9,6 +9,8 @@ import { UtmTracker } from "@/components/providers/UtmTracker";
 import { SentryProvider } from "@/components/providers/SentryProvider";
 import { AppToaster } from "@/components/common/AppToaster";
 import { ConfirmDialogHost } from "@/components/common/ConfirmDialog";
+import { DuplicateConflictDialogHost } from "@/components/common/DuplicateConflictDialog";
+import { CelebrationHost } from "@/components/common/Celebration";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -159,9 +161,12 @@ export default function RootLayout({
             <CookieBanner />
 
             {/* App-wide toast notifications + centered in-app confirm dialog
-                (replaces all native browser alert/confirm popups) */}
+                (replaces all native browser alert/confirm popups), the animated
+                duplicate-record conflict pop, and the create-celebration host */}
             <AppToaster />
             <ConfirmDialogHost />
+            <DuplicateConflictDialogHost />
+            <CelebrationHost />
           </SentryProvider>
         </body>
       </html>

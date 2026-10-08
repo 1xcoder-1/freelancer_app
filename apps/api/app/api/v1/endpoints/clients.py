@@ -3,10 +3,12 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.dedup import ensure_no_duplicate
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.contract import Contract
@@ -141,7 +143,17 @@ async def create_client(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
+    """Add a roster client, collision-checked against the workspace.
+
+    An email already on the roster is a hard 409 (one person = one row, so
+    invoices never split); a shared phone is a 409 the UI can retry past with
+    ``allow_duplicate`` after the user confirms they differ."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    await ensure_no_duplicate(
+        db, Client, workspace.id, "client",
+        email=payload.email, phone=payload.phone,
+        allow_duplicate=payload.allow_duplicate,
+    )
     client = Client(
         workspace_id=workspace.id,
         name=payload.name,
@@ -153,7 +165,12 @@ async def create_client(
         status=payload.status,
     )
     db.add(client)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Race guard for the (workspace_id, lower(email)) unique index.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="A client with this email already exists")
     await db.refresh(client)
     return client
 
@@ -178,10 +195,23 @@ async def update_client(
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
     client = await _get_workspace_client(db, workspace.id, client_id)
-    for field, val in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # PATCH only enforces the strict email rule against OTHER rows: the board
+    # and forms patch single cells constantly, and a name collision must not
+    # block saving an unrelated edit.
+    if "email" in data and (data["email"] or "").strip().lower() != (client.email or "").strip().lower():
+        await ensure_no_duplicate(
+            db, Client, workspace.id, "client",
+            email=data["email"], phone=None, exclude_id=client.id,
+        )
+    for field, val in data.items():
         if hasattr(client, field):
             setattr(client, field, val)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="A client with this email already exists")
     await db.refresh(client)
     return client
 

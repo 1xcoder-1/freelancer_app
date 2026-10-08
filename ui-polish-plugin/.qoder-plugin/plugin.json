@@ -1,0 +1,14 @@
+{
+  "name": "ui-polish",
+  "displayName": "UI Polish",
+  "version": "0.1.0",
+  "description": "Micro-interaction and visual-polish skills: better-ui design-engineering principles plus interaction-design motion patterns.",
+  "descriptionZh": "UI 打磨技能集：better-ui 设计工程原则与 interaction-design 动效模式。",
+  "author": { "name": "jakubkrehel / wshobson (packaged by Qoder)" },
+  "homepage": "https://www.ui-skills.com/",
+  "repository": "https://github.com/jakubkrehel/skills",
+  "keywords": ["qoder-plugin", "skill", "ui", "animation", "micro-interactions", "polish"],
+  "category": "developer-tools",
+  "tags": ["skill", "frontend", "design"],
+  "skills": "./skills/"
+}

@@ -107,7 +107,7 @@ export function CategoryVisualCard({
   return (
     <div
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl border border-line dark:border-[#26272d] bg-card dark:bg-[#141518] hover:bg-surface/50 dark:hover:bg-[#18181c] hover:border-line-strong dark:hover:border-[#383942] p-5 sm:p-6 shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none transition-all duration-200 ease-out hover:-translate-y-0.5 no-scrollbar scrollbar-none ${className}`}
+      className={`group relative overflow-hidden rounded-2xl border border-line dark:border-[#26272d] bg-card dark:bg-[#141518] hover:bg-surface/50 dark:hover:bg-[#18181c] hover:border-line-strong dark:hover:border-[#383942] p-5 sm:p-6 shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none [-webkit-tap-highlight-color:transparent] transition-[transform,border-color,background-color,box-shadow] duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.98] ${className}`}
     >
       {/* Background Subtle Grid & Pixel Block Texture */}
       <div

@@ -19,10 +19,12 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.dedup import ensure_no_duplicate, find_duplicate
 from app.core.inngest_client import emit
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
@@ -34,6 +36,8 @@ from app.models.project import Project
 from app.models.proposal import Proposal
 from app.schemas.domain import (
     ClientOut,
+    LeadConvertRequest,
+    LeadConvertPreviewOut,
     LeadCreate,
     LeadUpdate,
     LeadClose,
@@ -98,7 +102,16 @@ async def create_lead(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
+    """Add a prospect, collision-checked against the pipeline.
+
+    Same contract as POST /clients: an email hit is a hard 409, a phone hit
+    is an overridable 409 (``allow_duplicate``)."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    await ensure_no_duplicate(
+        db, Lead, workspace.id, "lead",
+        email=payload.email, phone=payload.phone,
+        allow_duplicate=payload.allow_duplicate,
+    )
     lead = Lead(
         workspace_id=workspace.id,
         name=payload.name,
@@ -118,7 +131,12 @@ async def create_lead(
         first_contact_at=datetime.utcnow(),
     )
     db.add(lead)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Race guard for the (workspace_id, lower(email)) unique index.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="A lead with this email already exists")
     await db.refresh(lead)
     return lead
 
@@ -134,13 +152,24 @@ async def update_lead(
     lead = await _get_workspace_lead(db, workspace.id, lead_id)
 
     data = payload.model_dump(exclude_unset=True)
+    # Email-only strictness on PATCH (same rule as clients): single-cell board
+    # edits must never be blocked by a name collision.
+    if "email" in data and (data["email"] or "").strip().lower() != (lead.email or "").strip().lower():
+        await ensure_no_duplicate(
+            db, Lead, workspace.id, "lead",
+            email=data["email"], phone=None, exclude_id=lead_id,
+        )
     for field, value in data.items():
         setattr(lead, field, value)
 
     # SE8: won/lost can no longer arrive through this generic PATCH, so the
     # email-deduped client auto-create moved to POST /leads/{id}/close. A stray
     # stage edit can no longer silently spawn a roster row.
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="A lead with this email already exists")
     await db.refresh(lead)
     return lead
 
@@ -171,13 +200,8 @@ async def close_lead(
         lead.reason_lost_note = payload.note
     else:  # won
         lead.stage = "won"
-        exists = await db.scalar(
-            select(func.count(Client.id)).where(
-                Client.workspace_id == workspace.id,
-                func.lower(Client.email) == (lead.email or "").lower(),
-            )
-        )
-        if not exists:
+        existing = await _existing_client_by_email(db, workspace.id, lead.email or "")
+        if existing is None:
             db.add(Client(
                 workspace_id=workspace.id,
                 name=lead.company or lead.name,
@@ -186,6 +210,13 @@ async def close_lead(
                 phone=lead.phone,
                 status="active",
             ))
+        else:
+            # Reusing the row is half the story — the lead may carry newer
+            # gaps the roster never got. Fill empties only, never overwrite.
+            _merge_fill_client(existing, {
+                "phone": lead.phone,
+                "company_name": lead.company,
+            })
 
     await db.commit()
     await db.refresh(lead)
@@ -256,32 +287,99 @@ async def _existing_client_by_email(db: AsyncSession, workspace_id: str, email: 
     return res.scalars().first()
 
 
+def _merge_fill_client(client: Client, fields: Dict[str, Any]) -> bool:
+    """Fill only the EMPTY roster fields from lead data — a field the client
+    already carries is never overwritten, so re-converting can't destroy edits."""
+    changed = False
+    for key, val in fields.items():
+        if (val or "").strip() and not (getattr(client, key) or "").strip():
+            setattr(client, key, val)
+            changed = True
+    return changed
+
+
+@router.get("/{lead_id}/convert-preview", response_model=LeadConvertPreviewOut)
+async def convert_preview(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """What 'Make this client' would do, asked BEFORE the user commits.
+
+    ``email`` = the exact person is already on the roster (convert will reuse
+    and gap-fill it, no duplicate); ``weak`` = a same-name/phone client exists
+    under a different email, so the UI must ask 'same person?' and pass the
+    answer back as ``merge_into_client_id``; ``none`` = clean create."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    lead = await _get_workspace_lead(db, workspace.id, lead_id)
+    dup = await find_duplicate(
+        db, Client, workspace.id,
+        name=lead.name, email=lead.email, phone=lead.phone,
+    )
+    if dup is None:
+        return LeadConvertPreviewOut(match="none")
+    person = dup["person"]
+    if dup["match"] == "email":
+        return LeadConvertPreviewOut(
+            match="email", client_id=person["id"], client_name=person["name"],
+            client_email=person["email"], same_person=True,
+        )
+    return LeadConvertPreviewOut(
+        match="weak", client_id=person["id"], client_name=person["name"],
+        client_email=person["email"],
+    )
+
+
 @router.post("/{lead_id}/convert-to-client", response_model=ClientOut)
 async def convert_lead_to_client(
     lead_id: str,
+    payload: Optional[LeadConvertRequest] = None,
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     """One action turns a prospect into a roster client — no re-typing.
 
     Idempotent by email: if the client already exists (manual add or the
-    won-stage auto-create), the existing row is returned instead of a duplicate.
-    The lead is kept and flipped to ``won`` — deleting it (as this used to do)
-    erased the pipeline history the win-rate and source analytics depend on.
+    won-stage auto-create), the existing row is returned instead of a duplicate
+    and its empty fields are filled from the lead. ``merge_into_client_id``
+    (from convert-preview) targets a specific roster row for the same-person,
+    different-email case. The lead is kept and flipped to ``won`` — deleting
+    it (as this used to do) erased the pipeline history the win-rate and
+    source analytics depend on.
     """
     _, workspace = await get_or_create_user_workspace(db, current_user)
     lead = await _get_workspace_lead(db, workspace.id, lead_id)
 
     fields = await _uplift_client_fields(lead, workspace)
-    existing = await _existing_client_by_email(db, workspace.id, fields["email"])
+    if payload and payload.merge_into_client_id:
+        res = await db.execute(
+            select(Client).where(
+                Client.id == payload.merge_into_client_id,
+                Client.workspace_id == workspace.id,
+            )
+        )
+        existing = res.scalar_one_or_none()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Client not found")
+    else:
+        existing = await _existing_client_by_email(db, workspace.id, fields["email"])
+
     if existing is not None:
         client = existing
+        _merge_fill_client(client, {
+            "phone": fields.get("phone"),
+            "company_name": fields.get("company_name"),
+        })
     else:
         client = Client(workspace_id=workspace.id, **fields)
         db.add(client)
 
     lead.stage = "won"
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="A client with this email already exists")
     await db.refresh(client)
     return client
 
@@ -308,7 +406,12 @@ async def start_work(
     existing = await _existing_client_by_email(db, workspace.id, fields["email"])
     reused = existing is not None
     client = existing if reused else Client(workspace_id=workspace.id, **fields)
-    if not reused:
+    if reused:
+        _merge_fill_client(client, {
+            "phone": fields.get("phone"),
+            "company_name": fields.get("company_name"),
+        })
+    else:
         db.add(client)
         await db.flush()  # assign client.id for the rows that reference it
 

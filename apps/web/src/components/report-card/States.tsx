@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { AlertCircle, Clock, Lock } from "lucide-react";
+import { AlertCircle, Clock, Lock } from "@/components/animated-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CardSkeleton() {

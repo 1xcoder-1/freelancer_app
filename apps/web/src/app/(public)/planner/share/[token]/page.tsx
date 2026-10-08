@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
-import { PenLine, Calendar, Clock, AlertCircle, Loader2, Eye } from "lucide-react";
+import { PenLine, Calendar, Clock, AlertCircle, Loader2, Eye } from "@/components/animated-icons";
 import "@excalidraw/excalidraw/index.css";
 
 import { getPublicPlannerBoard, type PublicPlannerBoard, type PlannerTodo } from "@/lib/api";

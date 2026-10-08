@@ -35,7 +35,7 @@ import {
   Laptop,
   AppWindow,
   type LucideIcon,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import type { CardContent, CardSettings } from "@/lib/api";
 
 // ----------------------------------------------------------------------------

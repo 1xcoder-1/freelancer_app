@@ -8,7 +8,7 @@ import {
   Mail,
   ShieldCheck,
   AlarmClock,
-} from "lucide-react";
+} from "@/components/animated-icons";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard, StatChip } from "@/components/dashboard/patterns";

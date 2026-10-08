@@ -15,171 +15,159 @@ import {
   Sparkles,
   FolderLock,
   ArrowRight,
-  CheckCircle2,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+  Check,
+} from "@/components/animated-icons";
+import { Reveal, hoverLift } from "@/components/landing/motion";
+import {
+  Container,
+  LandingShell,
+  PageHero,
+  Section,
+} from "@/components/landing/layout";
+
+const categories = [
+  { id: "all", label: "All modules" },
+  { id: "crm", label: "CRM & Pipeline" },
+  { id: "projects", label: "Project views" },
+  { id: "time", label: "Time & Focus" },
+  { id: "finance", label: "Invoices & Profit" },
+  { id: "desktop", label: "Desktop & Mobile" },
+  { id: "ai", label: "Book AI" },
+];
+
+const features = [
+  {
+    id: "crm",
+    category: "crm",
+    icon: Users,
+    group: "CRM & Pipeline",
+    title: "Client pipeline & relationship hub",
+    description:
+      "Track leads from first touch to closed contract. Contacts, proposals, custom fields, internal notes and automated client health scores in one view.",
+    highlights: [
+      "Client health scores based on payment velocity & communication",
+      "Multiple contact persons per company with roles and direct channels",
+      "White-label client portal for invoice approval and deliverable downloads",
+      "Custom status stages: Lead → Discovery → Active → Retainer → Archived",
+    ],
+    metric: "98% retention",
+  },
+  {
+    id: "projects",
+    category: "projects",
+    icon: Kanban,
+    group: "Project engine",
+    title: "Five views in one project engine",
+    description:
+      "Switch between Kanban, List, Calendar, Timeline Gantt and Table views with zero latency — the same data, whichever way your brain works today.",
+    highlights: [
+      "Drag-and-drop Kanban columns with WIP limits",
+      "Milestone tracking linked directly to invoice trigger events",
+      "Priorities (Urgent → Low) with nested subtasks",
+      "Markdown briefs and document attachments via Cloudinary",
+    ],
+    metric: "5 views, 1 click",
+  },
+  {
+    id: "time",
+    category: "time",
+    icon: Clock,
+    group: "Time & focus",
+    title: "One-click time & Pomodoro tracking",
+    description:
+      "Track billable vs non-billable hours on Web, the Windows tray, or Android — and know your real effective hourly rate down to the penny.",
+    highlights: [
+      "One-click start/stop with automatic project assignment",
+      "Pomodoro focus modes with configurable breaks",
+      "Manual edits and bulk categorization",
+      "Tracked time converts straight into invoice line items",
+    ],
+    metric: "+3.5 billable hrs/wk",
+  },
+  {
+    id: "finance",
+    category: "finance",
+    icon: FileText,
+    group: "Finance & profit",
+    title: "Invoices & project net profitability",
+    description:
+      "Professional PDF invoices, expense logging with receipt uploads, and live net margin per client and project.",
+    highlights: [
+      "PDF invoices with custom branding and tax rates",
+      "Receipt capture via Cloudinary object storage",
+      "Live expense-vs-revenue margin per project",
+      "Status lifecycle: Draft → Sent → Paid → Overdue with reminders",
+    ],
+    metric: "< 30s per invoice",
+  },
+  {
+    id: "desktop",
+    category: "desktop",
+    icon: Command,
+    group: "Desktop",
+    title: "Windows Quick Capture & system tray",
+    description:
+      "Press Ctrl+Shift+F anywhere to capture a task, note or timer — without leaving your editor or design tool.",
+    highlights: [
+      "Global shortcut from any active application",
+      "Minimal capture modal, keyboard-first",
+      "Tray widget with live running timer",
+      "Offline queue with automatic background sync",
+    ],
+    metric: "0 context switches",
+  },
+  {
+    id: "mobile",
+    category: "desktop",
+    icon: Smartphone,
+    group: "Mobile",
+    title: "Android companion app",
+    description:
+      "React Native + Expo app with push notifications, offline time tracking, quick client lookup and photo receipt capture.",
+    highlights: [
+      "Push alerts for invoice views and timer events",
+      "Camera receipt capture uploaded to the vault",
+      "Home-screen widget for one-tap timer toggle",
+      "Biometric login",
+    ],
+    metric: "Sub-second sync",
+  },
+  {
+    id: "ai",
+    category: "ai",
+    icon: Sparkles,
+    group: "Book AI",
+    title: "Book AI freelance assistant",
+    description:
+      "A copilot that knows your clients, time and money — drafts scopes and proposals, summarizes calls, and audits profitability.",
+    highlights: [
+      "One-click project plans with milestone cost breakdown",
+      "Client sentiment analysis and reminder drafting",
+      "Rate recommendations from your real project data",
+      "Natural-language queries across your workspace",
+    ],
+    metric: "10x faster proposals",
+  },
+  {
+    id: "storage",
+    category: "finance",
+    icon: FolderLock,
+    group: "Asset vault",
+    title: "Deliverable & document vault",
+    description:
+      "Storage for contract PDFs, briefs and deliverables with signed uploads and access logs.",
+    highlights: [
+      "Zero egress fees on client downloads",
+      "Encrypted storage for tax and contract documents",
+      "Signed URL uploads, no backend bottlenecks",
+      "Organized by project and client with access logs",
+    ],
+    metric: "$0 egress",
+  },
+];
 
 export default function FeaturesPage() {
   const [activeCategory, setActiveCategory] = useState<string>("all");
-
-  const categories = [
-    { id: "all", label: "All Modules" },
-    { id: "crm", label: "CRM & Pipeline" },
-    { id: "projects", label: "Project Multi-View" },
-    { id: "time", label: "Time & Focus" },
-    { id: "finance", label: "Invoices & Profit" },
-    { id: "desktop", label: "Desktop & Mobile" },
-    { id: "ai", label: "Book AI Assistant" },
-  ];
-
-  const features = [
-    {
-      id: "crm",
-      category: "crm",
-      icon: Users,
-      badge: "Client CRM",
-      badgeVariant: "emerald" as const,
-      title: "Client Pipeline & Relationship Hub",
-      headline: "Track client leads from first touch to closed contract.",
-      description: "Manage client leads, contacts, proposals, custom fields, internal interaction notes, and automated client health scores in a unified view.",
-      color: "text-accent bg-accent-soft border-accent/20",
-      highlights: [
-        "Client health scores based on payment velocity & communication",
-        "Multiple contact persons per company with roles and direct channels",
-        "White-label client portal for invoice approval and deliverable downloads",
-        "Custom status stages: Lead -> Discovery -> Active -> Retainer -> Archived",
-      ],
-      metrics: "98% client retention rate",
-    },
-    {
-      id: "projects",
-      category: "projects",
-      icon: Kanban,
-      badge: "Project Management",
-      badgeVariant: "indigo" as const,
-      title: "5-in-1 Multi-View Project Engine",
-      headline: "View your workload the way your brain works.",
-      description: "Switch seamlessly between Kanban board, List view, Calendar, Timeline Gantt, and Spreadsheet Table views with zero latency.",
-      color: "text-info dark:text-info bg-info/10 border-info/20",
-      highlights: [
-        "Interactive drag-and-drop Kanban columns with WIP limits",
-        "Milestone tracking linked directly to invoice trigger events",
-        "Task prioritization: Urgent, High, Medium, Low with subtasks",
-        "Markdown project briefs and document attachments via Cloudinary",
-      ],
-      metrics: "5 views in 1 click",
-    },
-    {
-      id: "time",
-      category: "time",
-      icon: Clock,
-      badge: "Time & Focus",
-      badgeVariant: "cyan" as const,
-      title: "One-Click Time & Pomodoro Tracking",
-      headline: "Know your real effective hourly rate down to the penny.",
-      description: "Track billable vs non-billable hours instantly on Web, Windows system tray, or Android mobile. Automatic calculation of true earnings per hour.",
-      color: "text-info bg-accent-soft border-accent/20",
-      highlights: [
-        "One-click start/stop timer with automatic project assignment",
-        "Pomodoro focus modes with configurable sound & break alerts",
-        "Manual time entry editing and bulk categorization",
-        "Direct conversion from tracked time entries into client invoice items",
-      ],
-      metrics: "+3.5 billable hrs/week",
-    },
-    {
-      id: "finance",
-      category: "finance",
-      icon: FileText,
-      badge: "Finance & Profit",
-      badgeVariant: "amber" as const,
-      title: "Invoices & Project Net Profitability",
-      headline: "Automated billing and real-time margin visibility.",
-      description: "Generate professional PDF invoices, log business expenses with receipt uploads, and track net profitability per client and project.",
-      color: "text-warn bg-warn/10 border-warn/20",
-      highlights: [
-        "Automated PDF invoice generation with custom branding and tax rates",
-        "Receipt capture via Cloudinary object storage",
-        "Live expense vs revenue net margin calculation per project",
-        "Payment status lifecycle: Draft -> Sent -> Paid -> Overdue with reminders",
-      ],
-      metrics: "< 30s invoice creation",
-    },
-    {
-      id: "desktop",
-      category: "desktop",
-      icon: Command,
-      badge: "Desktop Quick Capture",
-      badgeVariant: "default" as const,
-      title: "Windows Quick Capture & System Tray",
-      headline: "Press Ctrl+Shift+F anywhere to capture ideas and time.",
-      description: "Never lose focus when working inside your code editor or design tool. Launch an instant capture modal on Windows for tasks, notes, or timers.",
-      color: "text-accent bg-accent-soft border-line-strong",
-      highlights: [
-        "Global keyboard shortcut Ctrl+Shift+F from any active application",
-        "Minimal floating modal with instant keyboard submission",
-        "System tray timer widget showing live running elapsed time",
-        "Offline-capable local queue with automatic background sync",
-      ],
-      metrics: "0 context switching",
-    },
-    {
-      id: "mobile",
-      category: "desktop",
-      icon: Smartphone,
-      badge: "Mobile Companion",
-      badgeVariant: "indigo" as const,
-      title: "Android Mobile Companion App",
-      headline: "Your freelance business in your pocket.",
-      description: "React Native + Expo mobile application with real-time push notifications, offline time tracking, quick client lookup, and photo receipt capture.",
-      color: "text-info bg-info/10 border-info/20",
-      highlights: [
-        "Push notifications for client messages, invoice views, and timer alerts",
-        "Camera receipt scanning uploaded straight to Cloudinary",
-        "Native Android widgets for one-tap timer toggle",
-        "Secure biometric login with fingerprint and facial recognition",
-      ],
-      metrics: "Sub-second sync",
-    },
-    {
-      id: "ai",
-      category: "ai",
-      icon: Sparkles,
-      badge: "AI Intelligence",
-      badgeVariant: "indigo" as const,
-      title: "Book AI Freelance Assistant",
-      headline: "Your 24/7 strategic copilot powered by Gemini & OpenAI.",
-      description: "Auto-generate project scopes, draft clear contract clauses, summarize client meeting notes, and analyze your proposal win rates.",
-      color: "text-info dark:text-info bg-info/10 border-info/20",
-      highlights: [
-        "1-click project plan generator with milestone cost breakdown",
-        "Client sentiment analysis and overdue invoice reminder drafting",
-        "Effective hourly rate recommendations based on project scope",
-        "Natural language query interface across all your business data",
-      ],
-      metrics: "10x faster proposals",
-    },
-    {
-      id: "storage",
-      category: "finance",
-      icon: FolderLock,
-      badge: "Edge Storage",
-      badgeVariant: "cyan" as const,
-      title: "Cloudinary Asset & Deliverable Vault",
-      headline: "Zero egress fees for all client deliverables and files.",
-      description: "Fast, reliable cloud storage for contract PDFs, client design briefs, and project deliverables.",
-      color: "text-info bg-accent/10 border-accent/20",
-      highlights: [
-        "Zero egress fees on deliverable downloads by clients",
-        "Encrypted storage for sensitive tax and contract documents",
-        "Direct signed URL uploads without backend bottlenecks",
-        "Organized project and client folders with access logs",
-      ],
-      metrics: "$0 egress bandwidth cost",
-    },
-  ];
 
   const filteredFeatures =
     activeCategory === "all"
@@ -187,76 +175,41 @@ export default function FeaturesPage() {
       : features.filter((f) => f.category === activeCategory);
 
   return (
-    <div className="min-h-screen bg-bg text-fg flex flex-col selection:bg-accent selection:text-accent-fg">
+    <LandingShell>
       <Navbar />
 
       <main className="flex-1">
-        {/* Page Hero */}
-        <section className="relative pt-20 pb-16 overflow-hidden border-b border-line bg-bg">
-
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex mb-6"
-            >
-              <Badge variant="emerald" className="px-4 py-1.5 text-xs font-semibold gap-2">
-                <Sparkles className="w-3.5 h-3.5" /> Complete Feature Matrix
-              </Badge>
-            </motion.div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="font-display text-3xl sm:text-5xl font-bold text-fg tracking-tight leading-tight max-w-4xl mx-auto mb-6"
-            >
-              Every tool to operate your business,{" "}
-              <span className="italic font-medium text-accent">
-                categorized & unified.
-              </span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-[15px] text-muted max-w-3xl mx-auto mb-10 leading-relaxed font-normal"
-            >
-              Discover all 8 native modules designed specifically for independent freelancers, contractors, and agency founders.
-            </motion.p>
-
-            {/* Interactive Category Filter Pills */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="flex items-center justify-center flex-wrap gap-2 max-w-4xl mx-auto"
-            >
-              {categories.map((cat) => (
-                <Button
+        <PageHero
+          eyebrow="Feature matrix"
+          title="Every tool to run your business,"
+          accent="mapped and unified."
+          desc="Eight native modules for independent freelancers, contractors and agency-of-one operators — no plugin sprawl, no per-seat surprises."
+        >
+          {/* Category filter chips — quiet text pills, one active state */}
+          <div className="flex items-center justify-center flex-wrap gap-2 max-w-3xl mx-auto">
+            {categories.map((cat) => {
+              const active = activeCategory === cat.id;
+              return (
+                <button
                   key={cat.id}
-                  variant={activeCategory === cat.id ? "default" : "outline"}
-                  size="sm"
                   onClick={() => setActiveCategory(cat.id)}
-                  className={`rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-                    activeCategory === cat.id
-                      ? "bg-accent text-accent-fg font-bold shadow-sm"
-                      : "bg-card text-fg border-line hover:border-line-strong hover:text-fg"
+                  aria-pressed={active}
+                  className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 ${
+                    active
+                      ? "border-accent/30 bg-accent-soft dark:bg-accent/15 text-accent"
+                      : "border-line bg-card text-muted hover:text-fg hover:border-line-strong"
                   }`}
                 >
                   {cat.label}
-                </Button>
-              ))}
-            </motion.div>
+                </button>
+              );
+            })}
           </div>
-        </section>
+        </PageHero>
 
-        {/* Feature Grid Deep Dive with shadcn Card */}
-        <section className="py-20 bg-bg">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <Section className="border-t-0">
+          <Container>
+            <div className="grid md:grid-cols-2 gap-5">
               <AnimatePresence mode="popLayout">
                 {filteredFeatures.map((feat) => {
                   const Icon = feat.icon;
@@ -265,70 +218,75 @@ export default function FeaturesPage() {
                       key={feat.id}
                       id={feat.id}
                       layout
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.96 }}
-                      transition={{ duration: 0.3 }}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
                     >
-                      <Card className="h-full p-8 bg-card border-line hover:border-line-strong transition-all flex flex-col justify-between group shadow-xl">
-                        <div>
-                          {/* Top Meta */}
-                          <div className="flex items-center justify-between mb-6">
-                            <div className={`w-12 h-12 rounded-xl border flex items-center justify-center ${feat.color}`}>
-                              <Icon className="w-6 h-6" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={feat.badgeVariant} className="text-xs">
-                                {feat.badge}
-                              </Badge>
-                              <Badge variant="emerald" className="text-xs font-mono font-bold">
-                                {feat.metrics}
-                              </Badge>
-                            </div>
+                      <div className={`h-full rounded-xl border border-line bg-card p-6 sm:p-7 flex flex-col ${hoverLift}`}>
+                        {/* Meta row */}
+                        <div className="flex items-center justify-between gap-4 mb-5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-8 h-8 rounded-lg bg-accent-soft dark:bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                              <Icon className="w-4 h-4" />
+                            </span>
+                            <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-faint truncate">
+                              {feat.group}
+                            </span>
                           </div>
-
-                          {/* Title & Description */}
-                          <h3 className="text-2xl font-bold text-fg mb-2 group-hover:text-accent transition-colors">
-                            {feat.title}
-                          </h3>
-                          <p className="text-sm font-semibold text-fg mb-4">
-                            {feat.headline}
-                          </p>
-                          <p className="text-sm text-muted leading-relaxed mb-6 font-normal">
-                            {feat.description}
-                          </p>
-
-                          {/* Feature Highlights Checklist */}
-                          <div className="space-y-2.5 pt-4 border-t border-line">
-                            {feat.highlights.map((point, pIdx) => (
-                              <div key={pIdx} className="flex items-start gap-2.5 text-xs text-fg">
-                                <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
-                                <span className="leading-snug">{point}</span>
-                              </div>
-                            ))}
-                          </div>
+                          <span className="font-mono text-[11px] text-muted tabular-nums shrink-0">
+                            {feat.metric}
+                          </span>
                         </div>
 
-                        {/* Bottom Link with shadcn Button */}
-                        <div className="mt-8 pt-4 border-t border-line flex items-center justify-between">
-                          <Link href="/sign-up">
-                            <Button variant="ghost" size="sm" className="text-xs font-bold text-accent hover:text-accent p-0 h-auto gap-1.5">
-                              <span>Try {feat.badge} Free</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </Button>
-                          </Link>
-                        </div>
-                      </Card>
+                        <h2 className="font-display text-[17px] font-semibold text-fg mb-2">
+                          {feat.title}
+                        </h2>
+                        <p className="text-[13px] leading-6 text-muted mb-5">
+                          {feat.description}
+                        </p>
+
+                        <ul className="space-y-2 mt-auto pt-4 border-t border-line">
+                          {feat.highlights.map((point) => (
+                            <li key={point} className="flex items-start gap-2.5 text-[13px] leading-5 text-fg/90">
+                              <Check className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <Link
+                          href="/sign-up"
+                          className="mt-5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-accent transition-colors duration-150 hover:text-accent-hi"
+                        >
+                          Try it free
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                     </motion.div>
                   );
                 })}
               </AnimatePresence>
             </div>
-          </div>
-        </section>
+
+            {/* Single closing CTA instead of eight repeated links */}
+            <Reveal>
+              <div className="mt-14 pt-10 border-t border-line text-center">
+                <p className="text-[14px] text-muted">
+                  All eight modules ship with the free core plan.
+                </p>
+                <Link href="/sign-up" className="inline-block mt-4">
+                  <button className="cursor-pointer rounded-lg bg-accent px-6 py-2.5 text-[13px] font-semibold text-accent-fg transition-colors duration-150 hover:bg-accent-hi">
+                    Open your workspace
+                  </button>
+                </Link>
+              </div>
+            </Reveal>
+          </Container>
+        </Section>
       </main>
 
       <Footer />
-    </div>
+    </LandingShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, use } from "react";
+import { useEffect, useRef, useState, use, useCallback, useMemo } from "react";
 import {
   FileSignature,
   CheckCircle2,
@@ -12,12 +12,13 @@ import {
   PenTool,
   Lock,
   Building2,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPublicContract, signPublicContract, type PublicContract } from "@/lib/api";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
 
 interface PageProps {
@@ -44,6 +45,30 @@ export default function SignContractPage({ params }: PageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
+
+  // Unsaved-changes guard — a signer who typed their details (and clicked away
+  // by mistake) gets a confirm plus a restore offer. The pre-fill from the
+  // contract lands before the form enables, so it seeds as the clean baseline.
+  // The drawn-signature canvas can't ride in a draft; the typed one can.
+  const formValues = useMemo(
+    () => ({ signerName, signerEmail, typedSignature, agreeTerms: String(agreeTerms) }),
+    [signerName, signerEmail, typedSignature, agreeTerms]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.signerName) != null) setSignerName(s(draft.signerName)!);
+    if (s(draft.signerEmail) != null) setSignerEmail(s(draft.signerEmail)!);
+    if (s(draft.typedSignature) != null) setTypedSignature(s(draft.typedSignature)!);
+    if (s(draft.agreeTerms) != null) setAgreeTerms(s(draft.agreeTerms) === "true");
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    enabled: !loading && !!contract && !signedSuccess,
+    draftKey: `sign-contract-${token}`,
+    onRestoreDraft: applyDraft,
+  });
 
   useEffect(() => {
     async function fetchContract() {
@@ -152,6 +177,7 @@ export default function SignContractPage({ params }: PageProps) {
         recipient_email: signerEmail,
       });
       setContract(updated);
+      guard.markSaved();
       setSignedSuccess(true);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };

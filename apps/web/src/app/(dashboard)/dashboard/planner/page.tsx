@@ -15,7 +15,7 @@ import {
   Share2,
   AlertCircle,
   CalendarClock,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

@@ -20,7 +20,7 @@ import {
   ArrowUpRight,
   Sparkles,
   Calendar,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -175,7 +175,7 @@ export default function IntakeDetailPage() {
   const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/intake/${shareToken}` : `/intake/${shareToken}`;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
       {/* Top Navigation & Header */}
       <div className="space-y-4 pb-4 border-b border-line">
         <Link

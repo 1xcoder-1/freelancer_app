@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "@/components/animated-icons";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +44,9 @@ export function confirmDialog(options: string | ConfirmOptions): Promise<boolean
 
 export function ConfirmDialogHost() {
   const [pending, setPending] = React.useState<PendingRequest | null>(null);
+  // Stays true while the panel plays its 150ms exit, so the content is
+  // still rendered as it fades (no empty-panel flash).
+  const [closing, setClosing] = React.useState(false);
 
   React.useEffect(() => {
     requestConfirm = (req) => setPending(req);
@@ -53,12 +56,17 @@ export function ConfirmDialogHost() {
   }, []);
 
   const close = (confirmed: boolean) => {
-    pending?.resolve(confirmed);
-    setPending(null);
+    if (!pending) return;
+    pending.resolve(confirmed);
+    setClosing(true);
+    setTimeout(() => {
+      setPending(null);
+      setClosing(false);
+    }, 160);
   };
 
   return (
-    <Dialog open={!!pending} onOpenChange={(open) => close(open)}>
+    <Dialog open={!!pending && !closing} onOpenChange={(open) => close(open)}>
       <DialogContent className="max-w-md">
         {pending && (
           <>

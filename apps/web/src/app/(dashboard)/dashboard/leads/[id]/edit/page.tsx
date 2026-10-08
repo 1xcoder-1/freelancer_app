@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -9,11 +9,13 @@ import {
   Loader2,
   ChevronDown,
   AlertCircle,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { getLead, updateLead, closeLead, type Lead, type LeadStage } from "@/lib/api";
+import { getLead, getDuplicateConflict, updateLead, closeLead, type Lead, type LeadStage } from "@/lib/api";
+import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -138,6 +140,49 @@ export default function EditLeadPage() {
   const [notes, setNotes] = useState("");
 
   const effectiveCategory = customCategory.trim() || category || "Featured";
+
+  // Unsaved-changes guard. The baseline is captured once after the record
+  // loads, so the empty form shell never counts as dirty, and a restored
+  // draft (still differing from the record) does.
+  const formValues = useMemo(
+    () => ({
+      name, company, email, phone, source, estimatedValue, currency,
+      priority, stage, followUpDays, category, customCategory, notes,
+    }),
+    [name, company, email, phone, source, estimatedValue, currency, priority, stage, followUpDays, category, customCategory, notes]
+  );
+  const [initialValues, setInitialValues] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    if (!loading && !initialValues) setInitialValues({ ...formValues });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  const applyDraft = useCallback((saved: Record<string, unknown>) => {
+    const str = (k: string, d = "") => (typeof saved[k] === "string" && (saved[k] as string) !== "[object Object]" ? (saved[k] as string) : d);
+    setName(str("name"));
+    setCompany(str("company"));
+    setEmail(str("email"));
+    setPhone(str("phone"));
+    setSource(str("source", "Referral"));
+    setEstimatedValue(str("estimatedValue"));
+    setCurrency(str("currency", "USD"));
+    const pr = str("priority", "medium");
+    setPriority(["low", "medium", "high", "urgent"].includes(pr) ? (pr as Lead["priority"]) : "medium");
+    const st = str("stage", "new");
+    setStage(STAGES.some((s) => s.key === st) ? (st as LeadStage) : "new");
+    setFollowUpDays(str("followUpDays", "3"));
+    setCategory(str("category", "Featured"));
+    setCustomCategory(str("customCategory"));
+    setNotes(str("notes"));
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    initial: initialValues ?? undefined,
+    enabled: !loading && !!initialValues,
+    draftKey: `lead-edit-${leadId}`,
+    onRestoreDraft: applyDraft,
+  });
 
   // Load existing lead details
   useEffect(() => {
@@ -266,8 +311,18 @@ export default function EditLeadPage() {
       invalidateCache("dashboard:data");
 
       toast.success("Lead updated successfully");
+      // Saved: drop the draft + clear dirty so the redirect is never blocked.
+      guard.markSaved();
       router.push(`/dashboard/leads/${leadId}`);
     } catch (err) {
+      const conflict = getDuplicateConflict(err);
+      if (conflict) {
+        // PATCH conflicts are always strict email hits: one email, one
+        // person — offer the existing record instead of a second row.
+        const res = await resolveDuplicateConflict(conflict);
+        if (res.action === "open") guard.forcePush(res.path);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Could not update lead");
     } finally {
       setSaving(false);
@@ -286,7 +341,7 @@ export default function EditLeadPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
@@ -306,7 +361,7 @@ export default function EditLeadPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push(`/dashboard/leads/${leadId}`)}
+            onClick={() => guard.guardedPush(`/dashboard/leads/${leadId}`)}
             disabled={saving}
             className="text-xs rounded-xl h-9 px-4 border-line"
           >
@@ -595,7 +650,7 @@ export default function EditLeadPage() {
                   onChange={(e) => setNotes(e.target.value)}
                   rows={7}
                   placeholder="Scope details, discussion summary, or follow-up reminders..."
-                  className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg no-scrollbar scrollbar-none placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
                 />
               </div>
             </div>
@@ -603,7 +658,7 @@ export default function EditLeadPage() {
         </div>
 
         {/* Right Column: Clean Sticky Card Preview (5 cols) */}
-        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6 no-scrollbar scrollbar-none">
+        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-medium text-muted">Card Preview</span>
             <span className="text-[11px] font-mono text-muted">{effectiveCategory}</span>

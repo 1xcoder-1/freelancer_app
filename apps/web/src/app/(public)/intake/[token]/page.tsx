@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   ClipboardList,
@@ -8,11 +8,12 @@ import {
   Send,
   AlertCircle,
   ShieldCheck,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPublicIntakeForm, submitPublicIntakeForm, PublicIntakeForm } from "@/lib/api";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 export default function PublicIntakePage() {
   const params = useParams();
@@ -28,6 +29,36 @@ export default function PublicIntakePage() {
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Unsaved-changes guard — a visitor who typed long answers and accidentally
+  // clicks away gets a confirm, and their draft can be restored on return.
+  const formValues = useMemo(
+    () => ({
+      clientName,
+      clientEmail,
+      answersJson: JSON.stringify(answers),
+    }),
+    [clientName, clientEmail, answers]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.clientName) != null) setClientName(s(draft.clientName)!);
+    if (s(draft.clientEmail) != null) setClientEmail(s(draft.clientEmail)!);
+    try {
+      const a = JSON.parse(s(draft.answersJson) || "{}");
+      if (a && typeof a === "object" && !Array.isArray(a)) setAnswers(a);
+    } catch {
+      /* junk draft — keep empty answers */
+    }
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    enabled: !loading && !!form && !submitted,
+    draftKey: `intake-public-${token}`,
+    onRestoreDraft: applyDraft,
+  });
 
   useEffect(() => {
     if (!token) return;
@@ -63,6 +94,7 @@ export default function PublicIntakePage() {
         client_email: clientEmail,
         answers: answers,
       });
+      guard.markSaved();
       setSubmitted(true);
     } catch (err: unknown) {
       const message = (err as Error)?.message || "Failed to submit questionnaire.";

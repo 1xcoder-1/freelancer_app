@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Cookie } from "lucide-react";
+import { Cookie } from "@/components/animated-icons";
 
 export function CookieBanner() {
   const [show, setShow] = useState(false);

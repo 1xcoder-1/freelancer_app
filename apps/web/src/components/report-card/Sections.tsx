@@ -22,7 +22,7 @@ import {
   Smartphone,
   Tag,
   ArrowUpRight,
-} from "lucide-react";
+} from "@/components/animated-icons";
 
 // ----------------------------------------------------------------------------
 // Shared primitives

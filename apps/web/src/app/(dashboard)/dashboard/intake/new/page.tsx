@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -13,14 +13,16 @@ import {
   ClipboardList,
   Check,
   ChevronDown,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createIntakeForm } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { celebrate } from "@/components/common/Celebration";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -119,6 +121,47 @@ export default function NewIntakeFormPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Unsaved-changes guard — an accidental click away asks before the drafted
+  // questionnaire is lost, and the autosaved draft can be restored on return.
+  // Questions ride along as JSON since the guard compares strings.
+  const formValues = useMemo(
+    () => ({
+      title,
+      description,
+      category,
+      customCategory,
+      questionsJson: JSON.stringify(questions),
+    }),
+    [title, description, category, customCategory, questions]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.title) != null) setTitle(s(draft.title)!);
+    if (s(draft.description) != null) setDescription(s(draft.description)!);
+    if (s(draft.category)) setCategory(s(draft.category)!);
+    if (s(draft.customCategory) != null) setCustomCategory(s(draft.customCategory)!);
+    try {
+      const qs = JSON.parse(s(draft.questionsJson) || "[]");
+      if (Array.isArray(qs) && qs.length && qs.every((q: any) => q && typeof q.id === "string")) {
+        setQuestions(qs.map((q: any) => ({
+          id: q.id,
+          label: String(q.label ?? ""),
+          type: ["text", "textarea", "number", "file"].includes(q.type) ? q.type : "text",
+          required: !!q.required,
+        })));
+      }
+    } catch {
+      /* junk draft — keep defaults */
+    }
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "intake-new",
+    onRestoreDraft: applyDraft,
+  });
+
   const effectiveCategory = customCategory.trim() || category || "Featured";
 
   const handleAddQuestion = () => {
@@ -192,7 +235,10 @@ export default function NewIntakeFormPage() {
 
       invalidateCache("intake:forms");
       invalidateCache("dashboard:data");
+      guard.markSaved();
       toast.success("Intake form published successfully!");
+      // Small "new form published" pop that survives the redirect.
+      celebrate("Form published");
       router.push(`/dashboard/intake/${created.id}`);
     } catch (err: any) {
       console.error(err);
@@ -203,7 +249,7 @@ export default function NewIntakeFormPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div className="space-y-1">
@@ -222,11 +268,14 @@ export default function NewIntakeFormPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/intake">
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line cursor-pointer">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => guard.guardedPush("/dashboard/intake")}
+            className="text-xs rounded-xl h-9 px-4 border-line cursor-pointer"
+          >
+            Cancel
+          </Button>
           <Button
             size="sm"
             type="submit"
@@ -289,7 +338,7 @@ export default function NewIntakeFormPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   placeholder="e.g. Please fill out this brief questionnaire so we can prepare your quote and timeline."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs focus:border-accent focus:bg-card focus:outline-none transition-all resize-none no-scrollbar scrollbar-none"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs focus:border-accent focus:bg-card focus:outline-none transition-all resize-none"
                 />
               </div>
 

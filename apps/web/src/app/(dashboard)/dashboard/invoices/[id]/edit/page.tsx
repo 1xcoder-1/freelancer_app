@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
@@ -11,13 +11,14 @@ import {
   Trash2,
   Calendar,
   DollarSign,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { getInvoice, updateInvoiceStatus, type Invoice } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
 
 export default function EditInvoicePage() {
@@ -45,6 +46,29 @@ export default function EditInvoicePage() {
     }
   }, [invoice]);
 
+  // Unsaved-changes guard — the stored invoice is the baseline, so leaving
+  // with unsaved edits asks first and a saved draft can be restored on return.
+  const initialValues = useMemo(
+    () => (invoice ? { status: (invoice.status as string) || "sent", notes: invoice.notes || "" } : undefined),
+    [invoice]
+  );
+
+  const formValues = useMemo(() => ({ status, notes }), [status, notes]);
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.status)) setStatus(s(draft.status) as "draft" | "sent" | "paid" | "overdue");
+    if (s(draft.notes) != null) setNotes(s(draft.notes)!);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    initial: initialValues,
+    enabled: !!invoice,
+    draftKey: `invoice-edit-${invoiceId}`,
+    onRestoreDraft: applyDraft,
+  });
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -53,6 +77,7 @@ export default function EditInvoicePage() {
       await updateInvoiceStatus(invoiceId, status, token);
       invalidateCache(`invoice:${invoiceId}`);
       invalidateCache("invoices:data");
+      guard.markSaved();
       toast.success("Invoice updated successfully");
       router.push(`/dashboard/invoices/${invoiceId}`);
     } catch (err) {
@@ -94,11 +119,13 @@ export default function EditInvoicePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href={`/dashboard/invoices/${invoiceId}`}>
-            <Button variant="outline" className="border-line text-xs font-semibold h-9 rounded-xl">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            onClick={() => guard.guardedPush(`/dashboard/invoices/${invoiceId}`)}
+            className="border-line text-xs font-semibold h-9 rounded-xl"
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleSave}
             disabled={submitting}

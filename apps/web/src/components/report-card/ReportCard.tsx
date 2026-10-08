@@ -13,7 +13,7 @@ import {
   Sparkles,
   Trash2,
   Check,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import type { CardContent, CardSettings, ReportCardData } from "@/lib/api";
 import {
   CARD_TABS,

@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
   ArrowLeft,
   Send,
   Clock,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -52,6 +53,44 @@ export default function NewInvoicePage() {
   const [itemRate, setItemRate] = useState(1500);
   const [selectedTimeIds, setSelectedTimeIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Unsaved-changes guard — an accidental click away asks before the drafted
+  // invoice is lost, and the autosaved draft can be restored on return.
+  const formValues = useMemo(
+    () => ({
+      clientId,
+      invoiceNumber,
+      dueDate,
+      notes,
+      itemDesc,
+      itemQty: String(itemQty),
+      itemRate: String(itemRate),
+      selectedTimeIds: selectedTimeIds.join(","),
+    }),
+    [clientId, invoiceNumber, dueDate, notes, itemDesc, itemQty, itemRate, selectedTimeIds]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.clientId) != null) setClientId(s(draft.clientId)!);
+    if (s(draft.invoiceNumber) != null) setInvoiceNumber(s(draft.invoiceNumber)!);
+    if (s(draft.dueDate) != null) setDueDate(s(draft.dueDate)!);
+    if (s(draft.notes) != null) setNotes(s(draft.notes)!);
+    if (s(draft.itemDesc) != null) setItemDesc(s(draft.itemDesc)!);
+    const qty = Number(s(draft.itemQty));
+    if (Number.isFinite(qty) && qty > 0) setItemQty(qty);
+    const rate = Number(s(draft.itemRate));
+    if (Number.isFinite(rate) && rate >= 0) setItemRate(rate);
+    if (s(draft.selectedTimeIds) != null) {
+      setSelectedTimeIds(s(draft.selectedTimeIds)!.split(",").filter(Boolean));
+    }
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "invoice-new",
+    onRestoreDraft: applyDraft,
+  });
 
   const { data: pageData } = useApiData<{ clients: Client[]; unbilled: UnbilledTimeEntry[] }>(
     "invoices:form-data",
@@ -129,6 +168,7 @@ export default function NewInvoicePage() {
 
       invalidateCache("invoices:data");
       invalidateCache("projects:data");
+      guard.markSaved();
       toast.success("Invoice created & sent to client!");
       router.push(`/dashboard/invoices/${created.id}`);
     } catch (err: any) {
@@ -164,11 +204,13 @@ export default function NewInvoicePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/invoices">
-            <Button variant="outline" className="border-line text-xs font-semibold h-9 rounded-xl">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            onClick={() => guard.guardedPush("/dashboard/invoices")}
+            className="border-line text-xs font-semibold h-9 rounded-xl"
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleSubmit}
             disabled={submitting}

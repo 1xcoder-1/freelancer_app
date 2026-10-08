@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -10,11 +10,13 @@ import {
   ChevronDown,
   AlertCircle,
   Crown,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { getClient, updateClient, type Client } from "@/lib/api";
+import { getClient, getDuplicateConflict, updateClient, type Client } from "@/lib/api";
+import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -147,6 +149,46 @@ export default function EditClientPage() {
   const [isVip, setIsVip] = useState(false);
 
   const effectiveCategory = customCategory.trim() || category || "Featured";
+
+  // Unsaved-changes guard. The baseline is captured once after the record
+  // loads, so the empty form shell never counts as dirty, and a restored
+  // draft (still differing from the record) does.
+  const formValues = useMemo(
+    () => ({
+      name, companyName, email, phone, website, rateOrBudget, currency,
+      category, customCategory, paymentTerms, clientNotes, isVip,
+    }),
+    [name, companyName, email, phone, website, rateOrBudget, currency, category, customCategory, paymentTerms, clientNotes, isVip]
+  );
+  const [initialValues, setInitialValues] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    if (!loading && !initialValues) setInitialValues({ ...formValues });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  const applyDraft = useCallback((saved: Record<string, unknown>) => {
+    const str = (k: string, d = "") => (typeof saved[k] === "string" && (saved[k] as string) !== "[object Object]" ? (saved[k] as string) : d);
+    setName(str("name"));
+    setCompanyName(str("companyName"));
+    setEmail(str("email"));
+    setPhone(str("phone"));
+    setWebsite(str("website"));
+    setRateOrBudget(str("rateOrBudget"));
+    setCurrency(str("currency", "USD"));
+    setCategory(str("category", "Featured"));
+    setCustomCategory(str("customCategory"));
+    setPaymentTerms(str("paymentTerms", "50_advance_50_completion"));
+    setClientNotes(str("clientNotes"));
+    setIsVip(saved["isVip"] === true);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    initial: initialValues ?? undefined,
+    enabled: !loading && !!initialValues,
+    draftKey: `client-edit-${clientId}`,
+    onRestoreDraft: applyDraft,
+  });
 
   // Load existing client data
   useEffect(() => {
@@ -298,8 +340,18 @@ export default function EditClientPage() {
       invalidateCache("invoices:data");
 
       toast.success("Client updated successfully");
+      // Saved: drop the draft + clear dirty so the redirect is never blocked.
+      guard.markSaved();
       router.push(`/dashboard/clients/${clientId}`);
     } catch (err) {
+      const conflict = getDuplicateConflict(err);
+      if (conflict) {
+        // PATCH conflicts are always strict email hits: one email, one
+        // person — offer the existing record instead of a second row.
+        const res = await resolveDuplicateConflict(conflict);
+        if (res.action === "open") guard.forcePush(res.path);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Could not update client");
     } finally {
       setSaving(false);
@@ -316,7 +368,7 @@ export default function EditClientPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
@@ -336,7 +388,7 @@ export default function EditClientPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push(`/dashboard/clients/${clientId}`)}
+            onClick={() => guard.guardedPush(`/dashboard/clients/${clientId}`)}
             disabled={saving}
             className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg border border-line bg-card hover:bg-surface text-fg font-medium text-xs sm:text-sm transition-all duration-150 cursor-pointer disabled:opacity-50 h-9"
           >
@@ -578,7 +630,7 @@ export default function EditClientPage() {
                   onChange={(e) => setClientNotes(e.target.value)}
                   rows={7}
                   placeholder="Client preferences, key contacts, or milestone agreements..."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg no-scrollbar scrollbar-none placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
                 />
               </div>
             </div>

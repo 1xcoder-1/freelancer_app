@@ -17,7 +17,7 @@ import {
   Flame,
   XCircle,
   ArrowUpRight,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -123,9 +123,9 @@ export function LeadsPanel() {
   const dueFollowUps = insights?.due_follow_up_count ?? 0;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 no-scrollbar scrollbar-none">
+    <div className="space-y-6">
       {/* 4 Headline Cards matching main dashboard layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
         {loading && !insights ? (
           <>
             <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
@@ -236,7 +236,7 @@ export function LeadsPanel() {
 
           <button
             onClick={() => handleOpenCreate()}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Lead</span>
@@ -325,7 +325,7 @@ export function LeadsPanel() {
               <div className="mt-5 flex justify-center">
                 <button
                   onClick={() => handleOpenCreate()}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+                  className="press inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Lead</span>
@@ -382,7 +382,7 @@ export function LeadsPanel() {
                             <button
                               onClick={handlePrevPage}
                               disabled={currentPage <= 1}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                              className="press w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg"
                               title="Previous 20 Cards"
                               aria-label="Previous page"
                             >
@@ -396,7 +396,7 @@ export function LeadsPanel() {
                             <button
                               onClick={handleNextPage}
                               disabled={currentPage >= totalPages}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg transition-all duration-200"
+                              className="press w-7 h-7 rounded-lg flex items-center justify-center text-fg hover:bg-accent/15 hover:text-accent disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-fg"
                               title="Next 20 Cards"
                               aria-label="Next page"
                             >
@@ -408,7 +408,7 @@ export function LeadsPanel() {
                     </div>
 
                     {/* Cards Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 stagger-grid">
                       {visibleLeads.map((lead) => {
                         const stageObj = STAGES.find((s) => s.key === lead.stage) || STAGES[0];
                         const totalSteps = 5;

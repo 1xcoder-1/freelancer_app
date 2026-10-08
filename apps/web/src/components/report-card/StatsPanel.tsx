@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Flame, Eye } from "lucide-react";
+import { Flame, Eye } from "@/components/animated-icons";
 import type { DeliveryStats, HeatmapCell } from "@/lib/api";
 
 interface StatsPanelProps {

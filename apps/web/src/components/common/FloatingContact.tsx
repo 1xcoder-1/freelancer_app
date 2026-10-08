@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, X, Send, CheckCircle2, Sparkles } from "lucide-react";
+import { MessageSquare, X, Send, CheckCircle2, Sparkles } from "@/components/animated-icons";
 
 export function FloatingContact() {
   const pathname = usePathname();

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -13,7 +13,7 @@ import {
   ClipboardList,
   Check,
   ChevronDown,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getIntakeForm, updateIntakeForm, type IntakeForm } from "@/lib/api";
@@ -21,6 +21,7 @@ import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -123,6 +124,52 @@ export default function EditIntakeFormPage() {
   const [submissionsCount, setSubmissionsCount] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Unsaved-changes guard — the loaded questionnaire is the baseline, so
+  // leaving with typed edits asks first and a draft can be restored on return.
+  const [initialValues, setInitialValues] = useState<Record<string, string> | null>(null);
+
+  const formValues = useMemo(
+    () => ({
+      title,
+      description,
+      category,
+      customCategory,
+      status,
+      questionsJson: JSON.stringify(questions),
+    }),
+    [title, description, category, customCategory, status, questions]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.title) != null) setTitle(s(draft.title)!);
+    if (s(draft.description) != null) setDescription(s(draft.description)!);
+    if (s(draft.category)) setCategory(s(draft.category)!);
+    if (s(draft.customCategory) != null) setCustomCategory(s(draft.customCategory)!);
+    if (s(draft.status)) setStatus(s(draft.status)!);
+    try {
+      const qs = JSON.parse(s(draft.questionsJson) || "[]");
+      if (Array.isArray(qs) && qs.length && qs.every((q: any) => q && typeof q.id === "string")) {
+        setQuestions(qs.map((q: any) => ({
+          id: q.id,
+          label: String(q.label ?? ""),
+          type: ["text", "textarea", "number", "file"].includes(q.type) ? q.type : "text",
+          required: !!q.required,
+        })));
+      }
+    } catch {
+      /* junk draft — keep loaded content */
+    }
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    initial: initialValues ?? undefined,
+    enabled: !loading,
+    draftKey: `intake-edit-${formId}`,
+    onRestoreDraft: applyDraft,
+  });
+
   useEffect(() => {
     let mounted = true;
 
@@ -182,6 +229,21 @@ export default function EditIntakeFormPage() {
       mounted = false;
     };
   }, [formId, getToken]);
+
+  // Snapshot the loaded form as the guard's baseline once (state fills in above).
+  useEffect(() => {
+    if (!loading && !initialValues) {
+      setInitialValues({
+        title,
+        description,
+        category,
+        customCategory,
+        status,
+        questionsJson: JSON.stringify(questions),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const effectiveCategory = customCategory.trim() || category || "Featured";
 
@@ -258,6 +320,7 @@ export default function EditIntakeFormPage() {
 
       invalidateCache("intake:forms");
       invalidateCache("dashboard:data");
+      guard.markSaved();
       toast.success("Intake form updated successfully!");
       router.push(`/dashboard/intake/${formId}`);
     } catch (err: any) {
@@ -292,7 +355,7 @@ export default function EditIntakeFormPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div className="space-y-1">
@@ -312,11 +375,14 @@ export default function EditIntakeFormPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href={`/dashboard/intake/${formId}`}>
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line cursor-pointer">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => guard.guardedPush(`/dashboard/intake/${formId}`)}
+            className="text-xs rounded-xl h-9 px-4 border-line cursor-pointer"
+          >
+            Cancel
+          </Button>
           <Button
             size="sm"
             type="submit"
@@ -380,7 +446,7 @@ export default function EditIntakeFormPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   placeholder="e.g. Please fill out this brief questionnaire so we can prepare your quote and timeline."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs focus:border-accent focus:bg-card focus:outline-none transition-all resize-none no-scrollbar scrollbar-none"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs focus:border-accent focus:bg-card focus:outline-none transition-all resize-none"
                 />
               </div>
 

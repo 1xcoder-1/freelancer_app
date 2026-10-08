@@ -9,15 +9,13 @@ import {
   CtaBand,
 } from "@/components/landing/LandingSections";
 import { Footer } from "@/components/landing/Footer";
+import { LandingShell } from "@/components/landing/layout";
 
 export default function Home() {
   return (
     <SmoothScroll>
-      <div className="min-h-screen bg-bg text-fg flex flex-col">
-        {/* Slim top navigation */}
+      <LandingShell>
         <Navbar />
-
-        {/* Main Content Area */}
         <main className="flex-1">
           <Hero />
           <Features />
@@ -26,10 +24,8 @@ export default function Home() {
           <Faq />
           <CtaBand />
         </main>
-
-        {/* Categorized Footer */}
         <Footer />
-      </div>
+      </LandingShell>
     </SmoothScroll>
   );
 }

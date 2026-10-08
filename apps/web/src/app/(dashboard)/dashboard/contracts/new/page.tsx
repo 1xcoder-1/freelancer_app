@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   FileText,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -24,6 +24,7 @@ import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast } from "@/lib/validation";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 const contractSchema = z.object({
   title: z.string().trim().min(2, "Title must be at least 2 characters").max(100, "Title is too long"),
@@ -65,6 +66,41 @@ export default function NewContractPage() {
   // N2: how long the public sign link stays valid (server seeds expires_at).
   const [expireDays, setExpireDays] = useState(30);
   const [submitting, setSubmitting] = useState(false);
+
+  // Unsaved-changes guard — an accidental click away asks before the drafted
+  // agreement is lost, and the autosaved draft can be restored on return.
+  const formValues = useMemo(
+    () => ({
+      title,
+      projectId,
+      clientId,
+      recipientName,
+      recipientEmail,
+      content,
+      senderSignature,
+      expireDays: String(expireDays),
+    }),
+    [title, projectId, clientId, recipientName, recipientEmail, content, senderSignature, expireDays]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.title) != null) setTitle(s(draft.title)!);
+    if (s(draft.projectId) != null) setProjectId(s(draft.projectId)!);
+    if (s(draft.clientId) != null) setClientId(s(draft.clientId)!);
+    if (s(draft.recipientName) != null) setRecipientName(s(draft.recipientName)!);
+    if (s(draft.recipientEmail) != null) setRecipientEmail(s(draft.recipientEmail)!);
+    if (s(draft.content) != null) setContent(s(draft.content)!);
+    if (s(draft.senderSignature) != null) setSenderSignature(s(draft.senderSignature)!);
+    const days = Number(s(draft.expireDays));
+    if (Number.isFinite(days) && days > 0) setExpireDays(days);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "contract-new",
+    onRestoreDraft: applyDraft,
+  });
 
   const { data: pageData } = useApiData<{ projects: Project[]; clients: Client[] }>(
     "contracts:form-data",
@@ -135,6 +171,7 @@ export default function NewContractPage() {
 
       invalidateCache("contracts:data");
       invalidateCache("projects:data");
+      guard.markSaved();
       toast.success("Contract created & public signing link generated!");
       router.push(`/dashboard/contracts/${created.id}`);
     } catch (err: any) {
@@ -173,11 +210,13 @@ export default function NewContractPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/contracts">
-            <Button variant="outline" className="border-line text-xs font-semibold h-9 rounded-xl">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            onClick={() => guard.guardedPush("/dashboard/contracts")}
+            className="border-line text-xs font-semibold h-9 rounded-xl"
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleSubmit}
             disabled={submitting}

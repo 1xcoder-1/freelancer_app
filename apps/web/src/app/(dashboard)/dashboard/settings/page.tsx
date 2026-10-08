@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Settings,
@@ -19,7 +19,7 @@ import {
   Sparkles,
   AlertCircle,
   Loader2
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,6 +35,7 @@ import {
   updateWorkspaceSettings,
 } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
@@ -81,6 +82,24 @@ function SettingsContent() {
   const [config, setConfig] = useState<WorkspaceConfig>(DEFAULT_CONFIG);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Unsaved-changes guard — typed business/invoicing prefs (invoice footer,
+  // late-fee policy…) survive an accidental sidebar click and restore on return.
+  const configValues = useMemo<Record<string, unknown>>(() => ({ ...config }), [config]);
+  const guard = useUnsavedChangesGuard({
+    values: configValues,
+    enabled: !loading,
+    draftKey: "workspace-settings",
+    onRestoreDraft: useCallback((draft: Record<string, unknown>) => {
+      setConfig((prev) => {
+        const next = { ...prev } as Record<keyof WorkspaceConfig, string>;
+        for (const k of Object.keys(prev) as Array<keyof WorkspaceConfig>) {
+          if (typeof draft[k] === "string") next[k] = draft[k] as string;
+        }
+        return next;
+      });
+    }, []),
+  });
 
   // Load the persisted workspace settings from Neon (single source of truth,
   // shared across every device) instead of browser-local storage.
@@ -142,6 +161,7 @@ function SettingsContent() {
       // The saved currency/rate feed the dashboard stats and the billing timer.
       invalidateCache("dashboard:data");
       invalidateCache("dashboard:overview");
+      guard.markSaved();
       setSavedSuccess(true);
       toast.success("Settings saved");
       setTimeout(() => setSavedSuccess(false), 3000);
@@ -309,7 +329,7 @@ function SettingsContent() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>

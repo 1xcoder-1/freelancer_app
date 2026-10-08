@@ -2,6 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { CountUp } from "@/components/common/CountUp";
 
 /* ------------------------------------------------------------------
    Shared dashboard patterns styled 1:1 after the reference app:
@@ -54,7 +55,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "bg-[#141518] dark:bg-[#141518] border border-[#26272d] hover:border-[#383942] rounded-2xl p-6 flex flex-col justify-between min-h-[180px] shadow-sm transition-all duration-200",
+        "bg-[#141518] dark:bg-[#141518] border border-[#26272d] hover:border-[#383942] rounded-2xl p-6 flex flex-col justify-between min-h-[180px] shadow-sm transition-[border-color,box-shadow] duration-150 ease-out",
         className
       )}
     >
@@ -68,10 +69,11 @@ export function StatCard({
         )}
       </div>
 
-      {/* Primary Value */}
+      {/* Primary Value — plain numbers count up on arrival; strings (money
+          chips, labels) render as-is. */}
       <div className="my-auto py-1">
         <div className="font-display text-2xl sm:text-3xl font-medium text-white tracking-tight leading-none">
-          {value}
+          {typeof value === "number" ? <CountUp value={value} /> : value}
         </div>
       </div>
 

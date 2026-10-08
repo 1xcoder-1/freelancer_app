@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -11,7 +11,7 @@ import {
   Plus,
   Trash2,
   AlertCircle,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createProject, getClients, type Client } from "@/lib/api";
@@ -19,6 +19,7 @@ import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -75,6 +76,59 @@ export default function NewProjectPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Unsaved-changes guard — an accidental click away asks before the typed
+  // project is lost, and the autosaved draft can be restored on return.
+  // Milestones ride along as JSON since the guard compares strings.
+  const formValues = useMemo(
+    () => ({
+      title,
+      clientId,
+      category,
+      customCategory,
+      budgetStr,
+      hourlyRateStr,
+      currency,
+      priority,
+      deadline,
+      description,
+      milestonesJson: JSON.stringify(milestones),
+    }),
+    [title, clientId, category, customCategory, budgetStr, hourlyRateStr, currency, priority, deadline, description, milestones]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.title) != null) setTitle(s(draft.title)!);
+    if (s(draft.clientId) != null) setClientId(s(draft.clientId)!);
+    if (s(draft.category)) setCategory(s(draft.category)!);
+    if (s(draft.customCategory) != null) setCustomCategory(s(draft.customCategory)!);
+    if (s(draft.budgetStr) != null) setBudgetStr(s(draft.budgetStr)!);
+    if (s(draft.hourlyRateStr) != null) setHourlyRateStr(s(draft.hourlyRateStr)!);
+    if (s(draft.currency)) setCurrency(s(draft.currency)!);
+    if (s(draft.priority)) setPriority(s(draft.priority) as "low" | "medium" | "high");
+    if (s(draft.deadline) != null) setDeadline(s(draft.deadline)!);
+    if (s(draft.description) != null) setDescription(s(draft.description)!);
+    try {
+      const ms = JSON.parse(s(draft.milestonesJson) || "[]");
+      if (Array.isArray(ms) && ms.length && ms.every((m: any) => m && typeof m.id === "string")) {
+        setMilestones(ms.map((m: any) => ({
+          id: m.id,
+          title: String(m.title ?? ""),
+          amount: Number(m.amount) || 0,
+          deliverableNote: String(m.deliverableNote ?? ""),
+        })));
+      }
+    } catch {
+      /* junk draft — keep defaults */
+    }
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "project-new",
+    onRestoreDraft: applyDraft,
+  });
+
   useEffect(() => {
     async function loadClientList() {
       try {
@@ -92,6 +146,12 @@ export default function NewProjectPage() {
     }
     loadClientList();
   }, [getToken]);
+
+  // The auto-selected first client lands asynchronously — re-seed the guard's
+  // baseline once loading finishes so that pre-fill never counts as an edit.
+  useEffect(() => {
+    if (!loadingClients) guard.seedBaseline();
+  }, [loadingClients, guard]);
 
   const selectedClient = clients.find((c) => c.id === clientId);
   const effectiveCategory = customCategory.trim() || category || "Featured";
@@ -190,6 +250,7 @@ export default function NewProjectPage() {
 
       invalidateCache("projects:data");
       invalidateCache("dashboard:data");
+      guard.markSaved();
       toast.success("Project created successfully!");
       router.push(`/dashboard/projects/${created.id}`);
     } catch (err: any) {
@@ -221,11 +282,14 @@ export default function NewProjectPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/projects">
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => guard.guardedPush("/dashboard/projects")}
+            className="text-xs rounded-xl h-9 px-4 border-line"
+          >
+            Cancel
+          </Button>
           <Button
             size="sm"
             type="submit"

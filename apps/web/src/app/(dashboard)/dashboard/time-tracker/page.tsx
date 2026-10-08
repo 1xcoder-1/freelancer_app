@@ -9,7 +9,7 @@ import {
   Square,
   Trash2,
   RefreshCw,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -224,7 +224,7 @@ export default function TimeTrackerPage() {
   const paused = !!session && !session.is_running;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Time</h1>

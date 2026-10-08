@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useUser, useAuth } from "@clerk/nextjs";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Clock,
   DollarSign,
@@ -17,7 +18,7 @@ import {
   TrendingDown,
   Users,
   AlertTriangle,
-} from "lucide-react";
+} from "@/components/animated-icons";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -147,7 +148,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 enter-stagger">
       {/* Greeting + one-line summary */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -300,6 +301,14 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
         {tab === "today" && (
           todayLoading ? (
             <div className="space-y-2">
@@ -472,6 +481,8 @@ export default function DashboardPage() {
             </div>
           )
         )}
+        </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Live dashboard calendar: meetings, client work, deadlines + optional Google Calendar sync */}

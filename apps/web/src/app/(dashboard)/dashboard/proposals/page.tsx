@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -18,7 +18,7 @@ import {
   Copy,
   Check,
   Building,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +33,7 @@ import {
   type Client,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 export default function ProposalsPage() {
   const { getToken } = useAuth();
@@ -44,6 +45,45 @@ export default function ProposalsPage() {
   const [generatedPitch, setGeneratedPitch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Unsaved-changes guard — an accidental sidebar click while composing a
+  // pitch asks first, and the draft can be restored on return.
+  const formValues = useMemo(
+    () => ({
+      selectedClientId,
+      clientScope,
+      targetBudget: String(targetBudget),
+      proposalTitle,
+      generatedPitch,
+    }),
+    [selectedClientId, clientScope, targetBudget, proposalTitle, generatedPitch]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.selectedClientId) != null) setSelectedClientId(s(draft.selectedClientId)!);
+    if (s(draft.clientScope) != null) setClientScope(s(draft.clientScope)!);
+    const b = Number(s(draft.targetBudget));
+    if (Number.isFinite(b) && b >= 0) setTargetBudget(b);
+    if (s(draft.proposalTitle) != null) setProposalTitle(s(draft.proposalTitle)!);
+    if (s(draft.generatedPitch) != null) setGeneratedPitch(s(draft.generatedPitch)!);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "proposal-composer",
+    onRestoreDraft: applyDraft,
+  });
+
+  // After a save the composer resets to empty; re-baseline once that flush
+  // lands so the cleared form isn't flagged as unsaved work.
+  const justSavedRef = useRef(false);
+  useEffect(() => {
+    if (justSavedRef.current && !clientScope && !generatedPitch && !proposalTitle) {
+      justSavedRef.current = false;
+      guard.markSaved();
+    }
+  }, [clientScope, generatedPitch, proposalTitle, guard]);
 
   const { data: pageData, loading, refresh: loadData } = useApiData(
     "proposals:data",
@@ -99,6 +139,7 @@ export default function ProposalsPage() {
       setGeneratedPitch("");
       setProposalTitle("");
       setSelectedClientId("");
+      justSavedRef.current = true;
       loadData();
       toast.success("Proposal saved");
     } catch (err) {
@@ -145,7 +186,7 @@ export default function ProposalsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>

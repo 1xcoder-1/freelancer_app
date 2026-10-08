@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Settings2 } from "lucide-react";
+import { Settings2 } from "@/components/animated-icons";
 import { ACCENT_OPTIONS, FONT_OPTIONS } from "./constants";
 import type { CardSettings } from "@/lib/api";
 

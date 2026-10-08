@@ -19,7 +19,7 @@ import {
   RefreshCw,
   AlertTriangle,
   Ban,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";

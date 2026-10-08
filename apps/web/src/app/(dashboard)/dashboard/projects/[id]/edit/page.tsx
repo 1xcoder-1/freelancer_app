@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -9,7 +9,7 @@ import {
   Loader2,
   ChevronDown,
   AlertCircle,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getProject, updateProject, getClients, type Project, type Client } from "@/lib/api";
@@ -17,6 +17,7 @@ import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -62,6 +63,50 @@ export default function EditProjectPage() {
   const [deadline, setDeadline] = useState("");
   const [description, setDescription] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Unsaved-changes guard — the loaded project is the baseline, so leaving with
+  // typed edits asks first and a saved draft can be restored on return.
+  const [initialValues, setInitialValues] = useState<Record<string, string> | null>(null);
+
+  const formValues = useMemo(
+    () => ({
+      title,
+      clientId,
+      category,
+      customCategory,
+      budgetStr,
+      hourlyRateStr,
+      currency,
+      status,
+      priority,
+      deadline,
+      description,
+    }),
+    [title, clientId, category, customCategory, budgetStr, hourlyRateStr, currency, status, priority, deadline, description]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.title) != null) setTitle(s(draft.title)!);
+    if (s(draft.clientId) != null) setClientId(s(draft.clientId)!);
+    if (s(draft.category)) setCategory(s(draft.category)!);
+    if (s(draft.customCategory) != null) setCustomCategory(s(draft.customCategory)!);
+    if (s(draft.budgetStr) != null) setBudgetStr(s(draft.budgetStr)!);
+    if (s(draft.hourlyRateStr) != null) setHourlyRateStr(s(draft.hourlyRateStr)!);
+    if (s(draft.currency)) setCurrency(s(draft.currency)!);
+    if (s(draft.status)) setStatus(s(draft.status)!);
+    if (s(draft.priority)) setPriority(s(draft.priority) as "low" | "medium" | "high");
+    if (s(draft.deadline) != null) setDeadline(s(draft.deadline)!);
+    if (s(draft.description) != null) setDescription(s(draft.description)!);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    initial: initialValues ?? undefined,
+    enabled: !loading,
+    draftKey: `project-edit-${projectId}`,
+    onRestoreDraft: applyDraft,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -131,6 +176,26 @@ export default function EditProjectPage() {
       mounted = false;
     };
   }, [projectId, getToken]);
+
+  // Snapshot the loaded form as the guard's baseline once (state fills in above).
+  useEffect(() => {
+    if (!loading && !initialValues) {
+      setInitialValues({
+        title,
+        clientId,
+        category,
+        customCategory,
+        budgetStr,
+        hourlyRateStr,
+        currency,
+        status,
+        priority,
+        deadline,
+        description,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const selectedClient = clients.find((c) => c.id === clientId);
   const effectiveCategory = customCategory.trim() || category || "Featured";
@@ -207,6 +272,7 @@ export default function EditProjectPage() {
 
       invalidateCache("projects:data");
       invalidateCache("dashboard:data");
+      guard.markSaved();
       toast.success("Project updated successfully!");
       router.push(`/dashboard/projects/${projectId}`);
     } catch (err: any) {
@@ -263,11 +329,14 @@ export default function EditProjectPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href={`/dashboard/projects/${projectId}`}>
-            <Button variant="outline" size="sm" className="text-xs rounded-xl h-9 px-4 border-line">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => guard.guardedPush(`/dashboard/projects/${projectId}`)}
+            className="text-xs rounded-xl h-9 px-4 border-line"
+          >
+            Cancel
+          </Button>
           <Button
             size="sm"
             type="submit"

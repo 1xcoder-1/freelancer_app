@@ -4,14 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 const navLinks = [
   { label: "Features", href: "/features" },
   { label: "AI Copilot", href: "/ai" },
-  { label: "Pricing", href: "/pricing" },
   { label: "Architecture", href: "/architecture" },
   { label: "About", href: "/about" },
 ];

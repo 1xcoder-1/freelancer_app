@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { Github, Linkedin, Twitter } from "lucide-react";
+import { Github, Linkedin, Twitter } from "@/components/animated-icons";
 
 const columns = [
   {
     heading: "Product",
     links: [
       { label: "Features", href: "/features" },
-      { label: "Pricing", href: "/pricing" },
       { label: "Book AI", href: "/ai" },
       { label: "Dashboard", href: "/dashboard" },
     ],

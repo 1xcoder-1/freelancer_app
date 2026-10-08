@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { CalendarDays, Loader2, TriangleAlert } from "lucide-react";
+import { CalendarDays, Loader2, TriangleAlert } from "@/components/animated-icons";
 
 import { completeGoogleCalendarConnect } from "@/lib/api";
 

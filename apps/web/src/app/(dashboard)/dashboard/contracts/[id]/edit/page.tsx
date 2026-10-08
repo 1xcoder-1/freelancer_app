@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
@@ -13,13 +13,14 @@ import {
   User,
   Mail,
   ShieldCheck,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { getContract, type Contract } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
 
 export default function EditContractPage() {
@@ -53,6 +54,44 @@ export default function EditContractPage() {
     }
   }, [contract]);
 
+  // Unsaved-changes guard — the stored contract is the baseline, so leaving
+  // with edited terms asks first and a saved draft can be restored on return.
+  const initialValues = useMemo(
+    () =>
+      contract
+        ? {
+            title: contract.title || "",
+            recipientName: contract.recipient_name || "",
+            recipientEmail: contract.recipient_email || "",
+            content: contract.content || "",
+            senderSignature: contract.sender_signature || "",
+          }
+        : undefined,
+    [contract]
+  );
+
+  const formValues = useMemo(
+    () => ({ title, recipientName, recipientEmail, content, senderSignature }),
+    [title, recipientName, recipientEmail, content, senderSignature]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.title) != null) setTitle(s(draft.title)!);
+    if (s(draft.recipientName) != null) setRecipientName(s(draft.recipientName)!);
+    if (s(draft.recipientEmail) != null) setRecipientEmail(s(draft.recipientEmail)!);
+    if (s(draft.content) != null) setContent(s(draft.content)!);
+    if (s(draft.senderSignature) != null) setSenderSignature(s(draft.senderSignature)!);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    initial: initialValues,
+    enabled: !!contract,
+    draftKey: `contract-edit-${contractId}`,
+    onRestoreDraft: applyDraft,
+  });
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -60,6 +99,7 @@ export default function EditContractPage() {
       // Invalidate and redirect
       invalidateCache(`contract:${contractId}`);
       invalidateCache("contracts:data");
+      guard.markSaved();
       toast.success("Contract details updated");
       router.push(`/dashboard/contracts/${contractId}`);
     } catch (err) {
@@ -101,11 +141,13 @@ export default function EditContractPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href={`/dashboard/contracts/${contractId}`}>
-            <Button variant="outline" className="border-line text-xs font-semibold h-9 rounded-xl">
-              Cancel
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            onClick={() => guard.guardedPush(`/dashboard/contracts/${contractId}`)}
+            className="border-line text-xs font-semibold h-9 rounded-xl"
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleSave}
             disabled={submitting}

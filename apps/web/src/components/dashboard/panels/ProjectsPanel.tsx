@@ -11,7 +11,7 @@ import {
   RotateCcw,
   CheckCircle2,
   Trash2,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -120,7 +120,7 @@ export function ProjectsPanel() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
+    <div className="space-y-8">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
         <div>
@@ -287,7 +287,7 @@ export function ProjectsPanel() {
                     </div>
 
                     {/* Cards Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 stagger-grid">
                       {visibleProjects.map((p) => {
                         const totalMilestones = p.milestones?.length || 0;
                         const completedMilestones = p.milestones?.filter((m) => m.is_completed).length || 0;

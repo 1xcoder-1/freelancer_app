@@ -15,7 +15,7 @@ import {
   Trash2,
   Loader2,
   Unplug,
-} from "lucide-react";
+} from "@/components/animated-icons";
 
 import { Button } from "@/components/ui/button";
 import { confirmDialog } from "@/components/common/ConfirmDialog";

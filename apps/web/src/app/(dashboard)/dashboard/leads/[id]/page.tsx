@@ -21,13 +21,14 @@ import {
   ExternalLink,
   DollarSign,
   TrendingUp,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   getLead,
   deleteLead,
   convertLeadToClient,
+  getLeadConvertPreview,
   closeLead,
   startWork,
   type Lead,
@@ -107,12 +108,53 @@ export default function LeadDetailPage() {
     setBusyAction(true);
     try {
       const token = (await getToken()) || undefined;
-      const client = await convertLeadToClient(lead.id, token);
+
+      // Pre-flight: tell the user what will happen BEFORE committing, so
+      // "Make this client" never hides a duplicate or surprises with a reuse.
+      const preview = await getLeadConvertPreview(lead.id, token).catch(() => null);
+      let mergeInto: string | undefined;
+      if (preview && preview.match !== "none" && preview.client_id) {
+        if (preview.match === "email") {
+          const go = await confirmDialog({
+            title: "Already on your roster",
+            message: `${preview.client_name}${preview.client_email ? ` (${preview.client_email})` : ""} is already a client with this email. Converting marks the lead won and updates that existing client — no duplicate is created. Continue?`,
+            confirmLabel: "Update existing client",
+            cancelLabel: "Cancel",
+          });
+          if (!go) {
+            setBusyAction(false);
+            return;
+          }
+        } else {
+          const same = await confirmDialog({
+            title: "Is this the same person?",
+            message: `A client named "${preview.client_name}"${preview.client_email ? ` (${preview.client_email})` : ""} already exists with a different email. Converting can update that client instead of adding a second row for the same person.`,
+            confirmLabel: "Same person — merge",
+            cancelLabel: "Different person",
+          });
+          if (same) {
+            mergeInto = preview.client_id;
+          } else {
+            const create = await confirmDialog({
+              title: "Create a new client?",
+              message: `"${lead.name}" will be added to the roster as a NEW client alongside the existing one.`,
+              confirmLabel: "Create new client",
+              cancelLabel: "Cancel",
+            });
+            if (!create) {
+              setBusyAction(false);
+              return;
+            }
+          }
+        }
+      }
+
+      const client = await convertLeadToClient(lead.id, token, mergeInto);
       invalidateCache("leads:data");
       invalidateCache("leads:insights");
       invalidateCache("clients:data");
       invalidateCache("dashboard:data");
-      toast.success("Lead converted to Client roster!");
+      toast.success(mergeInto ? "Lead merged into the existing client!" : "Lead converted to Client roster!");
       router.push(`/dashboard/clients/${client.id}`);
     } catch (err) {
       console.error("Error converting lead:", err);
@@ -293,7 +335,7 @@ export default function LeadDetailPage() {
   const isLost = lead.stage === "lost";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
       {/* Top Navigation & Header */}
       <div className="space-y-4 pb-4 border-b border-line">
         <Link
@@ -304,9 +346,9 @@ export default function LeadDetailPage() {
           <span>Back to Leads</span>
         </Link>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            {/* Colorful soft pill tags matching client preview pattern */}
+            {/* Name + stage on one line; everything else sits in a quiet meta line */}
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1">
                 {lead.name}
@@ -320,34 +362,36 @@ export default function LeadDetailPage() {
               >
                 {lead.stage === "won" ? "★ Won Deal" : lead.stage === "lost" ? "Closed Lost" : stageObj.label}
               </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+              {lead.company && (
+                <span className="inline-flex items-center gap-1.5 mr-1">
+                  <Building2 className="w-3.5 h-3.5 text-accent" />
+                  <span className="text-fg font-medium">{lead.company}</span>
+                  <span>•</span>
+                  <span>Source: {lead.source || "Referral"}</span>
+                </span>
+              )}
 
               {/* Category Pill */}
-              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25">
                 {category}
               </span>
 
               {/* Priority Pill */}
               <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${getPriorityStyle(
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border capitalize ${getPriorityStyle(
                   lead.priority
                 )}`}
               >
                 {lead.priority} Priority
               </span>
             </div>
-
-            {lead.company && (
-              <p className="text-xs text-muted font-normal flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-accent" />
-                <span className="text-fg font-medium">{lead.company}</span>
-                <span>•</span>
-                <span>Source: {lead.source || "Referral"}</span>
-              </p>
-            )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Action Buttons — own row so they never crowd the identity block */}
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {!isWon && !isLost && (
               <Button
                 size="sm"
@@ -415,31 +459,20 @@ export default function LeadDetailPage() {
 
       {/* Start-Work inline modal/form */}
       {showStart && (
-        <Card className="p-5 rounded-2xl border-line bg-card space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="flex items-center justify-between border-b border-line pb-2.5">
-            <div className="flex items-center gap-2">
-              <Rocket className="w-4 h-4 text-accent" />
-              <h2 className="text-sm font-medium text-fg">Start Work — Convert, Project &amp; Billing</h2>
-            </div>
-            <button
-              onClick={() => setShowStart(false)}
-              className="text-xs text-muted hover:text-fg p-1"
-            >
-              ✕
-            </button>
+        <Card className="p-5 rounded-2xl border-line bg-card space-y-4 enter">
+          <div className="flex items-center gap-2">
+            <Rocket className="w-4 h-4 text-accent" />
+            <h2 className="text-sm font-medium text-fg">Start Work</h2>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium text-muted uppercase tracking-wider">Project Title</label>
-            <input
-              value={swProjectTitle}
-              onChange={(e) => setSwProjectTitle(e.target.value)}
-              placeholder={`${lead.name} — engagement`}
-              className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-xs focus:border-accent focus:bg-card focus:outline-none"
-            />
-          </div>
+          <input
+            value={swProjectTitle}
+            onChange={(e) => setSwProjectTitle(e.target.value)}
+            placeholder={`${lead.name} — project title`}
+            className="w-full h-11 px-4 rounded-xl border border-line bg-surface/50 text-sm text-fg placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none"
+          />
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className="flex items-center gap-2 text-xs text-fg cursor-pointer select-none">
               <input type="checkbox" checked={swCreateContract} onChange={(e) => setSwCreateContract(e.target.checked)} className="accent-accent" />
               Add contract draft
@@ -451,19 +484,17 @@ export default function LeadDetailPage() {
           </div>
 
           {swCreateInvoice && (
-            <div className="space-y-1.5 max-w-xs pt-1">
-              <label className="text-[11px] font-medium text-muted uppercase tracking-wider">Invoice Amount ({currency})</label>
-              <input
-                type="number"
-                min={0}
-                value={swInvoiceAmount}
-                onChange={(e) => setSwInvoiceAmount(Number(e.target.value))}
-                className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-xs font-mono focus:border-accent focus:bg-card focus:outline-none"
-              />
-            </div>
+            <input
+              type="number"
+              min={0}
+              value={swInvoiceAmount}
+              onChange={(e) => setSwInvoiceAmount(Number(e.target.value))}
+              placeholder={`Invoice amount (${currency})`}
+              className="w-full sm:w-56 h-11 px-4 rounded-xl border border-line bg-surface/50 text-sm text-fg font-mono placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none"
+            />
           )}
 
-          <div className="flex items-center gap-2 pt-2 border-t border-line">
+          <div className="flex items-center gap-2 pt-1">
             <Button
               size="sm"
               onClick={handleStartWork}
@@ -482,7 +513,7 @@ export default function LeadDetailPage() {
 
       {/* Mark-Lost inline form */}
       {showLost && lead.stage !== "lost" && (
-        <Card className="p-5 rounded-2xl border-line bg-card space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+        <Card className="p-5 rounded-2xl border-line bg-card space-y-4 enter">
           <div className="flex items-center justify-between border-b border-line pb-2.5">
             <div className="flex items-center gap-2">
               <XCircle className="w-4 h-4 text-danger" />
@@ -520,7 +551,7 @@ export default function LeadDetailPage() {
               onChange={(e) => setLostNote(e.target.value)}
               rows={2}
               placeholder="What happened, and what can we learn?"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-line bg-surface/50 text-fg text-xs focus:border-accent focus:bg-card focus:outline-none resize-none no-scrollbar scrollbar-none"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-line bg-surface/50 text-fg text-xs focus:border-accent focus:bg-card focus:outline-none resize-none"
             />
           </div>
 

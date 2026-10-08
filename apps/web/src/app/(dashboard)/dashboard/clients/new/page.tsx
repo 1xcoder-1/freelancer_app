@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -10,11 +10,14 @@ import {
   ChevronDown,
   AlertCircle,
   Crown,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { createClient } from "@/lib/api";
+import { createClient, getDuplicateConflict, type Client } from "@/lib/api";
+import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
+import { celebrate } from "@/components/common/Celebration";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -145,6 +148,39 @@ export default function NewClientPage() {
 
   const effectiveCategory = customCategory.trim() || category || "Featured";
 
+  // Unsaved-changes guard: covers Cancel, the back link, the sidebar and any
+  // other in-app navigation while the form has typed-but-unsaved work, and
+  // autosaves a draft so a mistaken leave can be restored next visit.
+  const formValues = useMemo(
+    () => ({
+      name, companyName, email, phone, website, rateOrBudget, currency,
+      category, customCategory, paymentTerms, clientNotes, isVip,
+    }),
+    [name, companyName, email, phone, website, rateOrBudget, currency, category, customCategory, paymentTerms, clientNotes, isVip]
+  );
+
+  const applyDraft = useCallback((saved: Record<string, unknown>) => {
+    const str = (k: string, d = "") => (typeof saved[k] === "string" && (saved[k] as string) !== "[object Object]" ? (saved[k] as string) : d);
+    setName(str("name"));
+    setCompanyName(str("companyName"));
+    setEmail(str("email"));
+    setPhone(str("phone"));
+    setWebsite(str("website"));
+    setRateOrBudget(str("rateOrBudget"));
+    setCurrency(str("currency", "USD"));
+    setCategory(str("category", "Featured"));
+    setCustomCategory(str("customCategory"));
+    setPaymentTerms(str("paymentTerms", "50_advance_50_completion"));
+    setClientNotes(str("clientNotes"));
+    setIsVip(saved["isVip"] === true);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "client-new",
+    onRestoreDraft: applyDraft,
+  });
+
   const handleToggleVip = () => {
     const nextVip = !isVip;
     setIsVip(nextVip);
@@ -200,28 +236,51 @@ export default function NewClientPage() {
       finalNotes += `\n\n${clientNotes.trim()}`;
     }
 
-    try {
-      const token = (await getToken()) || undefined;
-      const created = await createClient(
-        {
-          name: name.trim(),
-          company_name: companyName.trim() || undefined,
-          email: email.trim(),
-          phone: phone.trim() || undefined,
-          website: website.trim() || undefined,
-          notes: finalNotes,
-          status: isVip ? "vip" : "active",
-        },
-        token
-      );
+    const payloadBody = (allowDuplicate: boolean) => ({
+      name: name.trim(),
+      company_name: companyName.trim() || undefined,
+      email: email.trim(),
+      phone: phone.trim() || undefined,
+      website: website.trim() || undefined,
+      notes: finalNotes,
+      status: isVip ? "vip" : "active",
+      ...(allowDuplicate ? { allow_duplicate: true } : {}),
+    });
 
+    const finishCreate = (created: Client) => {
       invalidateCache("clients:data");
       invalidateCache("dashboard:data");
       invalidateCache("invoices:data");
-
       toast.success("Client created successfully");
+      // Small "new card in the roster" pop that survives the redirect.
+      celebrate("Client added");
+      // Saved: drop the draft + clear dirty so the redirect is never blocked.
+      guard.markSaved();
       router.push(`/dashboard/clients/${created.id}`);
+    };
+
+    try {
+      const token = (await getToken()) || undefined;
+      finishCreate(await createClient(payloadBody(false), token));
     } catch (err) {
+      const conflict = getDuplicateConflict(err);
+      if (conflict) {
+        const res = await resolveDuplicateConflict(conflict);
+        if (res.action === "open") {
+          // Leave now without the discard prompt; the typed draft stays.
+          guard.forcePush(res.path);
+          return;
+        }
+        if (res.action === "retry") {
+          try {
+            const retryToken = (await getToken()) || undefined;
+            finishCreate(await createClient(payloadBody(true), retryToken));
+          } catch (retryErr) {
+            toast.error(retryErr instanceof Error ? retryErr.message : "Could not create client");
+          }
+        }
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Could not create client");
     } finally {
       setSaving(false);
@@ -249,7 +308,7 @@ export default function NewClientPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/dashboard/clients")}
+            onClick={() => guard.guardedPush("/dashboard/clients")}
             disabled={saving}
             className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg border border-line bg-card hover:bg-surface text-fg font-medium text-xs sm:text-sm transition-all duration-150 cursor-pointer disabled:opacity-50 h-9"
           >
@@ -493,7 +552,7 @@ export default function NewClientPage() {
                   onChange={(e) => setClientNotes(e.target.value)}
                   rows={7}
                   placeholder="Client preferences, key contacts, or milestone agreements..."
-                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg no-scrollbar scrollbar-none placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
                 />
               </div>
             </div>

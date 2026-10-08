@@ -12,7 +12,7 @@ import {
   MessageSquare,
   Layers,
   Sparkles,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -78,9 +78,9 @@ export function IntakePanel() {
   const categoriesCount = categoriesPresent.length;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 no-scrollbar scrollbar-none">
+    <div className="space-y-6">
       {/* 4 Headline Cards at the top matching Dashboard, Leads & Clients */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
         {loading && forms.length === 0 ? (
           <>
             <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
@@ -274,7 +274,7 @@ export function IntakePanel() {
                 </div>
 
                 {/* Cards Grid with Category Visual Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 stagger-grid">
                   {visibleForms.map((form) => {
                     const qCount = Array.isArray(form.questions) ? form.questions.length : 0;
                     const subCount = form.submissions_count || 0;

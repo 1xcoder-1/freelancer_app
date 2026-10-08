@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -13,7 +14,7 @@ import {
   FileText,
   RefreshCw,
   CreditCard,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +64,29 @@ export default function PublicBookingPage() {
   const [notes, setNotes] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [confirmedAppt, setConfirmedAppt] = useState<BookingAppointment | null>(null);
+
+  // Unsaved-changes guard — a visitor who typed their details and clicks away
+  // by mistake gets a confirm and can restore the draft on return. Slot/day
+  // picks are excluded: they are auto-selected programmatically as the live
+  // slot list refreshes, so they are not "typed work" worth guarding.
+  const formValues = useMemo(
+    () => ({ clientName, clientEmail, notes }),
+    [clientName, clientEmail, notes]
+  );
+
+  const applyDraft = useCallback((draft: Record<string, unknown>) => {
+    const s = (v: unknown) => (v == null ? null : String(v));
+    if (s(draft.clientName) != null) setClientName(s(draft.clientName)!);
+    if (s(draft.clientEmail) != null) setClientEmail(s(draft.clientEmail)!);
+    if (s(draft.notes) != null) setNotes(s(draft.notes)!);
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    enabled: !loading && !!consultation && !confirmedAppt,
+    draftKey: `booking-public-${token}`,
+    onRestoreDraft: applyDraft,
+  });
 
   useEffect(() => {
     if (!token) return;
@@ -148,6 +172,7 @@ export default function PublicBookingPage() {
         appointment_time: selectedSlot,
         notes: notes || undefined,
       });
+      guard.markSaved();
       setConfirmedAppt(appt);
     } catch (err: any) {
       const msg = err?.message || "That slot was just taken. Please pick another.";

@@ -10,7 +10,7 @@ import {
   ExternalLink,
   Trash2,
   Clock,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

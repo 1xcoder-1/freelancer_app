@@ -12,6 +12,10 @@
   --bg: #fafaf9;
   --fg: #171512;
   --muted: #6b6560;
+  /* Animated icons (components/animated-icons): primary parts inherit the
+     surrounding text color, accent parts pick up the brand orange. Resolved
+     at use time, so .dark's --accent follows automatically. */
+  --icon-accent: var(--accent);
   --faint: #9a938c;
   --card: #ffffff;
   --surface: #f4f3f1;
@@ -79,6 +83,7 @@ html {
 body {
   background: var(--bg);
   color: var(--fg);
+  -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
   overflow-y: auto;
   min-height: 100vh;
@@ -104,7 +109,9 @@ select,
   user-select: text;
 }
 
-/* Utility to hide scrollbars while keeping scrollable */
+/* Utility to hide scrollbars while keeping scrollable (sidebar rail, dropdown
+   menus and horizontal chip strips only — page-level y-axis scrollbars stay
+   visible app-wide per the Leads/Clients scrollbar reversal) */
 .no-scrollbar,
 .scrollbar-none {
   -ms-overflow-style: none !important;
@@ -141,13 +148,44 @@ select,
   background-color: var(--muted);
 }
 
-/* Utility to hide scrollbars while preserving scroll functionality */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* ------------------------------------------------------------------
+   Motion tokens (ui-polish skill: better-ui + interaction-design).
+   The canonical keyframe/easing set lives further down under the
+   `ui-*` motion system; this block only carries shared tokens and
+   panel aliases.
+------------------------------------------------------------------- */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-micro: cubic-bezier(0.2, 0, 0, 1);
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+
+/* Card grids used by the Clients/Leads/Projects panels: per-card 60ms
+   entrance stagger, capped at 10 steps so paginated grids settle fast.
+   Aliased to the canonical ui-* keyframes; reduced motion keeps the
+   opacity-only fade. */
+.stagger-grid > * {
+  animation: ui-fade-in 300ms ease-out both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stagger-grid > * {
+    animation-name: ui-fade-in-up;
+  }
+}
+.stagger-grid > :nth-child(1) { animation-delay: 0ms; }
+.stagger-grid > :nth-child(2) { animation-delay: 60ms; }
+.stagger-grid > :nth-child(3) { animation-delay: 120ms; }
+.stagger-grid > :nth-child(4) { animation-delay: 180ms; }
+.stagger-grid > :nth-child(5) { animation-delay: 240ms; }
+.stagger-grid > :nth-child(6) { animation-delay: 300ms; }
+.stagger-grid > :nth-child(7) { animation-delay: 360ms; }
+.stagger-grid > :nth-child(8) { animation-delay: 420ms; }
+.stagger-grid > :nth-child(9) { animation-delay: 480ms; }
+.stagger-grid > :nth-child(n + 10) { animation-delay: 540ms; }
+
+/* Overlays own their scroll: never bleed past the end to the page behind. */
+[class*="overflow-y-auto"],
+[class*="overflow-auto"] {
+  overscroll-behavior: contain;
 }
 
 /* Display headline used across landing + section headers (clean grotesque, like refs) */
@@ -191,6 +229,16 @@ select,
   border-right: 1px dashed var(--line);
 }
 
+/* Scrollable overlay bodies (dialogs, pop-menus): keep wheel scrolling
+   inside the overlay. Page and dialog y-axis scrollbars both use the
+   sleek themed styling above (Clients/Leads scrollbar reversal) — only
+   the sidebar rail and horizontal strips hide theirs. */
+.dialog-scroll {
+  overscroll-behavior: contain;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
 /* Shimmer Animation for Skeleton Components */
 @keyframes shimmer {
   100% {
@@ -219,6 +267,129 @@ select,
 
 .animate-meteor {
   animation: meteor 5s linear infinite;
+}
+
+/* ------------------------------------------------------------------
+   Motion system (better-ui skill values)
+   Enters: 300ms ease-out — opacity + 12px rise + 4px blur.
+   Exits:  150ms ease-out — opacity + -12px rise (shorter than enters).
+   Stagger: 100ms between semantic chunks, first load only.
+   Press:  scale 0.96 over 150ms ease-out, never while disabled.
+   Reduced motion: opacity-only cross-fade everywhere.
+------------------------------------------------------------------- */
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ui-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+}
+
+/* One-shot entrance for a mounted block (panel, inline card, modal body) */
+.enter {
+  animation: ui-fade-in 300ms ease-out both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .enter {
+    animation-name: ui-fade-in-up;
+  }
+}
+
+@keyframes ui-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ui-fade-out-up {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+    filter: blur(4px);
+  }
+}
+
+/* Exit runs once before unmount — shorter and smaller than the enter */
+.exit {
+  animation: ui-fade-out 150ms ease-out both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .exit {
+    animation-name: ui-fade-out-up;
+  }
+}
+
+/* Staggered entrance for semantic children (stat cards, section blocks).
+   Delays cap at 6 so long lists never feel slow. */
+.enter-stagger > * {
+  animation: ui-fade-in 300ms ease-out both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .enter-stagger > * {
+    animation-name: ui-fade-in-up;
+  }
+}
+.enter-stagger > :nth-child(2) { animation-delay: 100ms; }
+.enter-stagger > :nth-child(3) { animation-delay: 200ms; }
+.enter-stagger > :nth-child(4) { animation-delay: 300ms; }
+.enter-stagger > :nth-child(5) { animation-delay: 400ms; }
+.enter-stagger > :nth-child(6) { animation-delay: 500ms; }
+.enter-stagger > :nth-child(n + 7) { animation-delay: 500ms; }
+
+/* Press feedback for any clickable surface (buttons, cards, nav rows) */
+.press {
+  -webkit-tap-highlight-color: transparent;
+  transition-property: scale, translate, background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+.press:not(:disabled):active {
+  scale: 0.96;
+}
+
+/* Compat layer: the codebase already ships tailwindcss-animate-style names
+   (animate-in fade-in duration-300, zoom-in-95, slide-in-from-bottom-4) that
+   resolve to nothing in Tailwind 4. Wire them to the motion system above so
+   every existing usage animates with the same enter language. */
+@keyframes ui-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes ui-slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(4px);
+  }
+}
+
+.animate-in {
+  animation: ui-fade-in 300ms ease-out both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-in {
+    animation-name: ui-fade-in-up;
+  }
+  .animate-in.zoom-in-95 {
+    animation-name: ui-zoom-in;
+  }
+  .animate-in.slide-in-from-bottom-4 {
+    animation-name: ui-slide-in-up;
+  }
+}
+
+/* Overlay panels (dialogs, drawers) must not scroll the page behind them */
+.overscroll-contain {
+  overscroll-behavior: contain;
 }
 
 /* Print Stylesheet (Checklist Requirement) */

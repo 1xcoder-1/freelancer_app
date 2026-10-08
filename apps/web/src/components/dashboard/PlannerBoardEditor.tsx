@@ -22,7 +22,7 @@ import {
   Calendar,
   CalendarClock,
   AlertCircle,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { toast } from "sonner";
 
 import "@excalidraw/excalidraw/index.css";

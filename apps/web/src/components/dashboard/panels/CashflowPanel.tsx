@@ -14,7 +14,7 @@ import {
   Pencil,
   Palmtree,
   ArrowRight,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -208,7 +208,7 @@ export function CashflowPanel() {
 
   if (loading && !summary) {
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-10 w-full max-w-md rounded-xl" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -296,7 +296,7 @@ export function CashflowPanel() {
     : "not set yet";
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>

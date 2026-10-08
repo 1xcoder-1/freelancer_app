@@ -16,7 +16,7 @@ import {
   Send,
   Eye,
   CheckCheck,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -112,7 +112,7 @@ export function ContractsPanel() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar">
+    <div className="space-y-8">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
         <div>

@@ -16,7 +16,7 @@ import {
   IdCard,
   Settings,
   ArrowRight,
-} from "lucide-react";
+} from "@/components/animated-icons";
 
 export function CommandMenu() {
   const [open, setOpen] = useState(false);

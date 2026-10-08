@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -9,11 +9,14 @@ import {
   Loader2,
   ChevronDown,
   AlertCircle,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { createLead, type LeadStage } from "@/lib/api";
+import { createLead, getDuplicateConflict, type Lead, type LeadStage } from "@/lib/api";
+import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
+import { celebrate } from "@/components/common/Celebration";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -136,6 +139,42 @@ export default function NewLeadPage() {
 
   const effectiveCategory = customCategory.trim() || category || "Featured";
 
+  // Unsaved-changes guard: covers Cancel, the back link, the sidebar and any
+  // other in-app navigation while the form has typed-but-unsaved work, and
+  // autosaves a draft so a mistaken leave can be restored next visit.
+  const formValues = useMemo(
+    () => ({
+      name, company, email, phone, source, estimatedValue, currency,
+      priority, stage, followUpDays, category, customCategory, notes,
+    }),
+    [name, company, email, phone, source, estimatedValue, currency, priority, stage, followUpDays, category, customCategory, notes]
+  );
+
+  const applyDraft = useCallback((saved: Record<string, unknown>) => {
+    const str = (k: string, d = "") => (typeof saved[k] === "string" && (saved[k] as string) !== "[object Object]" ? (saved[k] as string) : d);
+    setName(str("name"));
+    setCompany(str("company"));
+    setEmail(str("email"));
+    setPhone(str("phone"));
+    setSource(str("source", "Referral"));
+    setEstimatedValue(str("estimatedValue", "2,500"));
+    setCurrency(str("currency", "USD"));
+    const pr = str("priority", "medium");
+    setPriority(["low", "medium", "high", "urgent"].includes(pr) ? (pr as "low" | "medium" | "high" | "urgent") : "medium");
+    const st = str("stage", "new");
+    setStage(STAGES.some((s) => s.key === st) ? (st as LeadStage) : "new");
+    setFollowUpDays(str("followUpDays", "3"));
+    setCategory(str("category", "Featured"));
+    setCustomCategory(str("customCategory"));
+    setNotes(str("notes"));
+  }, []);
+
+  const guard = useUnsavedChangesGuard({
+    values: formValues,
+    draftKey: "lead-new",
+    onRestoreDraft: applyDraft,
+  });
+
   const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatAmountWithCommas(e.target.value);
     setEstimatedValue(formatted);
@@ -176,31 +215,54 @@ export default function NewLeadPage() {
     const days = Math.min(90, Math.max(0, parseInt(followUpDays || "3", 10) || 3));
     const nextFollowUp = new Date(Date.now() + days * 86_400_000).toISOString();
 
-    try {
-      const token = (await getToken()) || undefined;
-      const created = await createLead(
-        {
-          name: name.trim(),
-          company: company.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          source,
-          stage,
-          priority,
-          estimated_value: numericVal,
-          next_follow_up_at: nextFollowUp,
-          notes: finalNotes,
-        },
-        token
-      );
+    const buildPayload = (allowDuplicate: boolean) => ({
+      name: name.trim(),
+      company: company.trim() || undefined,
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      source,
+      stage,
+      priority,
+      estimated_value: numericVal,
+      next_follow_up_at: nextFollowUp,
+      notes: finalNotes,
+      ...(allowDuplicate ? { allow_duplicate: true } : {}),
+    });
 
+    const finishCreate = (created: Lead) => {
       invalidateCache("leads:data");
       invalidateCache("leads:insights");
       invalidateCache("dashboard:data");
-
       toast.success("Lead created successfully");
+      // Small "new card in the pipeline" pop that survives the redirect.
+      celebrate("Lead added");
+      // Saved: drop the draft + clear dirty so the redirect is never blocked.
+      guard.markSaved();
       router.push(`/dashboard/leads/${created.id}`);
+    };
+
+    try {
+      const token = (await getToken()) || undefined;
+      finishCreate(await createLead(buildPayload(false), token));
     } catch (err) {
+      const conflict = getDuplicateConflict(err);
+      if (conflict) {
+        const res = await resolveDuplicateConflict(conflict);
+        if (res.action === "open") {
+          // Leave now without the discard prompt; the typed draft stays.
+          guard.forcePush(res.path);
+          return;
+        }
+        if (res.action === "retry") {
+          try {
+            const retryToken = (await getToken()) || undefined;
+            finishCreate(await createLead(buildPayload(true), retryToken));
+          } catch (retryErr) {
+            toast.error(retryErr instanceof Error ? retryErr.message : "Could not create lead");
+          }
+        }
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Could not create lead");
     } finally {
       setSaving(false);
@@ -210,7 +272,7 @@ export default function NewLeadPage() {
   const stageObj = STAGES.find((s) => s.key === stage) || STAGES[0];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 no-scrollbar scrollbar-none">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
@@ -230,7 +292,7 @@ export default function NewLeadPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/dashboard/leads")}
+            onClick={() => guard.guardedPush("/dashboard/leads")}
             disabled={saving}
             className="text-xs rounded-xl h-9 px-4 border-line"
           >
@@ -519,7 +581,7 @@ export default function NewLeadPage() {
                   onChange={(e) => setNotes(e.target.value)}
                   rows={7}
                   placeholder="Scope details, discussion summary, or follow-up reminders..."
-                  className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg no-scrollbar scrollbar-none placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                  className="w-full p-3.5 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
                 />
               </div>
             </div>
@@ -527,7 +589,7 @@ export default function NewLeadPage() {
         </div>
 
         {/* Right Column: Clean Sticky Card Preview (5 cols) */}
-        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6 no-scrollbar scrollbar-none">
+        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-medium text-muted">Card Preview</span>
             <span className="text-[11px] font-mono text-muted">{effectiveCategory}</span>

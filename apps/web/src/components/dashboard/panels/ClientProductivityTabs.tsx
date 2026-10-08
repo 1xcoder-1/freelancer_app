@@ -6,7 +6,7 @@ import {
   FileCheck2,
   Receipt,
   CreditCard,
-} from "lucide-react";
+} from "@/components/animated-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApiData } from "@/hooks/use-api-data";
 import { getClientRelationship } from "@/lib/api";

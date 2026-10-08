@@ -22,6 +22,10 @@ class ClientCreate(BaseModel):
     website: Optional[str] = Field(None, max_length=255)
     notes: Optional[str] = Field(None, max_length=20_000)
     status: Literal["lead", "active", "archived", "vip"] = "active"
+    # Dedup UX: a same-phone collision raises 409 with the candidate; the UI
+    # retries with this flag when the user confirms it really is a different
+    # person. An email collision can never be overridden.
+    allow_duplicate: bool = False
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=255)
@@ -144,6 +148,8 @@ class LeadCreate(BaseModel):
     priority: Literal["low", "medium", "high", "urgent"] = "medium"
     next_follow_up_at: Optional[UTCDatetime] = None
     notes: Optional[str] = Field(None, max_length=20_000)
+    # Same dedup contract as ClientCreate (phone hit overridable, email hit never).
+    allow_duplicate: bool = False
 
 class LeadUpdate(BaseModel):
     """Every field is optional so the pipeline board can patch one cell."""
@@ -235,6 +241,29 @@ class LeadOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class LeadConvertRequest(BaseModel):
+    """Body for POST /leads/{id}/convert-to-client (all optional — the web
+    client has always posted {} here).
+
+    ``merge_into_client_id`` closes the 'same person, different email' loop:
+    after convert-preview flags a weak match and the user confirms it is the
+    same human, convert updates THAT roster row instead of creating a new one."""
+    merge_into_client_id: Optional[str] = Field(None, min_length=1, max_length=64)
+
+class LeadConvertPreviewOut(BaseModel):
+    """Pre-flight answer for 'Make this client': what convert-to-client would
+    do BEFORE the user commits, so the dialog can promise the right thing.
+
+    ``match``: 'email' = the roster already has this exact person (convert
+    reuses + fills gaps, never duplicates); 'weak' = a same-name/phone client
+    exists but the email differs, so the UI asks 'same person?' first; 'none'
+    = plain create."""
+    match: Literal["email", "weak", "none"]
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
+    client_email: Optional[str] = None
+    same_person: bool = False
 
 # ------------------------------------------------------------------------------
 # Interaction Schemas (F2)

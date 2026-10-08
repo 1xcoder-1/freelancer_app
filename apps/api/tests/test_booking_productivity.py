@@ -121,8 +121,7 @@ async def test_open_slots_exclude_booked_and_blocked_days(client):
     after_block = await client.get(f"/api/v1/booking/public/{c['token']}/slots?days=14")
     assert all(s[:10] != blocked_day for s in after_block.json()["slots"])
 
-
-# ------------------------------------------------------------------------------
+ # ------------------------------------------------------------------------------
 # B3 — status machine + capped self-reschedule via the appointment token
 # ------------------------------------------------------------------------------
 async def test_reschedule_moves_slot_and_is_capped(client):
@@ -238,3 +237,25 @@ async def test_other_workspace_cannot_touch_appointment(client, client_b):
     # ...and must not see it in their own list.
     lst = await client_b.get("/api/v1/booking/appointments")
     assert all(a["id"] != appt["id"] for a in lst.json())
+
+
+# ------------------------------------------------------------------------------
+# Regression (migration 005): the auto-seeded consultations must serialize the
+# canonical availability defaults. On Neon the rows seeded before the B1/B2
+# columns existed held NULLs there and 500'd this list with 16 response
+# validation errors (8 non-optional fields x 2 rows).
+# ------------------------------------------------------------------------------
+async def test_seeded_consultations_carry_availability_defaults(client):
+    res = await client.get("/api/v1/booking")
+    assert res.status_code == 200, res.text
+    seeded = res.json()
+    assert len(seeded) == 2
+    for c in seeded:
+        assert c["weekday_mask"] == "1111100"
+        assert c["start_minute"] == 540
+        assert c["end_minute"] == 1020
+        assert c["timezone"] == "UTC"
+        assert c["min_lead_hours"] == 2
+        assert c["max_advance_days"] == 60
+        assert c["buffer_minutes"] == 0
+        assert c["no_show_limit"] == 2

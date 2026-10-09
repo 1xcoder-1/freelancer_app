@@ -2,93 +2,83 @@
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { Sparkles, Home, Layers, Server, Heart } from "@/components/animated-icons";
+import { Rise } from "@/components/landing/motion";
+import { Container, LandingShell, MkButton } from "@/components/landing/layout";
+
+const modules = [
+  {
+    href: "/features",
+    title: "Features",
+    sub: "CRM, Time & Invoices",
+    glyph: "01",
+  },
+  {
+    href: "/architecture",
+    title: "Architecture",
+    sub: "Stack & Monorepo",
+    glyph: "02",
+  },
+  {
+    href: "/features#ai",
+    title: "Book AI",
+    sub: "AI Freelance Copilot",
+    glyph: "03",
+  },
+  {
+    href: "/about",
+    title: "About Us",
+    sub: "Story & Manifesto",
+    glyph: "04",
+  },
+];
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-bg text-fg flex flex-col selection:bg-accent selection:text-accent-fg">
+    <LandingShell>
       <Navbar />
 
-      <main className="flex-1 flex items-center justify-center py-24 px-4">
-        <div className="max-w-xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-danger/10 border border-danger/20 text-xs font-semibold text-danger mb-6">
-            <span className="w-2 h-2 rounded-full bg-danger animate-pulse" />
-            <span>404 — Page Not Found</span>
-          </div>
+      <main className="flex-1">
+        <Container className="flex flex-1 flex-col items-center justify-center py-24 text-center sm:py-32">
+          <Rise className="flex flex-col items-center">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-[2px] border border-line bg-fg/[0.03] px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-brand-light">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60 motion-reduce:animate-none" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-brand" />
+              </span>
+              404 — Page Not Found
+            </div>
 
-          <h1 className="font-display text-3xl sm:text-5xl font-bold text-fg tracking-tight leading-tight mb-4">
-            Lost in the Workspace?
-          </h1>
+            <h1 className="max-w-xl text-4xl font-medium tracking-tight leading-[1.1] text-fg sm:text-5xl">
+              This page isn&apos;t in the book.
+            </h1>
 
-          <p className="text-muted text-sm sm:text-base leading-relaxed mb-8 max-w-md mx-auto">
-            The page or document you are looking for might have been moved or does not exist. Explore our popular modules below:
-          </p>
+            <p className="mt-5 max-w-md text-base font-light text-muted sm:text-lg">
+              The page you are looking for may have been moved or does not exist. Explore
+              the popular modules below:
+            </p>
 
-          <div className="grid grid-cols-2 gap-3 mb-8 text-left">
-            <Link
-              href="/features"
-              className="p-3.5 rounded-xl bg-card border border-line hover:border-accent transition-all flex items-center gap-3 group"
-            >
-              <div className="w-8 h-8 rounded-xl bg-accent-soft text-accent flex items-center justify-center flex-shrink-0">
-                <Layers className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-fg group-hover:text-accent">Features</div>
-                <div className="text-[10px] text-muted">CRM, Time & Invoices</div>
-              </div>
+            <div className="mt-9 grid w-full max-w-lg grid-cols-2 gap-2.5 text-left">
+              {modules.map((m) => (
+                <Link
+                  key={m.title}
+                  href={m.href}
+                  className="rounded-[2px] border border-fg/10 bg-fg/[0.03] p-4 transition-colors hover:border-fg/20"
+                >
+                  <div className="mb-2 font-mono text-[10px] text-brand-light">{m.glyph}</div>
+                  <div className="text-[13px] font-medium text-fg">{m.title}</div>
+                  <div className="mt-0.5 text-[11px] text-muted">{m.sub}</div>
+                </Link>
+              ))}
+            </div>
+
+            <Link href="/" className="mt-10">
+              <MkButton>Return to Home</MkButton>
             </Link>
-
-            <Link
-              href="/architecture"
-              className="p-3.5 rounded-xl bg-card border border-line hover:border-accent transition-all flex items-center gap-3 group"
-            >
-              <div className="w-8 h-8 rounded-xl bg-accent-soft text-info flex items-center justify-center flex-shrink-0">
-                <Server className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-fg group-hover:text-info">Architecture</div>
-                <div className="text-[10px] text-muted">Stack & Monorepo</div>
-              </div>
-            </Link>
-
-            <Link
-              href="/ai"
-              className="p-3.5 rounded-xl bg-card border border-line hover:border-accent transition-all flex items-center gap-3 group"
-            >
-              <div className="w-8 h-8 rounded-xl bg-info/10 text-info dark:text-info flex items-center justify-center flex-shrink-0">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-fg group-hover:text-info dark:text-info">Book AI</div>
-                <div className="text-[10px] text-muted">AI Freelance Copilot</div>
-              </div>
-            </Link>
-
-            <Link
-              href="/about"
-              className="p-3.5 rounded-xl bg-card border border-line hover:border-accent transition-all flex items-center gap-3 group"
-            >
-              <div className="w-8 h-8 rounded-xl bg-accent-soft text-accent flex items-center justify-center flex-shrink-0">
-                <Heart className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-fg group-hover:text-accent">About Us</div>
-                <div className="text-[10px] text-muted">Story & Manifesto</div>
-              </div>
-            </Link>
-          </div>
-
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-bold text-xs transition-all shadow-sm"
-          >
-            <Home className="w-4 h-4" />
-            <span>Return to Home</span>
-          </Link>
-        </div>
+          </Rise>
+        </Container>
       </main>
 
       <Footer />
-    </div>
+    </LandingShell>
   );
 }

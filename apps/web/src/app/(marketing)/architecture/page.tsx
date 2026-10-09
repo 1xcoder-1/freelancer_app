@@ -2,29 +2,24 @@
 
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import {
-  Server,
-  Database,
-  Key,
-  Layers,
-  Shield,
-  Gauge,
-  Folder,
-} from "@/components/animated-icons";
-import { Reveal } from "@/components/landing/motion";
+import { Rise } from "@/components/landing/motion";
 import {
   Container,
   LandingShell,
   PageHero,
   Section,
-  SectionHeader,
+  WindowFrame,
 } from "@/components/landing/layout";
+
+/* ------------------------------------------------------------------
+   Architecture — spec-sheet rows for the six layers plus a terminal
+   window for the monorepo topology.
+------------------------------------------------------------------- */
 
 const tiers = [
   {
     layer: "Presentation",
     tech: "Next.js 16 · Electron · Expo",
-    icon: Layers,
     description:
       "One client ecosystem across web, desktop and mobile, sharing TypeScript types, design tokens and components.",
     points: [
@@ -37,7 +32,6 @@ const tiers = [
   {
     layer: "Backend",
     tech: "Python FastAPI (async)",
-    icon: Server,
     description:
       "High-throughput asynchronous REST core with typed Pydantic V2 models and live OpenAPI documentation.",
     points: [
@@ -50,7 +44,6 @@ const tiers = [
   {
     layer: "Database",
     tech: "Neon PostgreSQL (serverless)",
-    icon: Database,
     description:
       "Serverless Postgres with autoscaling, automated backups and branch-based workflows — zero maintenance overhead.",
     points: [
@@ -63,7 +56,6 @@ const tiers = [
   {
     layer: "Identity",
     tech: "Clerk JWT · RBAC",
-    icon: Key,
     description:
       "Authentication with social OAuth, MFA and session revocation — passwords never touch our servers.",
     points: [
@@ -76,7 +68,6 @@ const tiers = [
   {
     layer: "Storage",
     tech: "Cloudinary object storage",
-    icon: Shield,
     description:
       "Contract PDFs, receipts and client deliverables served from a global CDN with signed uploads.",
     points: [
@@ -89,7 +80,6 @@ const tiers = [
   {
     layer: "Hardening",
     tech: "Middleware & rate limits",
-    icon: Gauge,
     description:
       "A hardened request pipeline in front of every endpoint.",
     points: [
@@ -122,75 +112,71 @@ export default function ArchitecturePage() {
           desc="Built so the running cost of your workspace stays near zero — Neon Postgres that scales to idle, an async Python core, and no servers to babysit."
         />
 
-        {/* Layer spec sheet — rows, not a card grid */}
         <Section className="border-t-0">
           <Container>
             <div className="border-t border-line">
-              {tiers.map((tier, idx) => {
-                const Icon = tier.icon;
-                return (
-                  <Reveal key={tier.layer} delay={idx * 0.04}>
-                    <div className="grid sm:grid-cols-[240px_1fr] gap-3 sm:gap-10 py-8 border-b border-line">
-                      <div className="flex items-start gap-3">
-                        <span className="w-8 h-8 rounded-lg bg-accent-soft dark:bg-accent/15 text-accent flex items-center justify-center shrink-0 mt-0.5">
-                          <Icon className="w-4 h-4" />
-                        </span>
-                        <div>
-                          <div className="eyebrow !text-[10px] mb-1.5">
-                            {String(idx + 1).padStart(2, "0")} · {tier.layer}
-                          </div>
-                          <h2 className="font-display text-[16px] font-semibold text-fg leading-snug">
-                            {tier.tech}
-                          </h2>
-                        </div>
-                      </div>
+              {tiers.map((tier, idx) => (
+                <Rise key={tier.layer} delay={idx * 0.04}>
+                  <div className="grid gap-3 border-b border-line py-8 sm:grid-cols-[240px_1fr] sm:gap-10">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[2px] border border-line bg-fg/[0.03] font-mono text-[10px] text-brand-light">
+                        {String(idx + 1).padStart(2, "0")}
+                      </span>
                       <div>
-                        <p className="text-[14px] leading-7 text-muted mb-4">{tier.description}</p>
-                        <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
-                          {tier.points.map((p) => (
-                            <div key={p} className="flex items-start gap-2.5 text-[13px] leading-5 text-fg/90">
-                              <span className="w-1 h-1 rounded-full bg-line-strong shrink-0 mt-2" />
-                              <span>{p}</span>
-                            </div>
-                          ))}
+                        <div className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-brand">
+                          {tier.layer}
                         </div>
+                        <h2 className="font-display text-[16px] font-semibold leading-snug text-fg">
+                          {tier.tech}
+                        </h2>
                       </div>
                     </div>
-                  </Reveal>
-                );
-              })}
+                    <div>
+                      <p className="mb-4 text-[14px] leading-7 text-muted">{tier.description}</p>
+                      <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                        {tier.points.map((p) => (
+                          <div key={p} className="flex items-start gap-2.5 text-[13px] leading-5 text-fg/90">
+                            <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-muted/50" />
+                            <span>{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </Rise>
+              ))}
             </div>
           </Container>
         </Section>
 
-        {/* Monorepo topology — one quiet terminal-styled block */}
         <Section>
           <Container>
-            <SectionHeader
-              eyebrow="Monorepo"
-              title="One repository,"
-              accent="four clients, shared contracts."
-              desc="Web, API, desktop and mobile live together with a shared types package, so every client speaks the same schema."
-            />
-            <Reveal>
-              <div className="max-w-3xl mx-auto rounded-xl border border-line bg-card overflow-hidden">
-                <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-line bg-surface/60">
-                  <Folder className="w-3.5 h-3.5 text-muted" />
-                  <span className="font-mono text-[10px] text-faint tracking-wider">freelance-book/</span>
-                </div>
-                <div className="p-4 sm:p-5 font-mono text-[12px] leading-6">
+            <Rise className="max-w-2xl">
+              <h2 className="text-3xl font-medium tracking-tight leading-[1.1] text-fg sm:text-4xl lg:text-5xl">
+                One repository,
+                <br />
+                four clients, shared contracts.
+              </h2>
+              <p className="mt-5 text-base font-light text-muted sm:text-lg">
+                Web, API, desktop and mobile live together with a shared types package, so
+                every client speaks the same schema.
+              </p>
+            </Rise>
+            <Rise delay={0.08} className="mx-auto mt-12 max-w-3xl">
+              <WindowFrame title="freelance-book/">
+                <div className="p-4 font-mono text-[12px] leading-6 sm:p-5">
                   {monorepo.map((m) => (
                     <div
                       key={m.path}
-                      className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-4 py-2 border-b border-line last:border-b-0"
+                      className="flex flex-col gap-0.5 border-b border-line/60 py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-4"
                     >
-                      <span className="text-accent shrink-0">{m.path}</span>
+                      <span className="shrink-0 text-brand-light">{m.path}</span>
                       <span className="text-muted">{m.desc}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            </Reveal>
+              </WindowFrame>
+            </Rise>
           </Container>
         </Section>
       </main>

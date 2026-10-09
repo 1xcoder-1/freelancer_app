@@ -2,28 +2,22 @@
 
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
-import { Reveal, SplitHeading } from "@/components/landing/motion";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------
-   Marketing layout system — one source of truth for container width,
-   section rhythm and the type scale, so every landing/marketing page
-   reads as one publication instead of per-page improvisation.
+   Marketing layout system — matched 1:1 to superset.sh.
 
-   Scale (px, optical-leading tuned):
-     H1 page-hero   30 → 42 sm   font-semibold  leading-[1.12]
-     H1 home hero   34 → 52 lg   font-semibold  leading-[1.06]
-     H2 section     24 → 32 sm   font-semibold  leading-[1.2]
-     Lead           15 → 16 sm   muted          leading-7
-     Body           15           fg             leading-7
-     Secondary      13           muted          leading-6
-     Eyebrow        11.5 mono, 0.18em, uppercase (.eyebrow)
-     Stat           28 mono semibold + 13 label
+   Scope: LandingShell mounts .mk, which remaps the design tokens to
+   the superset palette (always dark) so marketing routes share one
+   visual language without touching the dashboard's own theme.
 
-   Rhythm: sections py-24 sm:py-28 separated by a single hairline;
-   header-to-content gap mb-16; grids gap-5 (cards) / gap-10 (columns).
-   Elevation: cards sit flat (border only); shadows reserved for the
-   floating mock windows.
+   Language:
+   · sharp 2px corners (rounded-[2px]) — squares everywhere
+   · mono uppercase brand eyebrows (text-sm font-mono tracking-widest)
+   · floating "mac window" mockups with layered black shadows and an
+     inset white ring highlight
+   · radial orange glows behind visuals
+   · sections py-24 sm:py-32, container max-w-7xl px-6 sm:px-8
 ------------------------------------------------------------------- */
 
 /** Global page width for everything marketing. */
@@ -35,13 +29,13 @@ export function Container({
   className?: string;
 }) {
   return (
-    <div className={cn("max-w-6xl mx-auto px-5 sm:px-8", className)}>
+    <div className={cn("max-w-7xl mx-auto px-6 sm:px-8", className)}>
       {children}
     </div>
   );
 }
 
-/** Standard content section: one vertical rhythm, one divider style. */
+/** Standard content section: superset vertical rhythm. */
 export function Section({
   children,
   className,
@@ -52,13 +46,13 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn("py-24 sm:py-28 border-t border-line", className)}>
+    <section id={id} className={cn("relative py-24 sm:py-32", className)}>
       {children}
     </section>
   );
 }
 
-/** Mono eyebrow label — replaces the colored-badge noise across pages. */
+/** Mono eyebrow label in brand orange (superset section opener). */
 export function Eyebrow({
   children,
   className,
@@ -66,49 +60,19 @@ export function Eyebrow({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("eyebrow", className)}>{children}</div>;
-}
-
-/** Centered section header: eyebrow → two-tone headline → lead. */
-export function SectionHeader({
-  eyebrow,
-  title,
-  accent,
-  suffix,
-  desc,
-  className,
-}: {
-  eyebrow?: string;
-  title: string;
-  accent?: string;
-  suffix?: string;
-  desc?: string;
-  className?: string;
-}) {
   return (
-    <div className={cn("text-center max-w-2xl mx-auto mb-16", className)}>
-      {eyebrow && (
-        <Reveal>
-          <Eyebrow className="mb-4">{eyebrow}</Eyebrow>
-        </Reveal>
+    <span
+      className={cn(
+        "block text-sm font-mono uppercase tracking-widest text-brand",
+        className
       )}
-      <SplitHeading
-        as="h2"
-        text={title}
-        accent={accent}
-        suffix={suffix}
-        className="font-display text-[24px] sm:text-[32px] font-semibold text-fg leading-[1.2]"
-      />
-      {desc && (
-        <Reveal delay={0.1}>
-          <p className="mt-4 text-[15px] leading-7 text-muted">{desc}</p>
-        </Reveal>
-      )}
-    </div>
+    >
+      {children}
+    </span>
   );
 }
 
-/** Sub-page hero — same grammar as SectionHeader but h1 + taller top gap. */
+/** Centered page hero: eyebrow → big tracking-tight headline → lead. */
 export function PageHero({
   eyebrow,
   title,
@@ -125,45 +89,170 @@ export function PageHero({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="pt-20 sm:pt-24 pb-16 sm:pb-20">
-      <Container className="text-center">
-        <Eyebrow className="mb-5">{eyebrow}</Eyebrow>
-        <SplitHeading
-          text={title}
-          accent={accent}
-          suffix={suffix}
-          className="font-display text-[30px] sm:text-[42px] font-semibold text-fg leading-[1.12] max-w-3xl mx-auto"
+    <div className="relative flex flex-col items-center pt-24 sm:pt-32 lg:pt-40 pb-16 sm:pb-24 overflow-hidden">
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          maskImage:
+            "linear-gradient(to bottom, black 0%, black 40%, transparent 70%)",
+          WebkitMaskImage:
+            "linear-gradient(to bottom, black 0%, black 40%, transparent 70%)",
+        }}
+      >
+        <div className="absolute inset-0 mk-dot-grid" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 50% 42% at 50% 28%, rgba(232,128,74,0.07), transparent 70%)",
+          }}
         />
-        <Reveal delay={0.15}>
-          <p className="mt-5 text-[15px] sm:text-base leading-7 text-muted max-w-2xl mx-auto">
+      </div>
+      <Container className="relative z-10">
+        <div className="flex flex-col items-center text-center">
+          <Eyebrow className="mb-4">{eyebrow}</Eyebrow>
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] text-fg max-w-4xl mx-auto">
+            {title}
+            {accent ? (
+              <>
+                {" "}
+                <span className="corner-brackets px-[0.2em] py-[0.06em] whitespace-nowrap">
+                  {accent}
+                </span>
+              </>
+            ) : null}
+            {suffix ? <span> {suffix}</span> : null}
+          </h1>
+          <p className="mt-6 text-base sm:text-xl font-light text-muted max-w-3xl mx-auto">
             {desc}
           </p>
-        </Reveal>
-        {children && <div className="mt-10">{children}</div>}
+          {children && <div className="mt-10">{children}</div>}
+        </div>
       </Container>
-    </section>
-  );
-}
-
-/** One stat column for the proof band: mono figure + short label. */
-export function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <div className="font-mono text-[26px] font-semibold text-fg tabular-nums leading-none">
-        {value}
-      </div>
-      <div className="mt-2 text-[13px] leading-5 text-muted">{label}</div>
     </div>
   );
 }
 
-/** Page shell for every marketing route: token background, selection,
-    and a MotionConfig so all framer entrances degrade under
-    prefers-reduced-motion (opacity-only) as the better-ui skill requires. */
+/* ------------------------------------------------------------------
+   Buttons — superset square grammar. Primary is foreground-on-dark
+   flipping to brand on hover; header CTA is the compact mono variant.
+------------------------------------------------------------------- */
+
+export function MkButton({
+  variant = "primary",
+  size = "default",
+  className,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "outline";
+  size?: "default" | "header";
+}) {
+  return (
+    <button
+      className={cn(
+        "group inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer transition-colors duration-150",
+        variant === "primary"
+          ? "bg-fg text-bg hover:bg-brand hover:text-white"
+          : "border border-line bg-bg text-fg hover:bg-surface",
+        size === "header"
+          ? "px-3 py-2 font-mono text-xs uppercase tracking-wider"
+          : "px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-normal",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Square outline icon button (hero secondary action). */
+export function MkIconButton({
+  className,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={cn(
+        "flex size-11 shrink-0 items-center justify-center border border-line bg-bg text-fg transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand cursor-pointer",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------
+   Floating mac-window shell used by every mockup visual. Layered
+   shadow + inset white ring are lifted from superset's windows.
+------------------------------------------------------------------- */
+
+export function WindowFrame({
+  title,
+  children,
+  className,
+  contentClassName,
+}: {
+  title?: string;
+  children: React.ReactNode;
+  className?: string;
+  contentClassName?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-line bg-bg shadow-[0_1px_1px_rgba(0,0,0,0.4),0_24px_70px_-16px_rgba(0,0,0,0.75)]",
+        className
+      )}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-10 rounded-lg ring-1 ring-inset ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+      />
+      {title && (
+        <div className="relative flex h-8 items-center border-b border-line/60 bg-card px-3">
+          <div className="flex items-center gap-1.5">
+            <div className="size-2 rounded-full bg-[#ff5f57]/85" />
+            <div className="size-2 rounded-full bg-[#febc2e]/85" />
+            <div className="size-2 rounded-full bg-[#28c840]/85" />
+          </div>
+          {title && (
+            <span className="pointer-events-none absolute inset-x-0 text-center font-mono text-[10px] tracking-tight text-muted/60">
+              {title}
+            </span>
+          )}
+        </div>
+      )}
+      <div className={cn("relative", contentClassName)}>{children}</div>
+    </div>
+  );
+}
+
+/** Soft brand radial glow placed behind a mockup visual. */
+export function RadialGlow() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0"
+      style={{
+        background:
+          "radial-gradient(ellipse 55% 45% at 50% 40%, rgba(232,128,74,0.05), transparent 75%)",
+      }}
+    />
+  );
+}
+
+/** Page shell for every marketing route: always-dark superset scope +
+    MotionConfig so entrances degrade under prefers-reduced-motion. */
 export function LandingShell({ children }: { children: React.ReactNode }) {
   return (
     <MotionConfig reducedMotion="user">
-      <div className="min-h-screen bg-bg text-fg flex flex-col selection:bg-accent selection:text-accent-fg">
+      <div className="mk min-h-screen bg-bg text-fg flex flex-col selection:bg-brand selection:text-white">
         {children}
       </div>
     </MotionConfig>

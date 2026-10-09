@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { Github, Linkedin, Twitter } from "@/components/animated-icons";
 
+/* ------------------------------------------------------------------
+   Footer — superset.sh footer grammar: hairline top border, brand
+   column with socials + copyright, link columns on the right.
+------------------------------------------------------------------- */
+
 const columns = [
   {
     heading: "Product",
     links: [
       { label: "Features", href: "/features" },
-      { label: "Book AI", href: "/ai" },
-      { label: "Dashboard", href: "/dashboard" },
+      { label: "Book AI", href: "/features#ai" },
+      { label: "Live demo", href: "/dashboard" },
+      { label: "Sign up", href: "/sign-up" },
     ],
   },
   {
@@ -15,46 +21,47 @@ const columns = [
     links: [
       { label: "Architecture", href: "/architecture" },
       { label: "About", href: "/about" },
-      { label: "Live Demo", href: "/dashboard" },
+      { label: "Manifesto", href: "/about" },
       { label: "Changelog", href: "/about" },
     ],
   },
   {
     heading: "Legal",
     links: [
-      { label: "Privacy Policy", href: "/about" },
-      { label: "Terms of Service", href: "/about" },
-      { label: "Cookie Policy", href: "/about" },
-      { label: "License", href: "/about" },
+      { label: "Privacy", href: "/about" },
+      { label: "Terms", href: "/about" },
+      { label: "Security", href: "/architecture" },
     ],
   },
+];
+
+const socials = [
+  { icon: Github, href: "https://github.com", label: "GitHub" },
+  { icon: Twitter, href: "https://x.com", label: "X / Twitter" },
+  { icon: Linkedin, href: "https://linkedin.com", label: "LinkedIn" },
 ];
 
 export function Footer() {
   return (
     <footer className="border-t border-line bg-bg">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-14 pb-10">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-10 mb-14">
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 py-14 sm:py-20">
+        <div className="grid grid-cols-2 gap-10 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:gap-x-16">
           {/* Brand column */}
-          <div className="col-span-2">
-            <Link href="/" className="flex items-center gap-2.5 mb-4">
-              <span className="w-6 h-6 rounded-md bg-accent flex items-center justify-center text-accent-fg text-[11px] font-black font-mono">
-                fb
-              </span>
-              <span className="font-display font-bold text-[15px] text-fg tracking-tight">
-                freelance<span className="text-accent">book</span>
+          <div className="col-span-2 flex flex-col gap-6 md:col-span-1">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-fg transition-colors hover:text-fg/80 w-max"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="size-4" aria-hidden>
+                <path d="M0 0h5v5H0zM5.5 0h5v5h-5zM11 0h5v5h-5zM0 5.5h5v5H0zM0 11h5v5H0zM5.5 11h5v5h-5zM11 5.5h5v5h-5z" />
+              </svg>
+              <span className="font-semibold tracking-tight text-[15px]">
+                freelance<span className="text-brand">book</span>
               </span>
             </Link>
-            <p className="text-[13px] text-muted leading-relaxed max-w-xs mb-6">
-              The calm, fast operating system for independent freelancers.
-              Capture, orchestrate and bill — in seconds.
-            </p>
-            <div className="flex items-center gap-2">
-              {[
-                { icon: Github, href: "https://github.com", label: "GitHub" },
-                { icon: Twitter, href: "https://x.com", label: "X / Twitter" },
-                { icon: Linkedin, href: "https://linkedin.com", label: "LinkedIn" },
-              ].map((s) => {
+
+            <div className="-ml-2 flex items-center gap-2">
+              {socials.map((s) => {
                 const Icon = s.icon;
                 return (
                   <a
@@ -63,25 +70,35 @@ export function Footer() {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={s.label}
-                    className="w-8 h-8 rounded-md border border-line bg-card flex items-center justify-center text-muted hover:text-fg hover:border-line-strong transition-colors"
+                    className="text-muted hover:text-fg transition-colors p-1 sm:p-2"
                   >
-                    <Icon className="w-3.5 h-3.5" />
+                    <Icon className="size-5" />
                   </a>
                 );
               })}
             </div>
+
+            <p className="text-sm text-muted">
+              © 2026 Freelance Book
+            </p>
+
+            <p className="text-sm text-muted max-w-xs leading-relaxed">
+              The calm operating system for independent freelancers —
+              clients, time and money in one book.
+            </p>
           </div>
 
           {/* Link columns */}
           {columns.map((col) => (
-            <div key={col.heading}>
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-faint mb-4">
-                {col.heading}
-              </div>
-              <ul className="space-y-2.5">
+            <div key={col.heading} className="flex flex-col gap-4">
+              <p className="text-sm font-medium text-fg">{col.heading}</p>
+              <ul className="flex flex-col gap-3">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    <Link href={link.href} className="text-[13px] text-muted hover:text-fg transition-colors">
+                    <Link
+                      href={link.href}
+                      className="inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg"
+                    >
                       {link.label}
                     </Link>
                   </li>
@@ -89,16 +106,6 @@ export function Footer() {
               </ul>
             </div>
           ))}
-        </div>
-
-        {/* Mono meta bottom bar */}
-        <div className="pt-6 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider text-faint">
-          <span>© 2026 Freelance Book&nbsp;&nbsp;·&nbsp;&nbsp;Built for independents</span>
-          <div className="flex items-center gap-6">
-            <Link href="/about" className="hover:text-fg transition-colors">Privacy</Link>
-            <Link href="/about" className="hover:text-fg transition-colors">Terms</Link>
-            <Link href="/features" className="hover:text-fg transition-colors">Status</Link>
-          </div>
         </div>
       </div>
     </footer>

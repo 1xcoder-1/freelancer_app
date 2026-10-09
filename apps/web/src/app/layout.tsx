@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import { Caveat, Geist, Geist_Mono, Inter, Schibsted_Grotesk } from "next/font/google";
+import { Caveat, Geist, Geist_Mono, IBM_Plex_Mono, Inter, Schibsted_Grotesk } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { ScrollProgress } from "@/components/common/ScrollProgress";
 import { BackToTop } from "@/components/common/BackToTop";
 import { CookieBanner } from "@/components/common/CookieBanner";
-import { FloatingContact } from "@/components/common/FloatingContact";
 import { UtmTracker } from "@/components/providers/UtmTracker";
 import { SentryProvider } from "@/components/providers/SentryProvider";
 import { AppToaster } from "@/components/common/AppToaster";
@@ -21,6 +19,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+/* Marketing (superset-style) terminal mono face */
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 /* Report card font choices (settings popover: Schibsted / Inter / Geist) */
@@ -116,7 +121,7 @@ export default function RootLayout({
         lang="en"
         data-scroll-behavior="smooth"
         suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${schibsted.variable} ${caveat.variable} dark h-full antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${plexMono.variable} ${inter.variable} ${schibsted.variable} ${caveat.variable} dark h-full antialiased`}
       >
         <head>
           {/* Apply saved theme before first paint (no flash). Default: dark. */}
@@ -143,9 +148,6 @@ export default function RootLayout({
             {/* UTM Tracking Capture */}
             <UtmTracker />
 
-            {/* Top Scroll Progress Bar */}
-            <ScrollProgress />
-
             {/* Main Application Page Content */}
             <div id="main-content" className="flex-1 flex flex-col">
               {children}
@@ -153,9 +155,6 @@ export default function RootLayout({
 
             {/* Back to Top Smooth Button */}
             <BackToTop />
-
-            {/* Floating Support Modal Trigger */}
-            <FloatingContact />
 
             {/* GDPR Cookie Consent Banner */}
             <CookieBanner />

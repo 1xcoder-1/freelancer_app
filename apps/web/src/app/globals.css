@@ -392,6 +392,150 @@ select,
   overscroll-behavior: contain;
 }
 
+/* ------------------------------------------------------------------
+   Marketing theme scope (.mk) — 1:1 with superset.sh's design system,
+   applied only to marketing routes via LandingShell so the dashboard
+   keeps its own palette. Lifted from superset.sh's compiled CSS:
+   bg #111, card #171717, white/10 hairlines, brand #d25611, Inter +
+   IBM Plex Mono, sharp 2px corners, orange radial glows.
+   The underlying token names are remapped (not renamed) so every
+   bg-bg / text-fg / border-line utility inside the scope flips to the
+   superset values automatically.
+------------------------------------------------------------------- */
+.mk {
+  --bg: #111111;
+  --fg: #fafafa;
+  --muted: #bebebe;
+  --faint: #737373;
+  --card: #171717;
+  --surface: #262626;
+  --line: rgb(255 255 255 / 0.1);
+  --line-strong: rgb(255 255 255 / 0.15);
+  --accent: #d25611;
+  --accent-hi: #e8804a;
+  --accent-soft: rgb(210 86 17 / 0.1);
+  --accent-fg: #ffffff;
+  --ok: #00d294;
+  --warn: #fcbb00;
+  --danger: #ff6568;
+  --info: #3080ff;
+  --violet: #a685ff;
+  --brand: #d25611;
+  --brand-light: #e8804a;
+  --brand-dark: #9e400a;
+  /* superset type: Inter for UI, IBM Plex Mono for terminal accents */
+  --font-geist-sans: var(--font-inter);
+  --font-geist-mono: var(--font-ibm-plex-mono);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-dark: var(--brand-dark);
+}
+
+/* Hidden scrollbars for hero tab strips / window chrome strips */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Navbar pill CTA: two brand glows orbiting the border ring
+   (masterji.co star-border, 5s per lap, ping-pongs) */
+@keyframes star-movement-bottom {
+  0% {
+    transform: translate(0%, 0%);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-100%, 0%);
+    opacity: 0;
+  }
+}
+@keyframes star-movement-top {
+  0% {
+    transform: translate(0%, 0%);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(100%, 0%);
+    opacity: 0;
+  }
+}
+.animate-star-movement-bottom {
+  animation: star-movement-bottom linear infinite alternate;
+}
+.animate-star-movement-top {
+  animation: star-movement-top linear infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-star-movement-bottom,
+  .animate-star-movement-top {
+    animation: none;
+  }
+}
+
+/* superset.sh signature: four brand corner brackets drawn with
+   background gradients (no pseudo elements, wraps any inline span) */
+.corner-brackets {
+  background-image: linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand)),
+    linear-gradient(var(--brand), var(--brand));
+  background-position: 0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%,
+    100% 100%;
+  background-repeat: no-repeat;
+  background-size: 0.15em 4px, 4px 0.15em, 0.15em 4px, 4px 0.15em, 0.15em 4px,
+    4px 0.15em, 0.15em 4px, 4px 0.15em;
+}
+
+/* Blinking block caret for hero headline + terminal prompts */
+@keyframes mk-caret-blink {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  50% {
+    opacity: 0;
+  }
+}
+.mk-caret {
+  animation: mk-caret-blink 1.2s steps(1) infinite;
+}
+
+/* CSS-only terminal typing (steps on width in ch units) */
+@keyframes mk-typing {
+  from {
+    width: 0;
+  }
+}
+.mk-typing {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  animation: mk-typing 0.9s steps(24, end) forwards;
+}
+
+/* Subtle dot grid for the hero backdrop (stands in for superset's canvas) */
+.mk-dot-grid {
+  background-image: radial-gradient(
+    rgb(255 255 255 / 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
 /* Print Stylesheet (Checklist Requirement) */
 @media print {
   header,

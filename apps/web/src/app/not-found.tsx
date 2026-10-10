@@ -13,9 +13,9 @@ const modules = [
     glyph: "01",
   },
   {
-    href: "/architecture",
-    title: "Architecture",
-    sub: "Stack & Monorepo",
+    href: "/download",
+    title: "Download",
+    sub: "Android & Windows",
     glyph: "02",
   },
   {
@@ -25,9 +25,9 @@ const modules = [
     glyph: "03",
   },
   {
-    href: "/about",
-    title: "About Us",
-    sub: "Story & Manifesto",
+    href: "/docs",
+    title: "Docs",
+    sub: "Guides & Reference",
     glyph: "04",
   },
 ];

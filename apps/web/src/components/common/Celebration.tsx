@@ -13,10 +13,6 @@ import { PartyPopper } from "lucide-react";
    calm pill cross-fade shows.
 ------------------------------------------------------------------- */
 
-export interface CelebrateOptions {
-  message?: string;
-}
-
 type PendingCelebration = { id: number; message: string };
 
 let requestCelebrate: ((c: PendingCelebration) => void) | null = null;

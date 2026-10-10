@@ -1,0 +1,63 @@
+---
+title: Automations
+description: Daily overdue checks, payment reminders and meeting reminders that run without you.
+---
+
+Automations are small jobs that run on your behalf. They exist to remove the
+two chores freelancers are worst at: chasing money and remembering meetings.
+
+## Daily overdue check
+
+Once a day, Freelance Book walks every sent invoice and checks it against
+the due date:
+
+1. Past due: the invoice flips to **Overdue**.
+2. The invoice joins the "Needs attention" list on the dashboard.
+3. If payment reminders are on, the next reminder in the sequence goes out.
+
+The check runs on a schedule, not when you happen to open the app, so an
+invoice you forgot about still gets flagged on time.
+
+## Payment reminders
+
+Reminders are emails sent through the invoice's pay link, so the client can
+settle immediately. Configure per workspace:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| First reminder | 3 days after due date | First nudge |
+| Repeat | Every 7 days | Interval between follow-ups |
+| Max reminders | 3 | Sequence stops after this |
+| Include CC to you | On | You see every reminder |
+
+Reminders are polite by design: a short line, the amount, the due date and
+the pay link. Marking an invoice as paid stops the sequence instantly.
+
+## Meeting reminders
+
+When a booking is confirmed, Freelance Book schedules reminders for both
+sides:
+
+- A reminder to you ahead of the call, with the booking questions attached.
+- An email to the attendee with the time, timezone and a reschedule link.
+
+If you connected Google Calendar, the reminder also lands as a normal
+calendar notification. See
+[Google Calendar](/docs/integrations/google-calendar).
+
+## Where to configure
+
+Open **Settings** and pick the **Automations** tab. Everything is opt-in
+except the overdue status change itself, which is core to keeping the money
+view honest.
+
+<Callout type="warning">
+  Reminders send from your connected email identity. If you disconnect the
+  integration, pending reminders pause rather than fail silently.
+</Callout>
+
+## What automations do not do
+
+- They never send invoices for you. Sending stays manual.
+- They never edit amounts, dates or statuses other than marking Overdue.
+- They never contact a client who opted out of reminders.

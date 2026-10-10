@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
 
 /* Class-based dark mode (real-time toggle via .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -479,6 +481,43 @@ select,
   }
 }
 
+/* testimonial wall: seamless vertical marquee — content is duplicated,
+   so -50% is exactly one full list */
+@keyframes mk-y-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+.mk-y-col {
+  animation: mk-y-scroll linear infinite;
+}
+.mk-y-col:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-y-col {
+    animation: none;
+  }
+}
+
+/* feature-row visuals: Agenforce-style 3D tilt (hero-matched grammar),
+   softened to a straight lean-back on small screens */
+.mk-tilt {
+  transform: rotateX(32deg) rotateY(-11deg) rotateZ(14deg);
+}
+.mk-tilt-flip {
+  transform: rotateX(32deg) rotateY(11deg) rotateZ(-14deg);
+}
+@media (max-width: 640px) {
+  .mk-tilt,
+  .mk-tilt-flip {
+    transform: rotateX(16deg) rotateY(0deg) rotateZ(0deg);
+  }
+}
+
 /* superset.sh signature: four brand corner brackets drawn with
    background gradients (no pseudo elements, wraps any inline span) */
 .corner-brackets {
@@ -549,4 +588,48 @@ select,
     background: #ffffff !important;
     color: #000000 !important;
   }
+}
+
+/* ------------------------------------------------------------------
+   Docs area (fumadocs) — always dark, mapped onto the marketing
+   palette. Docs routes wrap themselves in `.mk-docs.dark` (only that
+   subtree), so the default light `:root` fd-* values never apply and
+   the dashboard/marketing themes are untouched. Values follow the .mk
+   scope: bg #111, card #171717, muted #bebebe, white/10 hairlines,
+   orange accent #e8804a.
+------------------------------------------------------------------- */
+.dark.mk-docs {
+  /* fumadocs' "banner" offset: pushes its sticky sidebar/TOC below the
+     site's fixed 64px navbar */
+  --fd-banner-height: 4rem;
+
+  --color-fd-background: #111111;
+  --color-fd-foreground: #fafafa;
+  --color-fd-card: #171717;
+  --color-fd-card-foreground: #fafafa;
+  --color-fd-popover: #171717;
+  --color-fd-popover-foreground: #fafafa;
+  --color-fd-muted: #1d1d1d;
+  --color-fd-muted-foreground: #bebebe;
+  --color-fd-border: rgb(255 255 255 / 0.1);
+  --color-fd-primary: #e8804a;
+  --color-fd-primary-foreground: #161616;
+  --color-fd-secondary: #1d1d1d;
+  --color-fd-secondary-foreground: #fafafa;
+  --color-fd-accent: rgb(255 255 255 / 0.07);
+  --color-fd-accent-foreground: #fafafa;
+  --color-fd-ring: #d25611;
+}
+
+/* The docs layout claims 100dvh by default; subtract the navbar so the
+   page height stays exactly one viewport under the h-16 spacer. */
+.dark.mk-docs #nd-docs-layout {
+  --fd-docs-height: calc(100dvh - 4rem);
+}
+
+/* neutral.css restyles the sidebar under .dark; re-map to mk values */
+.dark.mk-docs #nd-sidebar {
+  --color-fd-muted: #1d1d1d;
+  --color-fd-secondary: #202020;
+  --color-fd-muted-foreground: #bebebe;
 }

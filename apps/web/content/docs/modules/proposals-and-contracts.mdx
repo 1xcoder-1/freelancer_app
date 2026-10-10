@@ -1,0 +1,64 @@
+---
+title: Proposals and contracts
+description: Draft proposals, share e-sign links with expiry, keep versioned revisions and track Sent, Viewed and Executed.
+---
+
+Proposals and contracts turn a "yes" into signed paperwork. Both share the
+same editor, the same share links and the same status pipeline.
+
+## Drafting
+
+A proposal starts blank or from Book AI. You write sections with simple
+blocks: headings, paragraphs, lists and pricing tables.
+
+Pricing tables understand the rest of the app:
+
+- Pull a rate from the client record.
+- Pull milestone splits from a project.
+- Total themselves as you edit.
+
+## Revisions
+
+Every published version of a proposal is kept as a **revision**. When you
+change a proposal that a client has already seen, you publish a new revision
+instead of editing history.
+
+- Each revision has a number, a date and a full diff from the previous one.
+- Share links point at one specific revision, so "the PDF you sent" stays
+  stable.
+- Contracts use the same mechanism: a signed contract is never edited, a new
+  revision is drafted and must be signed again.
+
+## Share links and e-sign
+
+Send a proposal or contract with a **share link**. The client opens it in a
+browser, reads it and signs by typing their legal name. No account needed.
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Expiry | 30 days | Link stops accepting signatures after this |
+| Signer name | Free text | Stored with the signature |
+| Notifications | On | You get an email on view and on sign |
+
+You can set a shorter expiry for time-sensitive quotes. An expired link shows
+a friendly page, and you can re-issue a fresh link from the proposal page.
+
+## Status pipeline
+
+Proposals and contracts both track three states:
+
+1. **Sent**: the link exists and works. Nothing observed yet.
+2. **Viewed**: the recipient opened the link. You see when, and from what
+   device class.
+3. **Executed**: signed. The document is locked and a timestamped copy is
+   kept.
+
+A proposal that is executed can be converted into a project in one click.
+Scope sections carry over as the project description and the pricing table
+becomes milestone fractions.
+
+<Callout type="info">
+  E-sign here is a simple typed signature with an audit trail (who, when,
+  what was signed). For jurisdictions that require certified digital
+  signatures, download the executed copy and run it through your local tool.
+</Callout>

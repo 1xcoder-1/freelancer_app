@@ -36,7 +36,7 @@ import {
   AppWindow,
   type LucideIcon,
 } from "@/components/animated-icons";
-import type { CardContent, CardSettings } from "@/lib/api";
+import type { CardContent } from "@/lib/api";
 
 // ----------------------------------------------------------------------------
 // Icon library — items store a plain key (persisted in Neon) resolved here
@@ -116,11 +116,6 @@ export const ITEM_COLORS = [
   "#06b6d4", // Cyan
 ] as const;
 
-export const DEFAULT_SETTINGS: CardSettings = {
-  font: "schibsted",
-  accent: "#e7e5e4",
-};
-
 export function fontCssVar(font: string): string {
   const match = FONT_OPTIONS.find((f) => f.id === font);
   return match ? match.cssVar : FONT_OPTIONS[0].cssVar;
@@ -137,13 +132,6 @@ export const CARD_TABS: { id: CardTab; label: string }[] = [
   { id: "projects", label: "Projects" },
   { id: "sponsor", label: "Sponsor" },
 ];
-
-export const TAB_TO_SECTION: Record<CardTab, string> = {
-  home: "things_i_do",
-  inspiration: "inspirations",
-  projects: "projects",
-  sponsor: "work_with_me",
-};
 
 // ----------------------------------------------------------------------------
 // Content helpers — a brand-new account always starts completely EMPTY

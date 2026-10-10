@@ -1,0 +1,13 @@
+{
+  "title": "Modules",
+  "pages": [
+    "clients",
+    "projects",
+    "time-tracking",
+    "invoices",
+    "proposals-and-contracts",
+    "booking",
+    "automations",
+    "book-ai"
+  ]
+}

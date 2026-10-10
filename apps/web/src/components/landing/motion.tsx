@@ -33,3 +33,50 @@ export function Rise({
     </motion.div>
   );
 }
+
+/* Staggered first-enter group: children rise in sequence the first time
+   the group scrolls into view (section openers, feature copy, FAQ list). */
+
+const staggerContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
+};
+
+const staggerItem = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" as const } },
+};
+
+export function Stagger({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      variants={staggerContainer}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, margin: "-60px" }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+export function StaggerItem({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div variants={staggerItem} className={className}>
+      {children}
+    </motion.div>
+  );
+}

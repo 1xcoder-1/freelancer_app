@@ -54,7 +54,7 @@ export function useOwnerReportCard() {
   };
 }
 
-export type PublicCardStatus =
+type PublicCardStatus =
   "loading" | "ok" | "revoked" | "expired" | "notfound";
 
 /**

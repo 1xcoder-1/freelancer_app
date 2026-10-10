@@ -24,9 +24,8 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [
   { label: "Features", href: "/features" },
-  { label: "Architecture", href: "/architecture" },
-  { label: "About", href: "/about" },
-  { label: "Live demo", href: "/dashboard" },
+  { label: "Download", href: "/download" },
+  { label: "Docs", href: "/docs" },
 ];
 
 const GLASS_BG = "rgba(22, 22, 23, 0.8)";

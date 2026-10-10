@@ -280,39 +280,8 @@ export const deleteClient = async (clientId: string, token?: string): Promise<vo
 };
 
 // ------------------------------------------------------------------------------
-// Clients productivity (C1 earnings, C5 files, C6 relationship strip)
+// Clients productivity (C6 relationship strip)
 // ------------------------------------------------------------------------------
-export interface ClientEarnings {
-  client_id: string;
-  name: string;
-  currency: string;
-  lifetime_revenue: number;
-  total_invoiced: number;
-  total_paid: number;
-  outstanding: number;
-  avg_deal_size: number;
-  days_to_payment: number | null;
-  lifetime_hours: number;
-  invoice_count: number;
-}
-
-export interface TopIncomeSource {
-  client_id: string;
-  name: string;
-  total_paid: number;
-  invoice_count: number;
-}
-
-export const getClientEarnings = async (clientId: string, token?: string): Promise<ClientEarnings> => {
-  const response = await apiClient.get<ClientEarnings>(`/clients/${clientId}/earnings`, authHeaders(token));
-  return response.data;
-};
-
-export const getTopIncomeSources = async (token?: string, limit = 8): Promise<TopIncomeSource[]> => {
-  const response = await apiClient.get<TopIncomeSource[]>('/clients/earnings/top', { ...authHeaders(token), params: { limit } });
-  return response.data;
-};
-
 export interface ClientRelationship {
   client_id: string;
   currency?: string;
@@ -381,58 +350,6 @@ export const deleteProjectFile = async (projectId: string, fileId: string, token
 
 export const getStorageDownloadUrl = async (fileKey: string, token?: string): Promise<{ file_key: string; url: string }> => {
   const response = await apiClient.get<{ file_key: string; url: string }>('/storage/download-url', { ...authHeaders(token), params: { file_key: fileKey } });
-  return response.data;
-};
-
-// ------------------------------------------------------------------------------
-// Interactions (F2) — shared touch log for leads + clients
-// ------------------------------------------------------------------------------
-export type InteractionKind = 'call' | 'email' | 'meeting' | 'message' | 'note';
-
-export interface Interaction {
-  id: string;
-  workspace_id: string;
-  person_type: 'lead' | 'client';
-  person_id: string;
-  kind: InteractionKind;
-  direction: 'inbound' | 'outbound';
-  summary?: string | null;
-  occurred_at: string;
-  next_action_at?: string | null;
-  created_at: string;
-}
-
-export const createInteraction = async (
-  payload: { person_type: 'lead' | 'client'; person_id: string; kind?: InteractionKind; direction?: 'inbound' | 'outbound'; summary?: string; occurred_at?: string; next_action_at?: string },
-  token?: string
-): Promise<Interaction> => {
-  const response = await apiClient.post<Interaction>('/interactions', payload, authHeaders(token));
-  return response.data;
-};
-
-export const listInteractions = async (
-  personType: 'lead' | 'client',
-  personId: string,
-  token?: string,
-  limit = 50
-): Promise<Interaction[]> => {
-  const response = await apiClient.get<Interaction[]>('/interactions', { ...authHeaders(token), params: { person_type: personType, person_id: personId, limit } });
-  return response.data;
-};
-
-export interface InteractionSummary {
-  touch_count: number;
-  last_touch_at: string | null;
-  days_since_last_touch: number | null;
-  next_action_at: string | null;
-}
-
-export const getInteractionSummary = async (
-  personType: 'lead' | 'client',
-  personId: string,
-  token?: string
-): Promise<InteractionSummary> => {
-  const response = await apiClient.get<InteractionSummary>('/interactions/summary', { ...authHeaders(token), params: { person_type: personType, person_id: personId } });
   return response.data;
 };
 
@@ -527,15 +444,6 @@ export const closeLead = async (
   return response.data;
 };
 
-export const logLeadContact = async (
-  leadId: string,
-  payload: { note?: string; next_follow_up_at?: string },
-  token?: string
-): Promise<Lead> => {
-  const response = await apiClient.post<Lead>(`/leads/${leadId}/log-contact`, payload, authHeaders(token));
-  return response.data;
-};
-
 export const deleteLead = async (leadId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/leads/${leadId}`, authHeaders(token));
 };
@@ -596,42 +504,6 @@ export const startWork = async (
 
 export const getPipelineInsights = async (token?: string): Promise<PipelineInsights> => {
   const response = await apiClient.get<PipelineInsights>('/leads/insights', authHeaders(token));
-  return response.data;
-};
-
-// ------------------------------------------------------------------------------
-// Cash Flow Guard — receivables aging, 90-day forecast, safe-to-spend
-// ------------------------------------------------------------------------------
-export interface CashflowSummary {
-  currency: string;
-  bank_balance: number;
-  bank_balance_updated_at: string | null;
-  receivables_total: number;
-  at_risk_total: number;
-  aging: Record<'not_due_yet' | 'days_1_15' | 'days_16_30' | 'days_31_plus', { count: number; amount: number }>;
-  overdue_invoices: Array<{ id: string; invoice_number: string; amount: number; due_date: string; days_overdue: number }>;
-  // Cumulative cash expected within 14 / 30 / 60 days (not-yet-due invoices).
-  expected_cash: { days_14: number; days_30: number; days_60: number };
-  history_6m: Array<{ month: string; collected: number; expenses: number; net: number; invoiced: number }>;
-  avg_monthly_collected: number;
-  avg_monthly_expenses: number;
-  monthly_burn_rate: number;
-  weekly_burn_rate: number;
-  // null = burn unknown (no expenses recorded yet), not "infinite".
-  runway_weeks: number | null;
-  runway_weeks_with_incoming: number | null;
-  vacation_reserve_target: number;
-  vacation_reserve_progress_pct: number | null;
-  income_volatility_pct: number;
-  avg_days_to_payment: number | null;
-  forecast_90d: Array<{ month: string; expected_invoices: number; expected_new_work: number; total_expected: number }>;
-  weighted_pipeline_value: number;
-  safe_to_spend_next_30d: number;
-  timestamp: string;
-}
-
-export const getCashflowSummary = async (token?: string): Promise<CashflowSummary> => {
-  const response = await apiClient.get<CashflowSummary>('/cashflow/summary', authHeaders(token));
   return response.data;
 };
 
@@ -813,35 +685,6 @@ export const decidePortalChangeRequest = async (
   const response = await apiClient.post<PublicProjectPortal>(
     `/projects/portal/${token}/change-requests/${crId}/decide`,
     payload
-  );
-  return response.data;
-};
-
-// P1: the unbilled hours this project earned, with each entry so the UI can
-// offer "bill these hours". Declared before deleteProject (ordering irrelevant,
-// just grouped with the project reads).
-export interface ProjectUnbilledTime {
-  project_id: string;
-  hours: number;
-  value: number;
-  entries: {
-    id: string;
-    description?: string | null;
-    start_time: string;
-    duration_seconds: number;
-    hours: number;
-    hourly_rate: number;
-    task_id?: string | null;
-  }[];
-}
-
-export const getProjectUnbilledTime = async (
-  projectId: string,
-  token?: string
-): Promise<ProjectUnbilledTime> => {
-  const response = await apiClient.get<ProjectUnbilledTime>(
-    `/projects/${projectId}/unbilled-time`,
-    authHeaders(token)
   );
   return response.data;
 };
@@ -1093,11 +936,6 @@ export const getTimeEntries = async (token?: string): Promise<TimeEntry[]> => {
   return response.data;
 };
 
-export const logTimeEntry = async (payload: Partial<TimeEntry>, token?: string): Promise<TimeEntry> => {
-  const response = await apiClient.post<TimeEntry>('/time-entries', payload, authHeaders(token));
-  return response.data;
-};
-
 export const deleteTimeEntry = async (entryId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/time-entries/${entryId}`, authHeaders(token));
 };
@@ -1280,12 +1118,6 @@ export interface ContractTemplate {
   created_at: string;
 }
 
-export interface ClauseSnippet {
-  key: string;
-  title: string;
-  body: string;
-}
-
 export interface PublicContract {
   id: string;
   title: string;
@@ -1370,28 +1202,9 @@ export const rotateContractToken = async (contractId: string, token?: string): P
   return response.data;
 };
 
-// N4 templates + clause snippets
-export const listContractTemplates = async (token?: string): Promise<ContractTemplate[]> => {
-  const response = await apiClient.get<ContractTemplate[]>('/contracts/templates', authHeaders(token));
-  return response.data;
-};
-
-export const createContractTemplate = async (payload: { title: string; content: string; category?: string }, token?: string): Promise<ContractTemplate> => {
-  const response = await apiClient.post<ContractTemplate>('/contracts/templates', payload, authHeaders(token));
-  return response.data;
-};
-
+// N4 templates
 export const saveContractAsTemplate = async (contractId: string, payload: { title: string; content: string; category?: string }, token?: string): Promise<ContractTemplate> => {
   const response = await apiClient.post<ContractTemplate>(`/contracts/${contractId}/save-as-template`, payload, authHeaders(token));
-  return response.data;
-};
-
-export const deleteContractTemplate = async (templateId: string, token?: string): Promise<void> => {
-  await apiClient.delete(`/contracts/templates/${templateId}`, authHeaders(token));
-};
-
-export const getClauseSnippets = async (token?: string): Promise<ClauseSnippet[]> => {
-  const response = await apiClient.get<ClauseSnippet[]>('/contracts/clauses', authHeaders(token));
   return response.data;
 };
 
@@ -1402,11 +1215,6 @@ export const getPublicContract = async (token: string): Promise<PublicContract> 
 
 export const signPublicContract = async (token: string, payload: ContractSignPayload): Promise<PublicContract> => {
   const response = await apiClient.post<PublicContract>(`/contracts/public/${token}/sign`, payload);
-  return response.data;
-};
-
-export const declinePublicContract = async (token: string, reason?: string): Promise<PublicContract> => {
-  const response = await apiClient.post<PublicContract>(`/contracts/public/${token}/decline`, { reason });
   return response.data;
 };
 
@@ -1694,11 +1502,6 @@ export const createBooking = async (payload: BookingConsultationPayload, token?:
   return response.data;
 };
 
-export const updateBooking = async (id: string, payload: BookingConsultationPayload, token?: string): Promise<BookingConsultation> => {
-  const response = await apiClient.put<BookingConsultation>(`/booking/${id}`, payload, authHeaders(token));
-  return response.data;
-};
-
 export const deleteBooking = async (bookingId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/booking/${bookingId}`, authHeaders(token));
 };
@@ -1838,15 +1641,6 @@ export const createCalendarEvent = async (
   token?: string
 ): Promise<CalendarEvent> => {
   const response = await apiClient.post<CalendarEvent>('/calendar/events', payload, authHeaders(token));
-  return response.data;
-};
-
-export const updateCalendarEvent = async (
-  eventId: string,
-  payload: Partial<CalendarEventCreatePayload>,
-  token?: string
-): Promise<CalendarEvent> => {
-  const response = await apiClient.patch<CalendarEvent>(`/calendar/events/${eventId}`, payload, authHeaders(token));
   return response.data;
 };
 
@@ -2013,11 +1807,6 @@ export const saveReportCardSettings = async (settings: CardSettings, token?: str
   return response.data;
 };
 
-export const getShareStatus = async (token?: string): Promise<ShareStatusResponse> => {
-  const response = await apiClient.get<ShareStatusResponse>('/report-card/share/status', authHeaders(token));
-  return response.data;
-};
-
 export const createShareLink = async (
   payload: { expiration: string; include_styling: boolean },
   token?: string
@@ -2142,13 +1931,6 @@ export interface PlannerSnapshotSummary {
   created_at: string;
 }
 
-export interface PlannerSnapshot {
-  captured_on: string;
-  revision: number;
-  elements: Record<string, unknown>[];
-  files: Record<string, Record<string, unknown>>;
-}
-
 export interface PublicPlannerBoard {
   name: string;
   elements: Record<string, unknown>[];
@@ -2265,15 +2047,6 @@ export const listPlannerSnapshots = async (
   token?: string
 ): Promise<PlannerSnapshotSummary[]> => {
   const response = await apiClient.get<PlannerSnapshotSummary[]>(`/planner/boards/${boardId}/snapshots`, authHeaders(token));
-  return response.data;
-};
-
-export const getPlannerSnapshot = async (
-  boardId: string,
-  capturedOn: string,
-  token?: string
-): Promise<PlannerSnapshot> => {
-  const response = await apiClient.get<PlannerSnapshot>(`/planner/boards/${boardId}/snapshots/${capturedOn}`, authHeaders(token));
   return response.data;
 };
 

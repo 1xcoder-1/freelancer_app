@@ -1,0 +1,62 @@
+---
+title: Time tracking
+description: A live timer that survives refreshes, per-project entries and one-click conversion to invoice lines.
+---
+
+Time tracking in Freelance Book is built around one rule: starting a timer
+must take two seconds, and the timer must never lose your time.
+
+## The live timer
+
+Start a timer from a project page or through the command menu (Ctrl+K).
+While it runs, the active entry shows in the top bar with the project and a
+running total.
+
+The timer is **server-side**. Close the tab, refresh, or switch devices and
+the running entry is still there when you come back. Nothing is stored only
+in the page.
+
+<Callout type="warning">
+  The timer does not take screenshots or monitor what you do. It counts time
+  against a project, nothing else.
+</Callout>
+
+## Entries
+
+Stopping the timer creates a time entry:
+
+| Field | Notes |
+| --- | --- |
+| Project | Where the time was logged |
+| Duration | Editable after the fact |
+| Note | One line of context, shows on invoice lines |
+| Date | Defaults to today, backfill allowed |
+| Billed | Set when the entry lands on a sent invoice |
+
+Entries can be added manually for work done away from the keyboard. Edit any
+entry until it has been invoiced.
+
+## From entries to invoice lines
+
+Unbilled entries collect on their project. When you create an invoice:
+
+1. Pick the project and date range.
+2. Freelance Book groups the entries into line items, grouped by note or by
+   day, your choice.
+3. Adjust quantities or rates per line if needed.
+
+After an invoice is sent, its entries are marked billed and are no longer
+offered for new invoices. If you void or delete that invoice, the entries go
+back to unbilled.
+
+## The Timesheet view
+
+The Time tab has a week view for reviewing your days. It shows totals per
+day and per project, highlights gaps, and lets you edit entries inline. Use
+it before invoicing to catch a "forgot to stop the timer" at 8 hours.
+
+## Desktop global capture
+
+The desktop app adds a system-wide shortcut, Ctrl+Shift+F, for quick capture:
+log a note or start the last timer without bringing the app to front. See
+[Desktop and mobile](/docs/apps/desktop-and-mobile).

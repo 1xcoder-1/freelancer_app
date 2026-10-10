@@ -1,0 +1,59 @@
+---
+title: Projects
+description: Milestone fractions, budgets, unbilled hours and a kanban board for every engagement.
+---
+
+Projects are where work happens. A project belongs to one client and carries
+its own billing model, budget and board.
+
+## Billing models
+
+When you create a project you pick how it gets billed:
+
+- **Hourly**: you track time, and unbilled hours accumulate until you invoice
+  them. The project remembers your rate, with optional overrides per task.
+- **Milestones**: you split the project into fractions, for example 30% /
+  40% / 30%. Each milestone can be marked done and invoiced on its own, so
+  cash arrives during the project instead of after it.
+
+Milestone fractions are editable at any time. When the fractions no longer
+sum to 100%, the project shows a small warning instead of silently rounding.
+
+## Budgets
+
+Set a budget in hours, in money, or both. The project header shows a burn
+bar as tracked time and approved expenses stack up.
+
+- At 80% of budget you get a soft warning on the project and in the
+  dashboard.
+- Past 100% the bar turns red and new time entries get flagged as
+  over-budget.
+
+## The board
+
+Every project has a kanban board. Columns are simple: To do, In progress,
+Review and Done. Cards can hold a description, a time estimate and links to
+invoices they belong to.
+
+You can move cards freely. Nothing in the board changes money by itself;
+invoicing stays an explicit step in the [Invoices](/docs/modules/invoices)
+module.
+
+## Unbilled hours
+
+Time entries that have not been attached to an invoice are listed on the
+project as **unbilled hours**. When you create an invoice for the project,
+Freelance Book offers those hours as draft line items.
+
+<Callout type="info">
+  Entries stay unbilled until an invoice containing them is sent. Editing a
+  draft invoice never locks the underlying time entries.
+</Callout>
+
+## Project page at a glance
+
+- Burn bar against budget.
+- Milestone list with fractions and status.
+- Unbilled hours total.
+- Recent time entries.
+- Related invoices and proposals.

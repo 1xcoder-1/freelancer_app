@@ -1,0 +1,69 @@
+---
+title: Invoices and money
+description: The invoice lifecycle, public pay links, expenses and a cash flow view that reflects reality.
+---
+
+The money module covers the invoice lifecycle, the expenses you pay to work,
+and the cash flow picture both produce together.
+
+## Invoice lifecycle
+
+Every invoice moves through one simple pipeline:
+
+| Status | Who sees it | What happens |
+| --- | --- | --- |
+| Draft | Only you | Edit lines, rates and notes freely |
+| Sent | Client via pay link | Locked lines, due date starts ticking |
+| Paid | Archive | Marked with the date paid |
+| Overdue | Client | Flagged after the due date passes |
+
+You can move an invoice backward to Draft before it is paid, for example to
+fix a wrong line. Every status change is recorded with a timestamp.
+
+## Public pay links
+
+Each invoice gets a **public pay link**. Paste it into an email or a chat and
+the client opens a clean page with the line items, totals and your payment
+details. No account, no portal, no password.
+
+- The link is unlisted and works for anyone who has it.
+- You can regenerate the link to invalidate the old one.
+- The page shows the invoice status, so a paid invoice reads as paid.
+
+## The overdue flow
+
+The [Automations](/docs/modules/automations) module runs a daily overdue
+check. When an invoice passes its due date:
+
+1. The invoice flips to **Overdue**.
+2. The dashboard shows it in the "Needs attention" list.
+3. A reminder email goes out if you enabled payment reminders.
+
+Reminders are polite and bounded: you choose the interval and the maximum
+number of follow-ups per invoice.
+
+## Expenses
+
+Log expenses per client or per project, with a date, an amount and a
+category. Expenses you plan to recharge can be attached to the next invoice
+for that project as line items.
+
+The Expenses view supports a monthly total per category, so tax time does
+not start with a shoebox of receipts.
+
+## Cash flow
+
+The cash flow view puts invoices and expenses on one timeline:
+
+- **In**: sent and paid invoices, by expected and actual date.
+- **Out**: expenses, by date.
+- **Net**: what is actually left.
+
+Future months use due dates and recurring expenses as estimates, so you can
+see a slow month coming weeks ahead.
+
+<Callout type="tip">
+  The Report Card module computes your effective hourly rate from paid
+  invoices and tracked time. It is the fastest way to learn which clients are
+  worth the hours.
+</Callout>

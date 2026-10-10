@@ -23,31 +23,6 @@ export const optionalTextSchema = (label: string, max = 2000) =>
     .or(z.literal(""))
     .transform((v) => (v ?? "").trim());
 
-export const emailSchema = z
-  .string()
-  .trim()
-  .email("Enter a valid email address");
-
-export const optionalEmailSchema = z
-  .union([z.literal(""), emailSchema])
-  .transform((v) => v.trim());
-
-export const phoneSchema = z
-  .string()
-  .trim()
-  .regex(/^[+()\d\s.-]{7,20}$/, "Enter a valid phone number (7-20 digits)");
-
-export const optionalUrlSchema = z
-  .union([
-    z.literal(""),
-    z
-      .string()
-      .trim()
-      .url("Enter a full website URL (https://...)")
-      .max(200, "Website URL is too long"),
-  ])
-  .transform((v) => v.trim());
-
 export const moneySchema = (label: string, max = 10_000_000) =>
   z
     .number({ message: `${label} must be a number` })

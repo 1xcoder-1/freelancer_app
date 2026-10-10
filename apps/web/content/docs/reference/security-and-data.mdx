@@ -1,0 +1,71 @@
+---
+title: Security and data
+description: How Freelance Book scopes workspaces, handles tokens, and how to export everything you put in.
+---
+
+This page documents how your data is isolated, how authentication tokens
+work, and how to get your data out.
+
+## Workspace scoping
+
+Every piece of data lives inside a **workspace**. A workspace is created
+when you sign up and belongs to you. Clients, projects, time entries,
+invoices, proposals and bookings all carry the workspace id, and every API
+request filters by it.
+
+- Requests from one workspace cannot read another workspace's rows, not even
+  by guessing ids.
+- The only way to share out is an explicit public link: an invoice pay link,
+  a proposal share link or a booking page. Each link exposes exactly one
+  document.
+- Public links can be regenerated, which invalidates the old URL, and
+  proposal links can carry an expiry date.
+
+## Authentication and tokens
+
+- Sign-in is handled by Clerk. Freelance Book never stores your password.
+- The API accepts **Bearer JWT** tokens minted for your session.
+- Tokens expire. The dashboard refreshes them automatically; scripts must
+  request a fresh one.
+- A token is bound to one workspace. If you belong to several workspaces,
+  each session token names the one it is for.
+
+See the [API reference](/docs/reference/api) for the header format.
+
+## What the server stores
+
+| Data | Stored for |
+| --- | --- |
+| Client and project records | Running your business, exports |
+| Time entries | Invoicing and the Report Card |
+| Invoice and expense history | Money views and tax records |
+| Proposal revisions | Legal audit trail of what was signed |
+| Booking answers | Following up on the call |
+
+Passwords: none. Payment card numbers: none. The server never touches card
+data; pay links point at your payment details, they do not process money.
+
+## Exports
+
+You can leave at any time, with your data:
+
+- **JSON export**: the full workspace, every module, one file. This is the
+  archival format, suited for backups.
+- **CSV exports**: per module, suited for spreadsheets. Clients, projects,
+  time entries, invoices, expenses.
+- **Notion import**: the export format is compatible with Notion's CSV
+  import, so a workspace can be re-housed in a Notion database.
+
+Exports are generated on demand from Settings. They contain everything your
+workspace holds, including invoice history and signed proposal revisions.
+
+<Callout type="info">
+  Deleting a workspace is a separate, explicit step from exporting. It
+  removes all rows and public links and cannot be undone.
+</Callout>
+
+## Reporting a problem
+
+Found something that looks like a security issue? Do not open a public
+issue. Use the contact link on the [home page](/) and describe it with
+enough detail to reproduce. Reports get a reply before any fix ships.

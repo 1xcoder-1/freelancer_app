@@ -1,0 +1,17 @@
+{
+  "title": "Freelance Book",
+  "description": "Documentation for Freelance Book, the freelancer OS",
+  "pages": [
+    "index",
+    "---getting-started---",
+    "getting-started",
+    "---modules---",
+    "modules",
+    "---apps---",
+    "apps",
+    "---integrations---",
+    "integrations",
+    "---reference---",
+    "reference"
+  ]
+}

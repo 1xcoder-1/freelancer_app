@@ -5,9 +5,10 @@
 export const publicRoutes = [
   "/",
   "/features(.*)",
-  "/architecture(.*)",
-  "/ai(.*)",
-  "/about(.*)",
+  "/download",
+  "/privacy",
+  "/terms",
+  "/docs(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/sso-callback(.*)",

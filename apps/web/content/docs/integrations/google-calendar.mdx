@@ -1,0 +1,52 @@
+---
+title: Google Calendar
+description: Connect Google Calendar to block booked slots and get meeting reminders where you already look.
+---
+
+The Google Calendar integration connects your booking pages and your
+automations to the calendar you already use.
+
+## What it does
+
+- **Blocks slots**: events on your calendar make those times unavailable on
+  every [booking page](/docs/modules/booking).
+- **Writes bookings**: confirmed bookings appear as events on the calendar
+  you choose, with attendee and answers in the description.
+- **Meeting reminders**: reminders fire as normal calendar notifications,
+  next to your other meetings.
+
+## Connecting
+
+1. Open **Settings**, then **Integrations**.
+2. Click **Connect Google Calendar** and complete the Google consent screen.
+3. Pick which calendar Freelance Book should write to. Your other calendars
+   stay read-only for availability checks.
+
+Disconnecting stops all reads and writes. Bookings already on the calendar
+stay there.
+
+## Availability rules
+
+Slot generation is the intersection of:
+
+- Your booking page availability window.
+- Busy events on your connected calendar.
+- The page's minimum notice and per-day limits.
+
+A slot that overlaps any busy event never appears, no matter which calendar
+it came from. All-day events block the whole day.
+
+<Callout type="tip">
+  If a client reschedules by editing the calendar event directly, the booking
+  record in Freelance Book updates on the next sync. Cancelling the event
+  cancels the booking and notifies the attendee.
+</Callout>
+
+## Data access
+
+The integration requests the smallest scope set that works: read free/busy
+and events for the calendar you connect, and write events. It never touches
+other calendars or deletes events it did not create.
+
+Tokens are stored per workspace and can be revoked at any time, both from
+Settings and from your Google account's security page.

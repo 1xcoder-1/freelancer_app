@@ -4,6 +4,8 @@ import * as Sentry from "@sentry/nextjs";
 // Sentry runtime configs live in @/config (src/config/).
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { default: EventEmitter } = await import("node:events");
+    EventEmitter.defaultMaxListeners = 30;
     await import("./config/sentry.server");
   }
 

@@ -1,0 +1,56 @@
+---
+title: Booking
+description: Public self-serve booking pages that create leads and connect to your calendar.
+---
+
+The Booking module gives every freelancer a public page where prospects pick
+a time and book a call. It removes the "does Tuesday at 3 work for you?"
+email thread.
+
+## How it works
+
+1. Create a booking page and give it a name, like "Intro call".
+2. Define what you offer: a duration, a description and optional questions.
+3. Set your availability: which days, which hours, and your timezone.
+4. Share the page URL anywhere: email signature, portfolio, social profile.
+
+Visitors pick a free slot, answer your questions and confirm. The booking
+lands in your dashboard and on your calendar.
+
+## Availability
+
+Availability rules are per page, so you can offer different windows for
+different services:
+
+- Working hours with a buffer between calls.
+- Day-of-week limits, for example no Mondays.
+- Minimum notice, for example 12 hours ahead.
+- A maximum of bookings per day.
+
+Existing calendar events block slots automatically if you connect Google
+Calendar. See [Google Calendar](/docs/integrations/google-calendar).
+
+## Where bookings land
+
+A confirmed booking creates or updates a **lead** in the Clients module:
+
+- New visitor: a new lead with the answers from your booking questions.
+- Existing client: the booking is attached to their record.
+
+From there, the normal pipeline applies: contact them, qualify them, send a
+proposal.
+
+<Callout type="tip">
+  Add one required question like "What are you trying to get done?" It makes
+  the first call twice as useful, and the answers become Book AI context for
+  drafting the proposal.
+</Callout>
+
+## Public page behavior
+
+- Booking pages work without an account and on mobile.
+- Cancel and reschedule links are included in the confirmation.
+- Timezones are handled for the visitor, so nobody books "your" 3 AM by
+  accident.
+- You can pause a page at any time; the URL then shows a plain
+  "not accepting bookings" note.

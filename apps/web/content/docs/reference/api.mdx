@@ -1,0 +1,99 @@
+---
+title: API reference
+description: The FastAPI backend behind the dashboard, with OpenAPI docs at /docs and Bearer JWT authentication.
+---
+
+The Freelance Book API is a REST API served by FastAPI. The dashboard uses it
+for everything, so anything you can do in the UI, you can do over HTTP.
+
+## Base URL
+
+The base URL depends on your deployment and is configured with
+`NEXT_PUBLIC_API_URL`:
+
+```bash
+export NEXT_PUBLIC_API_URL="https://api.example.com"
+```
+
+The web app reads this variable at build time. All examples below use
+`$API` as a stand-in for your base URL.
+
+## Interactive docs
+
+FastAPI generates OpenAPI schemas automatically:
+
+- Swagger UI: `$API/docs`
+- Raw OpenAPI JSON: `$API/openapi.json`
+
+The Swagger page lists every endpoint with its parameters and response
+models, and lets you call endpoints directly from the browser.
+
+## Authentication
+
+The API authenticates with **Bearer JWT** issued through Clerk. Sign in to
+the dashboard, request a token from your session, and pass it in the
+`Authorization` header:
+
+```bash
+curl -sS "$API/clients" \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json"
+```
+
+A token grants access to one workspace only. There are no service-wide
+tokens; everything you can reach is scoped to the workspace the token was
+issued for.
+
+## Resources
+
+The main resources mirror the modules:
+
+| Resource | Covers |
+| --- | --- |
+| `clients` | Roster, groups, VIP and silence signals |
+| `leads` | Intake form submissions and pipeline status |
+| `projects` | Milestones, budgets, board state |
+| `time-entries` | Tracked time and manual entries |
+| `invoices` | Lifecycle, pay links, line items |
+| `proposals` | Drafts, revisions, share links |
+| `bookings` | Public booking pages and slots |
+| `expenses` | Per-project and per-client expenses |
+
+The authoritative list, with all query parameters, is the OpenAPI schema at
+`$API/docs`.
+
+## Example: create a time entry
+
+```ts
+const api = process.env.NEXT_PUBLIC_API_URL!;
+
+const res = await fetch(`${api}/time-entries`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${jwt}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    project_id: "proj_01",
+    minutes: 95,
+    note: "Wireframes review call",
+  }),
+});
+
+if (!res.ok) throw new Error(`API error ${res.status}`);
+const entry = await res.json();
+```
+
+<Callout type="warning">
+  Keep JWTs on the client side only. Never embed a token in a public page, a
+  git history or a serverless function log.
+</Callout>
+
+## Errors
+
+Errors use standard HTTP codes with a JSON body:
+
+- `401` missing or expired token.
+- `403` valid token, wrong workspace.
+- `404` resource not found in your workspace.
+- `422` validation error, with details from the request schema.

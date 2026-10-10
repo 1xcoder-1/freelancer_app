@@ -1,0 +1,65 @@
+---
+title: Desktop and mobile
+description: Electron desktop app with global quick capture, Android app with offline sync, and where downloads stand.
+---
+
+Freelance Book runs in the browser today. Native apps add the parts a browser
+cannot do: global shortcuts, offline access and notifications.
+
+## Current status
+
+| Platform | Form | Status |
+| --- | --- | --- |
+| Windows, macOS, Linux | Desktop app (Electron) | Available |
+| Android | Native app | Coming soon |
+| Windows | Standalone exe | Coming soon |
+
+The web dashboard at [/dashboard](/dashboard) is always the most current
+build. Desktop releases trail it slightly.
+
+## Desktop app
+
+The desktop app wraps the full dashboard and adds native behavior:
+
+- Lives in the tray with a quick window toggle.
+- Same sign-in as the web app, sessions are shared.
+- Auto-updates in the background.
+
+### Global quick capture
+
+Press **Ctrl+Shift+F** anywhere in your operating system to open quick
+capture, even when Freelance Book is not focused.
+
+From the capture box you can:
+
+- Log a note straight to a client or project.
+- Start the timer on your most recent project.
+- Add an expense with an amount and a note.
+
+Captures sync to the workspace immediately, so they are on your phone and in
+the dashboard before you alt-tab back.
+
+<Callout type="info">
+  The global capture shortcut is separate from the in-app command menu
+  (Ctrl+K). The menu works inside the app window; capture works system-wide.
+</Callout>
+
+## Android app
+
+The Android app is in development. It is planned with:
+
+- **Offline sync**: read clients, projects and invoices without a network,
+  and queue time entries and notes to send later.
+- **Push notifications**: booking confirmations, meeting reminders and
+  payment alerts.
+- A focused phone layout: timer first, then invoices and client lookup.
+
+There is no beta channel yet. When a test build ships, it will be announced
+on the [download page](/#download).
+
+## What ships where
+
+- Bug fixes and dashboard features: web first.
+- Desktop shell updates (tray, capture, updates): released alongside stable
+  web milestones.
+- Mobile: after offline sync is proven stable in internal testing.

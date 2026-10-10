@@ -72,7 +72,7 @@ export function DottedDivider() {
  * 2. Authentic Brand SVG if icon matches brand library (Cursor, Replit, Neon, etc.)
  * 3. Lucide vector icon from ICON_LIBRARY
  */
-export function BrandGlyph({
+function BrandGlyph({
   icon,
   logoUrl,
   className = "w-4.5 h-4.5",
@@ -1054,7 +1054,7 @@ export function InspirationList({
 // ----------------------------------------------------------------------------
 // Projects Section with Category Filters & Freelance Portfolios
 // ----------------------------------------------------------------------------
-export const PROJECT_CATEGORIES = [
+const PROJECT_CATEGORIES = [
   "All",
   "Web Dev",
   "App Dev",

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Play, Sparkles } from "lucide-react";
 import { AppWindow, useAppCycle } from "@/components/landing/app";
-import { MkButton, MkIconButton } from "@/components/landing/layout";
+import { MkIconButton } from "@/components/landing/layout";
+import { BeamButton } from "@/components/ui/beam-button";
+import { TextureOverlay } from "@/components/ui/texture-overlay";
 
 /* ------------------------------------------------------------------
    Hero — superset.sh hero grammar (announcement pill, tracking-tight
@@ -98,6 +100,7 @@ export function Hero() {
         }}
       >
         <div className="mk-dot-grid absolute inset-0" />
+        <TextureOverlay texture="scatteredDots" opacity={0.5} />
         <div
           className="absolute inset-0"
           style={{
@@ -156,14 +159,16 @@ export function Hero() {
             className="mt-6 flex flex-wrap items-center justify-center gap-2 sm:mt-8 sm:gap-4"
           >
             <Link href="/sign-up">
-              <MkButton>
+              <BeamButton
+                surfaceClassName="bg-fg text-bg group-hover:bg-brand group-hover:text-white"
+              >
                 <span className="hidden sm:inline">Start for free</span>
                 <span className="sm:hidden">Start free</span>
                 <span className="relative size-4 overflow-hidden">
                   <ArrowRight className="absolute inset-0 size-4 transition-transform duration-300 ease-out group-hover:translate-x-full" />
                   <ArrowRight className="absolute inset-0 size-4 -translate-x-full transition-transform duration-300 ease-out group-hover:translate-x-0" />
                 </span>
-              </MkButton>
+              </BeamButton>
             </Link>
             <Link href="/dashboard" aria-label="Open the dashboard">
               <MkIconButton>

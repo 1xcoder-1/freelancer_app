@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
+import { TextAnimate } from "@/components/ui/text-animate";
+import { TextureOverlay } from "@/components/ui/texture-overlay";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------
@@ -72,13 +74,16 @@ export function Eyebrow({
   );
 }
 
-/** Centered page hero: eyebrow → big tracking-tight headline → lead. */
+/** Centered page hero: eyebrow → big tracking-tight headline → lead.
+    `animated` drives the vended Cult word reveal on the headline; the
+    legal pages opt out so clause copy never plays as marketing motion. */
 export function PageHero({
   eyebrow,
   title,
   accent,
   suffix,
   desc,
+  animated = true,
   children,
 }: {
   eyebrow: string;
@@ -86,8 +91,16 @@ export function PageHero({
   accent?: string;
   suffix?: string;
   desc: string;
+  animated?: boolean;
   children?: React.ReactNode;
 }) {
+  const phrase = [title, accent, suffix].filter(Boolean).join(" ");
+  const accentStart = title.split(" ").length;
+  const accentEnd = accent ? accentStart + accent.split(" ").length : accentStart;
+
+  const headlineClass =
+    "mx-auto max-w-4xl justify-center text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] text-fg";
+
   return (
     <div className="relative flex flex-col items-center pt-24 sm:pt-32 lg:pt-40 pb-16 sm:pb-24 overflow-hidden">
       <div
@@ -101,6 +114,7 @@ export function PageHero({
         }}
       >
         <div className="absolute inset-0 mk-dot-grid" />
+        <TextureOverlay texture="noise" opacity={0.6} />
         <div
           className="absolute inset-0"
           style={{
@@ -112,18 +126,32 @@ export function PageHero({
       <Container className="relative z-10">
         <div className="flex flex-col items-center text-center">
           <Eyebrow className="mb-4">{eyebrow}</Eyebrow>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] text-fg max-w-4xl mx-auto">
-            {title}
-            {accent ? (
-              <>
-                {" "}
-                <span className="corner-brackets px-[0.2em] py-[0.06em] whitespace-nowrap">
-                  {accent}
-                </span>
-              </>
-            ) : null}
-            {suffix ? <span> {suffix}</span> : null}
-          </h1>
+          {animated ? (
+            <TextAnimate
+              as="h1"
+              text={phrase}
+              variant="rise"
+              className={headlineClass}
+              wordClassName={(_, i) =>
+                i >= accentStart && i < accentEnd
+                  ? "bg-gradient-to-b from-brand-light to-brand bg-clip-text text-transparent"
+                  : undefined
+              }
+            />
+          ) : (
+            <h1 className={cn("max-w-4xl", headlineClass)}>
+              {title}
+              {accent ? (
+                <>
+                  {" "}
+                  <span className="corner-brackets px-[0.2em] py-[0.06em] whitespace-nowrap">
+                    {accent}
+                  </span>
+                </>
+              ) : null}
+              {suffix ? <span> {suffix}</span> : null}
+            </h1>
+          )}
           <p className="mt-6 text-base sm:text-xl font-light text-muted max-w-3xl mx-auto">
             {desc}
           </p>

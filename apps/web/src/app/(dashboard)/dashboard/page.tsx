@@ -18,12 +18,13 @@ import {
   TrendingDown,
   Users,
   AlertTriangle,
+  ShieldAlert,
+  MessageSquare,
 } from "@/components/animated-icons";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard, StatChip } from "@/components/dashboard/patterns";
-import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 import {
   getDashboardStats,
   getDashboardOverview,
@@ -35,6 +36,8 @@ import {
   getContracts,
   getBookings,
   getBookingAppointments,
+  getRevenueAtStake,
+  getUnreadNotificationCount,
   type TimerSession,
   type CalendarFeedItem,
 } from "@/lib/api";
@@ -53,7 +56,6 @@ type TabKey = "today" | "projects" | "invoices" | "time";
 export default function DashboardPage() {
   const { user } = useUser();
   const [tab, setTab] = useState<TabKey>("today");
-  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const { data: dashboardData, loading, error, refresh: loadData } = useApiData(
     "dashboard:data",
@@ -68,6 +70,8 @@ export default function DashboardPage() {
         contractsRes,
         bookingsRes,
         appointmentsRes,
+        atStakeRes,
+        unreadRes,
       ] = await Promise.all([
         getDashboardStats(token),
         getDashboardOverview(token),
@@ -77,6 +81,8 @@ export default function DashboardPage() {
         getContracts(undefined, token).catch(() => []),
         getBookings(token).catch(() => []),
         getBookingAppointments(undefined, token).catch(() => []),
+        getRevenueAtStake(token).catch(() => null),
+        getUnreadNotificationCount(token).catch(() => 0),
       ]);
       return {
         stats: statsRes,
@@ -87,6 +93,8 @@ export default function DashboardPage() {
         contracts: contractsRes,
         bookings: bookingsRes,
         appointments: appointmentsRes,
+        atStake: atStakeRes,
+        unreadCount: unreadRes,
       };
     },
     { reportContext: "dashboard" }
@@ -114,6 +122,10 @@ export default function DashboardPage() {
   const pendingBookingsCount = appointments.length > 0
     ? appointments.filter((a) => a.status !== "completed" && a.status !== "cancelled").length
     : (dashboardData?.bookings?.length ?? 0);
+
+  // Money the freelancer has already earned or invoiced but not collected.
+  const atStake = dashboardData?.atStake ?? null;
+  const unreadCount = dashboardData?.unreadCount ?? 0;
 
   // Today's schedule — same feed the calendar uses, window = today only.
   const { data: todayEvents, loading: todayLoading } = useApiData<CalendarFeedItem[]>(
@@ -169,14 +181,32 @@ export default function DashboardPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          <Button
-            size="sm"
-            onClick={() => setCalendarOpen(true)}
-            className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
-          >
-            <CalendarDays className="w-3.5 h-3.5 mr-1" />
-            Calendar
-          </Button>
+          <Link href="/dashboard/inbox" className="relative inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl bg-card border-line text-fg w-9 h-9 p-0 flex items-center justify-center shrink-0 hover:bg-surface"
+              title="Inbox"
+              aria-label="Open inbox"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+            </Button>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full bg-accent text-accent-fg text-[10px] font-bold flex items-center justify-center border-2 border-bg">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </Link>
+          <Link href="/dashboard/calendar" className="inline-flex">
+            <Button
+              size="sm"
+              className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+              title="Calendar"
+            >
+              <CalendarDays className="w-3.5 h-3.5 mr-1" />
+              Calendar
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -281,7 +311,56 @@ export default function DashboardPage() {
           <span className="font-semibold">{String(pendingBookingsCount)}</span>
           <span>Pending bookings</span>
         </StatChip>
+        {unreadCount > 0 && (
+          <Link href="/dashboard/inbox" className="inline-flex">
+            <StatChip tone="amber">
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="font-semibold">{String(unreadCount)}</span>
+              <span>New signals</span>
+            </StatChip>
+          </Link>
+        )}
       </div>
+
+      {/* Revenue at stake — the one number that says what the book is owed. */}
+      {!loading && atStake && atStake.totals.total_at_stake > 0 && (
+        <Link href="/dashboard/reports" className="block group">
+          <div className="bg-card border border-line hover:border-line-strong rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 transition-colors">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="w-10 h-10 rounded-xl bg-danger/10 text-danger border border-danger/20 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted">Revenue at stake</p>
+                <p className="font-display text-xl font-medium text-fg leading-tight">
+                  {usd(atStake.totals.total_at_stake)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              {atStake.totals.unpaid_invoices_value > 0 && (
+                <span className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-danger/10 text-danger">
+                  {usd(atStake.totals.unpaid_invoices_value)} unpaid · {atStake.totals.unpaid_invoices_count}
+                </span>
+              )}
+              {atStake.totals.unbilled_value > 0 && (
+                <span className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-warn/10 text-warn">
+                  {usd(atStake.totals.unbilled_value)} unbilled · {atStake.totals.unbilled_hours.toFixed(1)}h
+                </span>
+              )}
+              {atStake.totals.unsigned_contracts_value > 0 && (
+                <span className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-info/10 text-info">
+                  {usd(atStake.totals.unsigned_contracts_value)} unsigned · {atStake.totals.unsigned_contracts_count}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 text-xs text-muted group-hover:text-fg transition-colors">
+                Open report <ChevronRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* One small tabbed area — pick a label, see a short list */}
       <div className="bg-card border border-line rounded-xl p-5">
@@ -339,10 +418,12 @@ export default function DashboardPage() {
               title="Nothing scheduled today"
               desc="Add a meeting or deadline in the calendar to see it here."
               action={
-                <Button size="sm" variant="outline" onClick={() => setCalendarOpen(true)} className="rounded-lg border-line text-fg mt-4">
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  Open Calendar
-                </Button>
+                <Link href="/dashboard/calendar">
+                  <Button size="sm" variant="outline" className="rounded-lg border-line text-fg mt-4">
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Open Calendar
+                  </Button>
+                </Link>
               }
             />
           )
@@ -484,9 +565,6 @@ export default function DashboardPage() {
         </motion.div>
         </AnimatePresence>
       </div>
-
-      {/* Live dashboard calendar: meetings, client work, deadlines + optional Google Calendar sync */}
-      <DashboardCalendar open={calendarOpen} onClose={() => setCalendarOpen(false)} />
     </div>
   );
 }

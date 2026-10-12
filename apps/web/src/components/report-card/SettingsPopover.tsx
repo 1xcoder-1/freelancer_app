@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Settings2 } from "@/components/animated-icons";
-import { ACCENT_OPTIONS, FONT_OPTIONS } from "./constants";
+import { ACCENT_OPTIONS, FONT_OPTIONS, PROFILE_TEMPLATES } from "./constants";
 import type { CardSettings } from "@/lib/api";
 
 interface SettingsPopoverProps {
@@ -57,7 +57,39 @@ export function SettingsPopover({
 
       {open && (
         <div className="absolute right-0 top-12 z-40 w-[290px] rounded-2xl bg-[#2a2724] border border-white/10 p-4 shadow-2xl">
+          {/* Template picker */}
+          <div className="text-[10px] uppercase tracking-wider text-white/45 px-1 mb-2">Template</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {PROFILE_TEMPLATES.map((tpl) => {
+              const active = (settings.theme || "default") === tpl.id;
+              return (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => onChange({ ...settings, theme: tpl.id })}
+                  title={tpl.blurb}
+                  className={`text-left px-2.5 py-2 rounded-lg border transition-all ${
+                    active
+                      ? "bg-white/12 border-white/40 text-white"
+                      : "bg-black/20 border-white/10 text-white/60 hover:text-white hover:border-white/25"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="w-3 h-3 rounded-full border border-white/25 shrink-0"
+                      style={{ background: tpl.vars["--bg"] || "linear-gradient(135deg,#fafaf9,#0e0e0f)" }}
+                    />
+                    <span className="text-[11px] font-semibold">{tpl.label}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="my-3 border-t border-dashed border-white/15" />
+
           {/* Font choices */}
+          <div className="text-[10px] uppercase tracking-wider text-white/45 px-1 mb-2">Font</div>
           <div className="flex items-center gap-1.5 rounded-xl bg-black/25 p-1.5">
             {FONT_OPTIONS.map((font) => {
               const active = settings.font === font.id;

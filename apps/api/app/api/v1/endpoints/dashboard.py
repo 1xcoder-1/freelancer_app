@@ -2,7 +2,6 @@ import asyncio
 from fastapi import APIRouter, Depends
 from typing import Dict, Any, List
 from datetime import datetime
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload
@@ -16,10 +15,6 @@ from app.models.client import Client
 from app.models.finance import Invoice, TimeEntry, Expense, TimerSession
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
-
-class StartTimerRequest(BaseModel):
-    project_id: str
-    task_name: str = "Focus Session"
 
 @router.get("/stats")
 async def get_dashboard_stats(

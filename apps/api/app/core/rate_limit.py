@@ -22,6 +22,8 @@ _RULES = [
     ("/api/v1/invoices/public/", (30, 60)),
     # PL5: the anonymous read-only board share is token-addressed like the rest.
     ("/api/v1/planner/public/", (30, 60)),
+    # Link pages: slug-addressed public profile + its view/click beacon.
+    ("/api/v1/link-pages/public/", (30, 60)),
 ]
 DEFAULT_RULE = (240, 60)  # generous ceiling for authenticated dashboard usage
 

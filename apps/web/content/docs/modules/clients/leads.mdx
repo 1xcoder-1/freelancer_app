@@ -1,0 +1,64 @@
+---
+title: Leads Pipeline
+description: Pipeline stages, follow-up signals, touchpoint history and lead-to-client conversion for freelance sales tracking.
+---
+
+The Leads module tracks people who are interested but not paying yet. It
+lives next to your roster under **Clients → Leads Pipeline**, so a lead and
+a client are always one conversion apart — never two systems.
+
+## The pipeline
+
+Every lead carries a stage so the state of your sales is visible at a
+glance:
+
+| Stage | Meaning |
+| --- | --- |
+| New | Arrived, not yet reviewed |
+| Contacted | You reached out |
+| Proposal | A proposal is out |
+| Talking price | Negotiating the number |
+| Won | Converted to a client |
+| Lost | Parked, with a note on why |
+
+The board header does the arithmetic for you: **pipeline value**, **total
+leads**, **ongoing leads** and **follow-ups due**, computed from the cards
+below.
+
+## Needs action
+
+The default view is **Needs action** — only the leads that want something
+from you right now: a reply due, a follow-up overdue, or a stage that has
+gone quiet. Flip to **All leads** when you want the whole pipeline, and
+page through cards twenty at a time.
+
+## Touchpoints and silence
+
+Every interaction — a call, an email, a meeting — is logged on the lead as
+a **touchpoint**. From that history the card computes how long the person
+has been silent, so "X days silent" is a fact on the card, not a memory in
+your head.
+
+- Add a touchpoint with a direction (in or out) and a note.
+- The silence counter resets on every new interaction.
+- Follow-ups surface in **Needs action** when the silence passes your
+  window.
+
+## One person, one record
+
+If the same person shows up twice — say, they filled an intake form and
+later booked a call — the workspace merges them into a single person
+record instead of duplicating the card. Bookings from your
+[public booking page](/docs/modules/booking) create or enrich the matching
+lead automatically.
+
+## Converting
+
+When a lead wins, convert them to a client with one click. The contact
+details, touchpoint history and intake answers move with them, and the
+lead's archive entry stays so you can see where the client came from.
+
+<Callout type="tip">
+Intake forms feed this module: every submission lands as a new lead with
+the form fields pre-filled. See [Clients Roster](/docs/modules/clients).
+</Callout>

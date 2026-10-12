@@ -1,6 +1,6 @@
 "use client"
 
-import type { Easing } from "motion/react"
+import type { Easing } from "framer-motion"
 
 import { createAnimatedIcon } from "../lib/create-icon"
 import { ease, flash, pivot, slot, snap } from "../lib/motion"

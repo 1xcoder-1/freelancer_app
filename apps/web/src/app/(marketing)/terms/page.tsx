@@ -12,6 +12,7 @@ import {
   Section,
 } from "@/components/landing/layout";
 import { cn } from "@/lib/utils";
+import { TextureCard } from "@/components/ui/texture-card";
 
 /* ------------------------------------------------------------------
    Terms of Service. Same superset legal register as the privacy
@@ -301,6 +302,7 @@ export default function TermsPage() {
         <PageHero
           eyebrow="Legal · Terms"
           title="Terms of Service"
+          animated={false}
           desc="The rules and terms that govern your use of Freelance Book, from accounts and billing to ownership, disclaimers and liability."
         />
 
@@ -343,20 +345,22 @@ export default function TermsPage() {
                   ))}
                 </div>
 
-                <div className="mt-12 rounded-[2px] border border-line bg-card p-6">
-                  <p className="text-sm leading-6 text-muted">
-                    Questions about these Terms? Reach us at{" "}
-                    <span className="font-mono text-fg">
-                      privacy@freelancebook.app
-                    </span>
-                    .
-                  </p>
-                  <a href="mailto:privacy@freelancebook.app" className="mt-5 inline-flex">
-                    <MkButton variant="outline" type="button">
-                      Contact support
-                    </MkButton>
-                  </a>
-                </div>
+                <TextureCard className="mt-12">
+                  <div className="p-6">
+                    <p className="text-sm leading-6 text-muted">
+                      Questions about these Terms? Reach us at{" "}
+                      <span className="font-mono text-fg">
+                        privacy@freelancebook.app
+                      </span>
+                      .
+                    </p>
+                    <a href="mailto:privacy@freelancebook.app" className="mt-5 inline-flex">
+                      <MkButton variant="outline" type="button">
+                        Contact support
+                      </MkButton>
+                    </a>
+                  </div>
+                </TextureCard>
               </div>
             </div>
           </Container>

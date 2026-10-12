@@ -1,52 +1,57 @@
 ---
 title: Google Calendar
-description: Connect Google Calendar to block booked slots and get meeting reminders where you already look.
+description: Connect Google Calendar to mirror your week into the dashboard and give every booking a real event with a live Google Meet link.
 ---
 
-The Google Calendar integration connects your booking pages and your
-automations to the calendar you already use.
-
-## What it does
-
-- **Blocks slots**: events on your calendar make those times unavailable on
-  every [booking page](/docs/modules/booking).
-- **Writes bookings**: confirmed bookings appear as events on the calendar
-  you choose, with attendee and answers in the description.
-- **Meeting reminders**: reminders fire as normal calendar notifications,
-  next to your other meetings.
+The Google Calendar integration does two jobs: it **mirrors** your calendar
+into the dashboard calendar, and since bookings now create events, it
+**provisions real Google Meet links** for every booked call.
 
 ## Connecting
 
-1. Open **Settings**, then **Integrations**.
-2. Click **Connect Google Calendar** and complete the Google consent screen.
-3. Pick which calendar Freelance Book should write to. Your other calendars
-   stay read-only for availability checks.
+1. Open the **Calendar** page in the dashboard.
+2. Click **Connect Google Calendar** and complete Google's consent screen.
+3. Events start syncing immediately — manually via **Sync now**, and
+   continuously by a background job.
 
-Disconnecting stops all reads and writes. Bookings already on the calendar
-stay there.
+The connection is per workspace and optional; the app works fully without
+it.
 
-## Availability rules
-
-Slot generation is the intersection of:
-
-- Your booking page availability window.
-- Busy events on your connected calendar.
-- The page's minimum notice and per-day limits.
-
-A slot that overlaps any busy event never appears, no matter which calendar
-it came from. All-day events block the whole day.
-
-<Callout type="tip">
-  If a client reschedules by editing the calendar event directly, the booking
-  record in Freelance Book updates on the next sync. Cancelling the event
-  cancels the booking and notifies the attendee.
+<Callout type="warning">
+Scope upgrade: the integration moved from read-only (`calendar.readonly`)
+to event read/write (`calendar.events`) so bookings can create Meet events.
+Connections made **before** this change still hold a read-only grant —
+disconnect and reconnect once to enable automatic Meet provisioning. Until
+you do, bookings keep working with the in-app meeting link as fallback.
 </Callout>
 
-## Data access
+## What it does
 
-The integration requests the smallest scope set that works: read free/busy
-and events for the calendar you connect, and write events. It never touches
-other calendars or deletes events it did not create.
+- **Mirrors your week**: events from your primary calendar are copied into
+  the dashboard calendar next to your local events and booked calls, and a
+  background job keeps the mirror fresh (events you delete on Google are
+  retired in the mirror too).
+- **Creates the meeting**: when a client books or reschedules on your
+  [booking page](/docs/modules/booking/services), a durable job creates or
+  updates an event on your primary calendar with a genuine
+  `meet.google.com` link, invites the client, and saves that link on the
+  appointment. Reminder emails then contain the live link.
+- **Cleans up cancellations**: cancelling an appointment soft-cancels the
+  Google event, so attendees get the cancellation automatically.
 
-Tokens are stored per workspace and can be revoked at any time, both from
-Settings and from your Google account's security page.
+## What it never does
+
+- It does not read your other calendars or any details beyond event data.
+- It never deletes anything on your calendar except events it created for
+  bookings.
+- Availability on public booking pages is driven by your service hours,
+  days off and existing appointments — Google events are **not**
+  required for slots to work.
+
+## Data access and revoking
+
+OAuth tokens live on your workspace row only. You can disconnect from the
+Calendar page, or revoke the app in your
+[Google account permissions](https://myaccount.google.com/permissions) —
+either path de-provisions the feature completely; the mirror simply stops
+updating.

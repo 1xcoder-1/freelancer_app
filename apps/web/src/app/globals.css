@@ -112,8 +112,9 @@ select,
 }
 
 /* Utility to hide scrollbars while keeping scrollable (sidebar rail, dropdown
-   menus and horizontal chip strips only — page-level y-axis scrollbars stay
-   visible app-wide per the Leads/Clients scrollbar reversal) */
+   menus, horizontal chip strips and the calendar board's internal columns —
+   page-level y-axis scrollbars stay visible app-wide per the Leads/Clients
+   scrollbar reversal) */
 .no-scrollbar,
 .scrollbar-none {
   -ms-overflow-style: none !important;
@@ -573,6 +574,37 @@ select,
     transparent 1px
   );
   background-size: 24px 24px;
+}
+
+/* BeamButton border: a brand conic gradient that sweeps around the ring.
+   Animating an @property angle (not a rotating oversized layer, which is
+   what the original Cult UI block does) keeps the repaint inside the
+   button's own box. Browsers without @property support get the static
+   gradient. */
+@property --mk-beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes mk-beam-spin {
+  to {
+    --mk-beam-angle: 360deg;
+  }
+}
+.mk-beam-ring {
+  background: conic-gradient(
+    from var(--mk-beam-angle),
+    transparent 0deg 200deg,
+    var(--brand) 260deg,
+    var(--brand-light) 300deg,
+    transparent 340deg 360deg
+  );
+  animation: mk-beam-spin 4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-beam-ring {
+    animation: none;
+  }
 }
 
 /* Print Stylesheet (Checklist Requirement) */

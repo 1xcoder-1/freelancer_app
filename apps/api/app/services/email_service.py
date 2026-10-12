@@ -16,10 +16,6 @@ from app.core.config import settings
 _RESEND_URL = "https://api.resend.com/emails"
 
 
-def provider_name() -> str:
-    return "resend" if settings.RESEND_API_KEY else "console"
-
-
 async def send_email(to: str, subject: str, text: str, html: str | None = None) -> dict:
     """Deliver via Resend when configured, otherwise log to the console."""
     if settings.RESEND_API_KEY:

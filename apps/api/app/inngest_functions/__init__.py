@@ -8,6 +8,8 @@ from app.inngest_functions.booking_jobs import (
     booking_reminder_24h,
     booking_reminder_1h,
     booking_payment_confirmed,
+    booking_google_meet_sync,
+    booking_google_event_cancel,
 )
 from app.inngest_functions.calendar_jobs import google_calendar_sync
 from app.inngest_functions.invoice_jobs import invoice_overdue_scan, invoice_reminder_4d
@@ -24,6 +26,8 @@ functions = [
     booking_reminder_1h,
     booking_payment_confirmed,
     google_calendar_sync,
+    booking_google_meet_sync,
+    booking_google_event_cancel,
     contract_reminder_3d,
     contract_expiry_scan,
     proposal_reminder_3d,

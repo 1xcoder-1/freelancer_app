@@ -420,7 +420,6 @@ export function LeadsPanel() {
                             currentCount={stageObj.step}
                             totalCount={totalSteps}
                             subtitle={lead.company || lead.source || "Referral"}
-                            category={cat}
                             onClick={() => handleOpenDetail(lead)}
                             tags={
                               <div className="flex flex-wrap items-center gap-1.5">

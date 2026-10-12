@@ -23,7 +23,13 @@ import {
   ClipboardList,
   Receipt,
   FileSignature,
-  RotateCcw,
+  TrendingUp,
+  Star,
+  Link2,
+  FileText,
+  Bot,
+  CalendarDays,
+  Phone,
 } from "@/components/animated-icons";
 import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -74,6 +80,25 @@ interface NavItem {
 const navItems: NavItem[] = [
   { title: "Home", href: "/dashboard", icon: Home },
   {
+    title: "Booking",
+    href: "/dashboard/booking",
+    icon: Calendar,
+    children: [
+      {
+        title: "Calls",
+        href: "/dashboard/booking",
+        icon: Phone,
+        active: (p) => p === "/dashboard/booking",
+      },
+      {
+        title: "Services",
+        href: "/dashboard/booking/services",
+        icon: CalendarDays,
+        active: (p) => p.startsWith("/dashboard/booking/"),
+      },
+    ],
+  },
+  {
     title: "Clients",
     href: "/dashboard/clients",
     icon: Users,
@@ -97,8 +122,32 @@ const navItems: NavItem[] = [
         icon: ClipboardList,
         active: (p, t) =>
           (p === "/dashboard/clients" && (t === "forms" || t === "intake")) ||
-          onPath(p, "/dashboard/intake") ||
-          onPath(p, "/dashboard/forms"),
+          onPath(p, "/dashboard/intake"),
+      },
+    ],
+  },
+  {
+    title: "Proposals",
+    href: "/dashboard/proposals",
+    icon: Sparkles,
+    children: [
+      {
+        title: "Saved Proposals",
+        href: "/dashboard/proposals",
+        icon: FileText,
+        active: (p, t) => p === "/dashboard/proposals" && (t === "" || t === "proposals"),
+      },
+      {
+        title: "AI Composer",
+        href: "/dashboard/proposals/new",
+        icon: PenLine,
+        active: (p) => onPath(p, "/dashboard/proposals/new"),
+      },
+      {
+        title: "Book AI",
+        href: "/dashboard/proposals?tab=book-ai",
+        icon: Bot,
+        active: (p, t) => p === "/dashboard/proposals" && t === "book-ai",
       },
     ],
   },
@@ -129,12 +178,53 @@ const navItems: NavItem[] = [
       },
     ],
   },
-  { title: "Time", href: "/dashboard/time-tracker", icon: Clock },
   { title: "Money", href: "/dashboard/cashflow", icon: Wallet },
-  { title: "Proposals", href: "/dashboard/proposals", icon: Sparkles },
-  { title: "Booking", href: "/dashboard/booking", icon: Calendar },
+  { title: "Time", href: "/dashboard/time-tracker", icon: Clock },
   { title: "Planner", href: "/dashboard/planner", icon: PenLine },
-  { title: "Profile", href: "/dashboard/report-card", icon: IdCard },
+  {
+    title: "Insights",
+    href: "/dashboard/reports",
+    icon: TrendingUp,
+    children: [
+      {
+        title: "Reports",
+        href: "/dashboard/reports",
+        icon: TrendingUp,
+        active: (p) => onPath(p, "/dashboard/reports"),
+      },
+      {
+        title: "Testimonials",
+        href: "/dashboard/testimonials",
+        icon: Star,
+        active: (p) => onPath(p, "/dashboard/testimonials"),
+      },
+      {
+        title: "Shared Links",
+        href: "/dashboard/links",
+        icon: Link2,
+        active: (p) => onPath(p, "/dashboard/links"),
+      },
+    ],
+  },
+  {
+    title: "Profile",
+    href: "/dashboard/report-card",
+    icon: IdCard,
+    children: [
+      {
+        title: "Profile Report Card",
+        href: "/dashboard/report-card",
+        icon: IdCard,
+        active: (p) => onPath(p, "/dashboard/report-card"),
+      },
+      {
+        title: "Link Page",
+        href: "/dashboard/link-page",
+        icon: Link2,
+        active: (p) => onPath(p, "/dashboard/link-page"),
+      },
+    ],
+  },
   { title: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -172,9 +262,6 @@ export function DashboardSidebar() {
   const isLinkActive = (href: string) => {
     if (href.includes("?")) {
       return fullCurrentPath === href;
-    }
-    if (href === "/dashboard/intake") {
-      return pathname.startsWith("/dashboard/forms") || pathname.startsWith("/dashboard/intake");
     }
     if (href === "/dashboard/projects") {
       return pathname === "/dashboard/projects" && !searchParams?.get("tab");

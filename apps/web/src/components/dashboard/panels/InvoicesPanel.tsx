@@ -279,7 +279,6 @@ export function InvoicesPanel() {
                         currentCount={`$${inv.total_amount.toLocaleString()}`}
                         totalCount={isPaid ? "Paid" : isOverdue ? "Overdue" : "Due"}
                         subtitle={inv.client_name ? `Client: ${inv.client_name}` : "Direct Client"}
-                        category={cat}
                         onClick={() => handleOpenDetail(inv)}
                         tags={
                           <div className="flex flex-wrap items-center gap-1.5">

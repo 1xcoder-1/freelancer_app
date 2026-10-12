@@ -24,6 +24,8 @@ import {
   starterTemplate,
   blankInspirationItem,
   blankProjectItem,
+  resolveProfileTemplate,
+  type HomeSection,
 } from "./constants";
 import { SettingsPopover } from "./SettingsPopover";
 import { ShareDialog } from "./ShareDialog";
@@ -102,6 +104,9 @@ export function ReportCard({
   const fontFamily = styled
     ? fontCssVar(data.settings?.font || "schibsted")
     : undefined;
+  const template = styled
+    ? resolveProfileTemplate(data.settings?.theme)
+    : resolveProfileTemplate("default");
 
   const displayName =
     clerkUser?.fullName || data.full_name || data.username || "Freelancer";
@@ -468,10 +473,19 @@ export function ReportCard({
     />
   );
 
+  const homeSections: Record<HomeSection, React.ReactNode> = {
+    bio,
+    things: thingsSection,
+    companies: companiesSection,
+    work: workSection,
+    stats: statsSection,
+    quote: quoteSection,
+  };
+
   return (
     <div
-      className="min-h-screen bg-bg text-fg pb-10 selection:bg-accent/25"
-      style={{ fontFamily }}
+      className="min-h-screen bg-bg text-fg pb-10 selection:bg-accent/25 transition-colors duration-300"
+      style={{ fontFamily, ...(styled ? template.vars as React.CSSProperties : {}) }}
     >
       <div className="max-w-3xl mx-auto px-6 lg:px-0 pt-10">
         {/* Header: Clerk avatar + real name (live) + owner controls */}
@@ -634,20 +648,15 @@ export function ReportCard({
           </div>
         )}
 
-        {/* Page bodies */}
+        {/* Page bodies — home follows the chosen template's section order */}
         {activeTab === "home" && !showEmptyState && (
           <>
-            {bio}
-            <DottedDivider />
-            {thingsSection}
-            <DottedDivider />
-            {companiesSection}
-            <DottedDivider />
-            {workSection}
-            <DottedDivider />
-            {statsSection}
-            <DottedDivider />
-            {quoteSection}
+            {template.homeOrder.map((key, i) => (
+              <React.Fragment key={key}>
+                {i > 0 && <DottedDivider />}
+                {homeSections[key]}
+              </React.Fragment>
+            ))}
           </>
         )}
 

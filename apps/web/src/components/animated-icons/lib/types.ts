@@ -1,4 +1,4 @@
-import type { useAnimate } from "motion/react"
+import type { useAnimate } from "framer-motion"
 
 export type ColorSlot = "primary" | "secondary" | "accent"
 

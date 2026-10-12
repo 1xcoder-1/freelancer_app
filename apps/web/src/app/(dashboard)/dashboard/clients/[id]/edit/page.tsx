@@ -647,7 +647,6 @@ export default function EditClientPage() {
           <CategoryVisualCard
             title={name.trim() || "Client Name"}
             subtitle={companyName.trim() || "Direct Client"}
-            category={effectiveCategory}
             topRightContent={
               isVip ? (
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/15 to-yellow-500/15 dark:from-amber-500/20 dark:to-yellow-500/20 border border-amber-500/30 dark:border-amber-500/35 text-amber-700 dark:text-amber-300 text-xs font-semibold shadow-sm tracking-wide">

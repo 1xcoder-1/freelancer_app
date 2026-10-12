@@ -1,13 +1,18 @@
 """Google Calendar integration service (optional per-user OAuth connection).
 
 Deliberately dependency-light: plain OAuth + Calendar REST calls over httpx
-(no google-api-python-client). The app only READS the user's calendar
-(calendar.readonly scope) and mirrors events into our own `calendar_events`
-table, so revoking access at Google fully de-provisions the feature.
+(no google-api-python-client). The app mirrors the user's calendar into our
+own `calendar_events` table AND provisions Google Calendar events (with real
+Google Meet links) for booked consultations, so revoking access at Google
+fully de-provisions the feature.
 
 Token lifecycle: Google issues a long-lived refresh_token (access_type=offline);
 the short-lived access_token is cached on the connection row and refreshed
 lazily whenever it is missing/expired before an API call.
+
+Scope: calendar.events covers read + write of single events. Connections made
+while the app still used calendar.readonly cannot create events; those write
+calls fail with a 401/403 and the booking job logs a reconnect hint.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -24,8 +29,9 @@ from app.models.calendar import CalendarEvent, GoogleCalendarConnection
 AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
-# Read-only: we mirror events into our DB, we never write to Google.
-CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+# Read + write: mirror events into our DB and create Meet-enabled events for
+# booked consultations.
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 
 GOOGLE_TOKEN_EXPIRY_SKEW = timedelta(minutes=5)
 
@@ -147,7 +153,9 @@ def _map_event_fields(google_event: Dict[str, Any]) -> Dict[str, Any]:
 
     conferencing = (google_event.get("conferences") or [{}])[0].get("conferenceData") or {}
     meeting_link = conferencing.get("entryPoints", [{}])[0].get("uri") if conferencing.get("entryPoints") else None
-    meeting_link = meeting_link or google_event.get("hangoutsLink") or google_event.get("htmlLink")
+    # Google's real fields are hangoutLink (top-level) / eventHangoutLink; the
+    # old "hangoutsLink" key never matched anything.
+    meeting_link = meeting_link or google_event.get("hangoutLink") or google_event.get("eventHangoutLink") or google_event.get("htmlLink")
 
     return {
         "title": (google_event.get("summary") or "(Untitled event)")[:255],
@@ -158,6 +166,110 @@ def _map_event_fields(google_event: Dict[str, Any]) -> Dict[str, Any]:
         "meeting_link": meeting_link,
         "google_calendar_id": google_event.get("organizer", {}).get("email") if google_event.get("organizer") else None,
     }
+
+
+def _google_instant(dt: datetime) -> Dict[str, str]:
+    """App datetimes are naive UTC; Google wants an explicit offset."""
+    aware = dt.replace(tzinfo=timezone.utc)
+    return {"dateTime": aware.isoformat(), "timeZone": "UTC"}
+
+
+async def create_meet_event(
+    access_token: str,
+    *,
+    title: str,
+    description: str,
+    start: datetime,
+    end: datetime,
+    attendee_email: str,
+    attendee_name: str,
+    request_id: str,
+) -> Dict[str, Any]:
+    """Insert a primary-calendar event with a real Google Meet conference.
+
+    conferenceData.createRequest asks Google to generate the hangout link;
+    returns {"google_event_id", "meeting_link", "hangout_code"} (meeting_link
+    may be None if Meet provisioning is unavailable on the account)."""
+    body = {
+        "summary": title,
+        "description": description,
+        "start": _google_instant(start),
+        "end": _google_instant(end),
+        "attendees": [{"email": attendee_email, "displayName": attendee_name}],
+        "conferenceData": {
+            "createRequest": {
+                "requestId": request_id,
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            }
+        },
+        "source": {"title": "Freelance Book", "url": settings.WEB_APP_URL},
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.post(
+            CALENDAR_EVENTS_URL,
+            params={"conferenceVersion": "2021-10-01", "sendUpdates": "all"},
+            json=body,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if res.status_code not in (200, 201):
+        raise GoogleCalendarError(f"Google event creation failed (HTTP {res.status_code}) — reconnect Google Calendar if access was granted before Meet support")
+    event = res.json()
+    return {
+        "google_event_id": event.get("id"),
+        "meeting_link": event.get("hangoutLink") or (
+            ((event.get("conferenceData") or {}).get("entryPoints") or [{}])[0].get("uri")
+        ),
+        "hangout_code": event.get("hangoutLink"),
+    }
+
+
+async def update_event(
+    access_token: str,
+    google_event_id: str,
+    *,
+    title: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    attendee_email: Optional[str] = None,
+    attendee_name: Optional[str] = None,
+    description: Optional[str] = None,
+) -> None:
+    """PATCH the event (reschedule keeps the same Meet link)."""
+    patch: Dict[str, Any] = {}
+    if title is not None:
+        patch["summary"] = title
+    if description is not None:
+        patch["description"] = description
+    if start is not None:
+        patch["start"] = _google_instant(start)
+    if end is not None:
+        patch["end"] = _google_instant(end)
+    if attendee_email is not None:
+        patch["attendees"] = [{"email": attendee_email, "displayName": attendee_name or attendee_email}]
+    if not patch:
+        return
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.patch(
+            f"{CALENDAR_EVENTS_URL}/{google_event_id}",
+            params={"sendUpdates": "all"},
+            json=patch,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if res.status_code not in (200, 204):
+        raise GoogleCalendarError(f"Google event update failed (HTTP {res.status_code})")
+
+
+async def delete_event(access_token: str, google_event_id: str) -> None:
+    """Soft-cancel the Google event (keeps the cancellation trail for attendees)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.post(
+            f"{CALENDAR_EVENTS_URL}/{google_event_id}",
+            params={"sendUpdates": "all"},
+            json={"status": "cancelled"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if res.status_code not in (200, 204):
+        raise GoogleCalendarError(f"Google event cancel failed (HTTP {res.status_code})")
 
 
 async def sync_connection(session: AsyncSession, conn: GoogleCalendarConnection) -> Dict[str, int]:

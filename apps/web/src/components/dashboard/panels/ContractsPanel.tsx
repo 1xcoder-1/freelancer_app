@@ -275,7 +275,6 @@ export function ContractsPanel() {
                             ? `Project: ${contract.project_title}`
                             : "Standard Agreement"
                         }
-                        category={cat}
                         onClick={() => handleOpenDetail(contract)}
                         tags={
                           <div className="flex flex-wrap items-center gap-1.5">

@@ -12,6 +12,9 @@ from app.models.calendar import CalendarEvent, GoogleCalendarConnection
 from app.models.report_card import ReportCard
 from app.models.planner import PlannerBoard, PlannerTodo, PlannerSnapshot
 from app.models.interaction import Interaction
+from app.models.notification import Notification
+from app.models.testimonial import Testimonial
+from app.models.link_page import LinkPage, LinkItem, LinkEvent
 
 __all__ = [
     "Base",
@@ -50,5 +53,10 @@ __all__ = [
     "PlannerTodo",
     "PlannerSnapshot",
     "Interaction",
+    "Notification",
+    "Testimonial",
+    "LinkPage",
+    "LinkItem",
+    "LinkEvent",
 ]
 

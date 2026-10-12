@@ -1,0 +1,63 @@
+---
+title: Booking
+description: Public self-serve booking pages that turn visitors into booked calls — services, calls and days off, each on its own page.
+---
+
+Booking sits right after Home in the dashboard sidebar because it is the top
+of your funnel: prospects pick a time on a public page, and the call lands in
+your calendar with a real Google Meet link attached. No "does Tuesday at 3
+work?" email thread.
+
+It splits into three pages, documented one per page:
+
+| Page | What it holds |
+| --- | --- |
+| [Calls](/docs/modules/booking/calls) | Every appointment clients made — status, reschedules, payment |
+| [Services](/docs/modules/booking/services) | Your bookable consultations — duration, price, opening hours |
+| [Days off](/docs/modules/booking/days-off) | Dates you are away, so nobody can book them |
+
+`/dashboard/booking` is the Calls page; `/dashboard/booking/services` is
+Services. Days off are not a page of their own — they belong to one service,
+so they open inside each service card and on its edit page.
+
+## How a booking happens
+
+1. A visitor opens your public page (`/booking/{token}` — share it in an email
+   signature, your [Link Page](/docs/modules/report-card/link-page) or social
+   profile).
+2. They see only slots that are genuinely open: weekdays and hours you set,
+   minus days off, minus anything already booked, minus your minimum
+   notice.
+3. They enter name, email and optional notes and confirm.
+4. The appointment appears on **Calls**; the client gets a 24-hour
+   reminder and a 1-hour nudge with the meeting link.
+
+## Every rule is enforced server-side
+
+Slot lists are only a hint — the booking request itself re-validates
+everything inside one transaction, so a stale tab or a bot can never
+double-book, book a past time, or ignore your days off:
+
+- Weekday window + daily opening hours, per service.
+- Minimum lead time and a maximum advance window.
+- A buffer you can require around each call.
+- Overlap against live appointment data at insert time.
+
+## Paid consultations
+
+A service with a price is not "paid because a price exists". Booking one
+creates an invoice, and the appointment only flips to confirmed when that
+invoice actually reaches **paid** (handled by a durable workflow). Free
+services confirm immediately.
+
+## No-show protection
+
+Each person gets a strike counter per workspace. Once their no-shows reach
+the service's limit, free slots are refused for them — their next booking
+must be a paid one, so prepayment is enforced where it matters.
+
+<Callout type="tip">
+Paid consultations link an intake form, so you get answers before the call —
+and those answers make excellent
+[Book AI](/docs/modules/proposals/book-ai) context afterwards.
+</Callout>

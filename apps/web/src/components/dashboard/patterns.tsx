@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/common/CountUp";
+import { SpotlightCard } from "@/components/ui/spotlight-card";
 
 /* ------------------------------------------------------------------
    Shared dashboard patterns styled 1:1 after the reference app:
@@ -53,7 +54,8 @@ export function StatCard({
   className?: string;
 }) {
   return (
-    <div
+    <SpotlightCard
+      radius={260}
       className={cn(
         "bg-[#141518] dark:bg-[#141518] border border-[#26272d] hover:border-[#383942] rounded-2xl p-6 flex flex-col justify-between min-h-[180px] shadow-sm transition-[border-color,box-shadow] duration-150 ease-out",
         className
@@ -103,7 +105,7 @@ export function StatCard({
           {badge && <div className="shrink-0">{badge}</div>}
         </div>
       ) : null}
-    </div>
+    </SpotlightCard>
   );
 }
 
@@ -203,36 +205,5 @@ export function FilterPill({
     >
       {children}
     </button>
-  );
-}
-
-/* Reference-style data table: uppercase muted headers, hairline rows */
-export function RefTable({
-  columns,
-  children,
-}: {
-  columns: string[];
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-line bg-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-line">
-              {columns.map((c) => (
-                <th
-                  key={c}
-                  className="text-left px-5 py-3.5 text-[11px] font-mono font-bold uppercase tracking-wider text-muted"
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>{children}</tbody>
-        </table>
-      </div>
-    </div>
   );
 }

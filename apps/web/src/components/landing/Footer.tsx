@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Github, Linkedin, Twitter } from "@/components/animated-icons";
+import { site } from "@/lib/site";
 
 /* ------------------------------------------------------------------
    Footer — sits under the CTA panel and echoes it: brand column with
@@ -14,6 +15,7 @@ const columns = [
       { label: "Features", href: "/features" },
       { label: "Book AI", href: "/features#ai" },
       { label: "Download", href: "/download" },
+      { label: "Changelog", href: "/changelog" },
       { label: "Sign up", href: "/sign-up" },
     ],
   },
@@ -23,14 +25,15 @@ const columns = [
       { label: "Docs", href: "/docs" },
       { label: "Getting started", href: "/docs/getting-started" },
       { label: "Testimonials", href: "/#reviews" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
     heading: "Social",
     links: [
-      { label: "GitHub", href: "https://github.com", icon: Github },
-      { label: "X / Twitter", href: "https://x.com", icon: Twitter },
-      { label: "LinkedIn", href: "https://linkedin.com", icon: Linkedin },
+      { label: "GitHub", href: site.socials.github, icon: Github },
+      { label: "X / Twitter", href: site.socials.x, icon: Twitter },
+      { label: "LinkedIn", href: site.socials.linkedin, icon: Linkedin },
     ],
   },
 ];

@@ -122,6 +122,82 @@ export function fontCssVar(font: string): string {
 }
 
 // ----------------------------------------------------------------------------
+// Profile templates — full-page designs (palette + home layout). "default"
+// is the original card and inherits the app theme; the rest override the
+// CSS variable tokens on the card wrapper so every section restyles itself.
+// `id` must stay in sync with the CardSettings.theme Literal in the API.
+// ----------------------------------------------------------------------------
+export type HomeSection = "bio" | "things" | "companies" | "work" | "stats" | "quote";
+
+export const PROFILE_TEMPLATES: {
+  id: string;
+  label: string;
+  blurb: string;
+  vars: Record<string, string>;
+  homeOrder: HomeSection[];
+}[] = [
+  {
+    id: "default",
+    label: "Classic",
+    blurb: "The original report card — follows your app theme",
+    vars: {},
+    homeOrder: ["bio", "things", "companies", "work", "stats", "quote"],
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    blurb: "Warm paper tones, quote-led intro",
+    vars: {
+      "--bg": "#FAF7F1",
+      "--card": "#FFFFFF",
+      "--surface": "#F2EDE3",
+      "--line": "#E6DECF",
+      "--line-strong": "#D4C9B4",
+      "--fg": "#2A231C",
+      "--muted": "#6F6558",
+      "--faint": "#A2978A",
+    },
+    homeOrder: ["quote", "bio", "things", "companies", "work", "stats"],
+  },
+  {
+    id: "midnight",
+    label: "Midnight",
+    blurb: "Deep navy dashboard, stats up front",
+    vars: {
+      "--bg": "#070B14",
+      "--card": "#0D1420",
+      "--surface": "#121A29",
+      "--line": "#1E2A3E",
+      "--line-strong": "#2C3B55",
+      "--fg": "#E6EDF7",
+      "--muted": "#93A1B8",
+      "--faint": "#5D6B82",
+    },
+    homeOrder: ["stats", "bio", "things", "companies", "work", "quote"],
+  },
+  {
+    id: "warm",
+    label: "Warm Amber",
+    blurb: "Sepia dark canvas with a work-first layout",
+    vars: {
+      "--bg": "#171008",
+      "--card": "#1F160B",
+      "--surface": "#281D10",
+      "--line": "#3A2B18",
+      "--line-strong": "#4E3A22",
+      "--fg": "#F5EADB",
+      "--muted": "#C6B49A",
+      "--faint": "#8D7B62",
+    },
+    homeOrder: ["bio", "work", "companies", "things", "stats", "quote"],
+  },
+];
+
+export function resolveProfileTemplate(theme: string | undefined) {
+  return PROFILE_TEMPLATES.find((t) => t.id === theme) || PROFILE_TEMPLATES[0];
+}
+
+// ----------------------------------------------------------------------------
 // Page tabs — each one is a real route (Home / Inspiration / Projects / Sponsor)
 // ----------------------------------------------------------------------------
 export type CardTab = "home" | "inspiration" | "projects" | "sponsor";

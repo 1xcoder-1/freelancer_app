@@ -1502,6 +1502,11 @@ export const createBooking = async (payload: BookingConsultationPayload, token?:
   return response.data;
 };
 
+export const updateBooking = async (consultationId: string, payload: BookingConsultationPayload, token?: string): Promise<BookingConsultation> => {
+  const response = await apiClient.put<BookingConsultation>(`/booking/${consultationId}`, payload, authHeaders(token));
+  return response.data;
+};
+
 export const deleteBooking = async (bookingId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/booking/${bookingId}`, authHeaders(token));
 };
@@ -1744,6 +1749,7 @@ export interface CardContent {
 export interface CardSettings {
   font: string;    // schibsted | inter | geist
   accent: string;  // accent colour chosen in the settings popover
+  theme?: string;  // profile template: default | editorial | midnight | warm
 }
 
 export interface ScopeStat {
@@ -1825,28 +1831,6 @@ export const getPublicReportCard = async (username: string, shareToken?: string 
     ? `/report-card/public/${encodeURIComponent(username)}?token=${encodeURIComponent(shareToken)}`
     : `/report-card/public/${encodeURIComponent(username)}`;
   const response = await apiClient.get<ReportCardData>(url);
-  return response.data;
-};
-
-// ------------------------------------------------------------------------------
-// Smart Automations — Inngest background-job state (read-only dashboard view)
-// ------------------------------------------------------------------------------
-export interface AutomationState {
-  enabled: boolean;
-  overdue_scan_cron: string;
-  reminder_grace_days: number;
-  booking_reminder_lead_hours: number;
-  overdue_invoice_count: number;
-  overdue_invoice_amount: number;
-  sent_unpaid_count: number;
-  upcoming_appointments_7d_count: number;
-  email_provider: string; // "console" | "resend"
-  web_app_url: string;
-  timestamp: string;
-}
-
-export const getAutomationState = async (token?: string): Promise<AutomationState> => {
-  const response = await apiClient.get<AutomationState>('/automations/state', authHeaders(token));
   return response.data;
 };
 
@@ -2133,3 +2117,379 @@ export const uploadFileToCloudinary = async (
 
 
 
+
+// ------------------------------------------------------------------------------
+// Notifications inbox — the in-app mirror of the events that also go out by
+// email. The unread count is polled by the sidebar badge, so it stays a cheap
+// single indexed count on the server.
+// ------------------------------------------------------------------------------
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  is_read: boolean;
+  occurred_at: string;
+  created_at: string;
+}
+
+export const getNotifications = async (
+  unreadOnly: boolean = false,
+  token?: string
+): Promise<NotificationItem[]> => {
+  const response = await apiClient.get<NotificationItem[]>(
+    '/notifications',
+    { ...authHeaders(token), params: { unread_only: unreadOnly } }
+  );
+  return response.data;
+};
+
+export const getUnreadNotificationCount = async (token?: string): Promise<number> => {
+  const response = await apiClient.get<{ count: number }>('/notifications/unread-count', authHeaders(token));
+  return response.data.count;
+};
+
+export const markNotificationRead = async (id: string, token?: string): Promise<void> => {
+  await apiClient.post(`/notifications/${id}/read`, {}, authHeaders(token));
+};
+
+export const markAllNotificationsRead = async (token?: string): Promise<number> => {
+  const response = await apiClient.post<{ marked: number }>('/notifications/read-all', {}, authHeaders(token));
+  return response.data.marked;
+};
+
+export const deleteNotification = async (id: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/notifications/${id}`, authHeaders(token));
+};
+
+// ------------------------------------------------------------------------------
+// Testimonials — request a quote with a single-use token link, the client
+// submits without an account, the freelancer approves before it ever renders.
+// ------------------------------------------------------------------------------
+export type TestimonialStatus = 'pending' | 'approved' | 'rejected';
+
+export interface TestimonialRecord {
+  id: string;
+  client_id?: string | null;
+  author_name: string;
+  author_role?: string | null;
+  context_label?: string | null;
+  quote?: string | null;
+  rating?: number | null;
+  status: TestimonialStatus;
+  submitted_at?: string | null;
+  created_at: string;
+  token: string;
+  submit_url: string;
+}
+
+export interface PublicTestimonialRequest {
+  author_name: string;
+  author_role?: string | null;
+  context_label?: string | null;
+  submitted: boolean;
+}
+
+export const getTestimonials = async (
+  status?: TestimonialStatus,
+  token?: string
+): Promise<TestimonialRecord[]> => {
+  const response = await apiClient.get<TestimonialRecord[]>('/testimonials', {
+    ...authHeaders(token),
+    params: status ? { status } : {},
+  });
+  return response.data;
+};
+
+export const createTestimonialRequest = async (
+  payload: { client_id?: string; author_name: string; author_role?: string; context_label?: string },
+  token?: string
+): Promise<TestimonialRecord> => {
+  const response = await apiClient.post<TestimonialRecord>('/testimonials', payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateTestimonial = async (
+  id: string,
+  payload: Partial<Pick<TestimonialRecord, 'author_name' | 'author_role' | 'context_label' | 'quote' | 'rating' | 'status'>>,
+  token?: string
+): Promise<TestimonialRecord> => {
+  const response = await apiClient.patch<TestimonialRecord>(`/testimonials/${id}`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTestimonial = async (id: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/testimonials/${id}`, authHeaders(token));
+};
+
+// Public (token-only, no account): used by /testimonial/[token].
+export const getPublicTestimonialRequest = async (token: string): Promise<PublicTestimonialRequest> => {
+  const response = await apiClient.get<PublicTestimonialRequest>(`/testimonials/public/${token}`);
+  return response.data;
+};
+
+export const submitPublicTestimonial = async (
+  token: string,
+  payload: { quote: string; rating?: number; author_name?: string; author_role?: string }
+): Promise<{ status: string; submitted_at: string }> => {
+  const response = await apiClient.post<{ status: string; submitted_at: string }>(
+    `/testimonials/public/${token}`,
+    payload
+  );
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Reports & Analytics — one grouped pass that answers "how is the book doing".
+// ------------------------------------------------------------------------------
+export interface RevenueAtStakeTotals {
+  total_at_stake: number;
+  unsigned_contracts_value: number;
+  unsigned_contracts_count: number;
+  unbilled_value: number;
+  unbilled_hours: number;
+  unpaid_invoices_value: number;
+  unpaid_invoices_count: number;
+}
+
+export interface AtStakeContract {
+  contract_id: string;
+  title: string;
+  status: string;
+  project_id: string | null;
+  project_title: string;
+  client_id: string | null;
+  client_name: string | null;
+  budget: number;
+  sent_days_ago: number | null;
+}
+
+export interface AtStakeUnbilled {
+  project_id: string;
+  project_title: string;
+  client_id: string | null;
+  client_name: string | null;
+  hours: number;
+  entries: number;
+  value: number;
+}
+
+export interface AtStakeInvoice {
+  invoice_id: string;
+  invoice_number: string;
+  project_id: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  amount_due: number;
+  days_overdue: number;
+}
+
+export interface AtStakeProject {
+  project_id: string;
+  project_title: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  unsigned_contract_value: number;
+  unbilled_value: number;
+  unbilled_hours: number;
+  unpaid_value: number;
+  total_at_risk: number;
+  due_date: string | null;
+  project_status: string | null;
+  overdue: boolean;
+}
+
+export interface RevenueAtStake {
+  currency: string;
+  totals: RevenueAtStakeTotals;
+  unsigned_contracts: AtStakeContract[];
+  unbilled_time: AtStakeUnbilled[];
+  unpaid_invoices: AtStakeInvoice[];
+  at_risk_projects: AtStakeProject[];
+  generated_at: string;
+}
+
+export const getRevenueAtStake = async (token?: string): Promise<RevenueAtStake> => {
+  const response = await apiClient.get<RevenueAtStake>('/contracts/at-stake', authHeaders(token));
+  return response.data;
+};
+
+export interface ReportsSummary {
+  generated_at: string;
+  months_window: number;
+  revenue_by_month: { month: string; total: number }[];
+  revenue_by_client: { client: string; total: number }[];
+  lead_funnel: {
+    stages: Record<string, number>;
+    pipeline_value: number;
+    win_rate: number | null;
+  };
+  expenses: { recurring_run_rate: number; one_time_this_month: number };
+  invoices: {
+    paid_count: number;
+    paid_total: number;
+    overdue_count: number;
+    overdue_total: number;
+    awaiting_count: number;
+    awaiting_total: number;
+  };
+  revenue_at_stake: RevenueAtStake;
+}
+
+export const getReportsSummary = async (months: number = 6, token?: string): Promise<ReportsSummary> => {
+  const response = await apiClient.get<ReportsSummary>('/reports/summary', {
+    ...authHeaders(token),
+    params: { months },
+  });
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Shared Links — every live public token in the book, read-only. Revocation
+// stays in the owning module, so this surface only points back at it.
+// ------------------------------------------------------------------------------
+export interface ShareLink {
+  module: string;
+  label: string;
+  subtitle?: string | null;
+  status: string;
+  kind: string;
+  is_active: boolean;
+  path: string;
+  url: string;
+}
+
+export const getShareLinks = async (token?: string): Promise<ShareLink[]> => {
+  const response = await apiClient.get<ShareLink[]>('/share-links', authHeaders(token));
+  return response.data;
+};
+
+// PL7 — one tap re-plans the incomplete tail of a board onto today.
+export const carryOverPlannerTodos = async (
+  boardId: string,
+  token?: string
+): Promise<{ moved: number; date: string }> => {
+  const response = await apiClient.post<{ moved: number; date: string }>(
+    `/planner/boards/${boardId}/carry-over`,
+    {},
+    authHeaders(token)
+  );
+  return response.data;
+};
+
+// ---------------------------------------------------------------------------
+// Link pages (Linktree-style public profile)
+// ---------------------------------------------------------------------------
+export interface LinkPageItem {
+  id: string;
+  page_id?: string;
+  label: string;
+  url: string;
+  icon?: string | null;
+  description?: string | null;
+  sort_order: number;
+  active?: boolean;
+  clicks_count?: number;
+}
+
+export interface LinkPage {
+  id: string;
+  workspace_id: string;
+  slug: string;
+  display_name: string;
+  headline?: string | null;
+  bio?: string | null;
+  avatar_url?: string | null;
+  theme: string;
+  template: string;
+  published: boolean;
+  views_count: number;
+  created_at: string;
+  updated_at: string;
+  items: LinkPageItem[];
+}
+
+export interface LinkPageUpsertPayload {
+  slug: string;
+  display_name: string;
+  headline?: string;
+  bio?: string;
+  avatar_url?: string;
+  theme: string;
+  template: string;
+  published: boolean;
+}
+
+export interface LinkPageItemInput {
+  label: string;
+  url: string;
+  icon?: string;
+  description?: string;
+  sort_order?: number;
+  active?: boolean;
+}
+
+export interface LinkPageStats {
+  range_days: number;
+  totals: { views: number; clicks: number; ctr: number };
+  daily: { date: string; views: number; clicks: number }[];
+  items: { id: string; label: string; url: string | null; clicks: number }[];
+  top_referrers: { referrer: string; views: number }[];
+}
+
+export interface PublicLinkPage {
+  slug: string;
+  display_name: string;
+  headline?: string | null;
+  bio?: string | null;
+  avatar_url?: string | null;
+  theme: string;
+  template: string;
+  items: { id: string; label: string; url: string; icon?: string | null; description?: string | null; sort_order: number }[];
+}
+
+export const getMyLinkPage = async (token?: string): Promise<LinkPage | null> => {
+  const response = await apiClient.get<LinkPage | null>('/link-pages/my', authHeaders(token));
+  return response.data;
+};
+
+export const upsertMyLinkPage = async (
+  payload: LinkPageUpsertPayload,
+  token?: string
+): Promise<LinkPage> => {
+  const response = await apiClient.post<LinkPage>('/link-pages/my', payload, authHeaders(token));
+  return response.data;
+};
+
+export const replaceMyLinkPageItems = async (
+  items: LinkPageItemInput[],
+  token?: string
+): Promise<{ items: LinkPageItem[] }> => {
+  const response = await apiClient.put<{ items: LinkPageItem[] }>(
+    '/link-pages/my/items',
+    { items },
+    authHeaders(token)
+  );
+  return response.data;
+};
+
+export const getMyLinkPageStats = async (days: number, token?: string): Promise<LinkPageStats> => {
+  const response = await apiClient.get<LinkPageStats>('/link-pages/my/stats', {
+    ...authHeaders(token),
+    params: { days },
+  });
+  return response.data;
+};
+
+export const getPublicLinkPage = async (slug: string): Promise<PublicLinkPage> => {
+  const response = await apiClient.get<PublicLinkPage>(`/link-pages/public/${slug}`);
+  return response.data;
+};
+
+export const recordLinkPageEvent = async (
+  slug: string,
+  payload: { event_type: 'view' | 'click'; item_id?: string; referrer?: string }
+): Promise<void> => {
+  await apiClient.post(`/link-pages/public/${slug}/event`, payload);
+};

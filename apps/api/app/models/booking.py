@@ -64,12 +64,16 @@ class BookingAppointment(Base, TimestampMixin):
     # price>0" fiction. client_id links a completed call's person to a Client.
     invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True)
     client_id: Mapped[str] = mapped_column(ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    # Google Calendar event provisioned for this booking (real Meet link).
+    # NULL while the workspace has no connected calendar or creation failed;
+    # set by the booking.google-meet-sync Inngest job.
+    google_event_id: Mapped[str] = mapped_column(String(255), nullable=True)
 
     consultation: Mapped["BookingConsultation"] = relationship("BookingConsultation", back_populates="appointments")
 
 
 class BookingBlockedDay(Base, TimestampMixin):
-    """A blackout day for a consultation (B2): "away this week" / holidays.
+    """A day off for a consultation (B2): "away this week" / holidays.
     The open-slot generator excludes these dates so a client can never book a
     day you are unavailable."""
     __tablename__ = "booking_blocked_days"

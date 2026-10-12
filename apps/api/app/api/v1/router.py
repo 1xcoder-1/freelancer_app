@@ -19,9 +19,14 @@ from app.api.v1.endpoints import (
     intake,
     booking,
     calendar,
-    automations,
     report_card,
-    planner
+    planner,
+    notifications,
+    testimonials,
+    reports,
+    links,
+    link_pages,
+    book_ai
 )
 
 api_router = APIRouter()
@@ -44,9 +49,14 @@ api_router.include_router(proposals.router)
 api_router.include_router(intake.router)
 api_router.include_router(booking.router)
 api_router.include_router(calendar.router)
-api_router.include_router(automations.router)
 api_router.include_router(report_card.router, prefix="/report-card", tags=["Report Card"])
 api_router.include_router(planner.router)
+api_router.include_router(notifications.router)
+api_router.include_router(testimonials.router)
+api_router.include_router(reports.router)
+api_router.include_router(links.router)
+api_router.include_router(link_pages.router)
+api_router.include_router(book_ai.router)
 
 
 

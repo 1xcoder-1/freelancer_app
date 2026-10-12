@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Container, Section } from "@/components/landing/layout";
 import { Rise, Stagger, StaggerItem } from "@/components/landing/motion";
+import { TextureOverlay } from "@/components/ui/texture-overlay";
+import { GradientText } from "@/components/ui/gradient-text";
 
 /* ============================ CTA BAND ============================
    Masterji-style closing panel: one big rounded card in warm paper
@@ -17,12 +19,11 @@ export function CtaSection() {
         <Rise>
           <div className="relative overflow-hidden rounded-[28px] bg-[#e9e6e0] px-6 py-12 text-center sm:rounded-[36px] sm:py-16">
             {/* dotted texture, strongest toward the edges */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
+            <TextureOverlay
+              texture="dots"
+              tone="dark"
+              opacity={0.32}
               style={{
-                backgroundImage:
-                  "radial-gradient(rgba(20,19,17,0.13) 1px, transparent 1px)",
                 backgroundSize: "20px 20px",
                 maskImage:
                   "radial-gradient(ellipse 72% 72% at 50% 50%, transparent 32%, black 100%)",
@@ -39,7 +40,7 @@ export function CtaSection() {
               <StaggerItem>
                 <h2 className="max-w-3xl text-3xl font-medium tracking-tight leading-[1.08] text-[#141311] sm:text-4xl lg:text-5xl">
                   Ready to run your business from{" "}
-                  <span className="text-brand">one calm book</span>?
+                  <GradientText>one calm book</GradientText>?
                 </h2>
               </StaggerItem>
               <StaggerItem>

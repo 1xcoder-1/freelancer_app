@@ -74,7 +74,7 @@ const TYPE_STYLE: Record<string, { dot: string; chip: string; label: string }> =
 };
 
 // ------------------------------------------------------------ component ----
-export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function DashboardCalendar() {
   const { getToken } = useAuth();
   const [view, setView] = useState<ViewKey>("month");
   const [cursor, setCursor] = useState<Date>(() => new Date());
@@ -111,7 +111,6 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
   }, [view, cursor]);
 
   const loadEvents = useCallback(async (silent = false) => {
-    if (!open) return;
     if (!silent) setLoading(true);
     try {
       const token = (await getToken()) || undefined;
@@ -123,7 +122,7 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
     } finally {
       setLoading(false);
     }
-  }, [open, rangeStart.toISOString(), rangeEnd.toISOString]);
+  }, [rangeStart.toISOString(), rangeEnd.toISOString]);
 
   useEffect(() => {
     void loadEvents();
@@ -131,14 +130,13 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
 
   // Real-time: live poll while the calendar is open + keep the "now" line fresh
   useEffect(() => {
-    if (!open) return;
     const poll = setInterval(() => void loadEvents(true), 45_000);
     const clock = setInterval(() => setNowTick(Date.now()), 60_000);
     return () => {
       clearInterval(poll);
       clearInterval(clock);
     };
-  }, [open, loadEvents]);
+  }, [loadEvents]);
 
   const loadGoogleStatus = useCallback(async () => {
     try {
@@ -149,8 +147,8 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
     }
   }, []);
   useEffect(() => {
-    if (open) void loadGoogleStatus();
-  }, [open, loadGoogleStatus]);
+    void loadGoogleStatus();
+  }, [loadGoogleStatus]);
 
   const navigate = (dir: -1 | 1) => {
     if (view === "month") setCursor((c) => addMonths(c, dir));
@@ -177,21 +175,16 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
     void loadEvents(true);
   };
 
-  // Escape closes, backdrop click closes
+  // Escape backs out of the topmost layer: detail, then the new-event form
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (detail) setDetail(null);
-        else if (creating) setCreating(false);
-        else onClose();
-      }
+      if (e.key !== "Escape") return;
+      if (detail) setDetail(null);
+      else if (creating) setCreating(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, detail, creating, onClose]);
-
-  if (!open) return null;
+  }, [detail, creating]);
 
   const title =
     view === "month"
@@ -203,12 +196,7 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
   const now = new Date(nowTick);
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col animate-in fade-in duration-200">
-      {/* Dimmed backdrop (click to close) */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
-
-      {/* Calendar surface — dark, full-bleed like the reference */}
-      <div className="relative flex-1 flex flex-col bg-card text-fg overflow-hidden m-0 md:m-6 md:rounded-2xl border border-line shadow-2xl">
+    <div className="relative flex flex-col h-[calc(100vh-8rem)] min-h-[520px] bg-card text-fg overflow-hidden rounded-2xl border border-line">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-16 shrink-0">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -318,14 +306,6 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
               <Plus className="w-3.5 h-3.5 mr-1" />
               <span className="hidden sm:inline">New Event</span>
             </Button>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg text-muted hover:text-fg hover:bg-surface transition-colors"
-              title="Close calendar"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
@@ -337,7 +317,7 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-hidden flex flex-col px-3 pb-3 md:px-5 md:pb-5">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col px-3 pb-3 md:px-5 md:pb-5">
           {view === "month" && (
             <MonthView
               cells={cells}
@@ -407,7 +387,6 @@ export function DashboardCalendar({ open, onClose }: { open: boolean; onClose: (
             }}
           />
         )}
-      </div>
     </div>
   );
 }
@@ -500,7 +479,7 @@ function MonthView({
   onEventClick: (e: CalendarFeedItem) => void;
 }) {
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-[640px]">
       {/* Weekday header row */}
       <div className="grid grid-cols-7 shrink-0">
         {WEEKDAYS.map((w) => (
@@ -600,7 +579,7 @@ function TimeGrid({
   }, [days.length]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 border border-line rounded-xl overflow-hidden bg-card">
+    <div className="flex-1 flex flex-col min-h-[420px] border border-line rounded-xl overflow-hidden bg-card">
       {/* Day headers */}
       <div className="grid shrink-0 border-b border-line" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)` }}>
         <div />
@@ -619,7 +598,7 @@ function TimeGrid({
       </div>
 
       {/* Scrollable hour grid */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar relative">
         <div className="grid relative" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)`, height: 24 * HOUR_H }}>
           {/* Gutter */}
           <div className="relative border-r border-line">

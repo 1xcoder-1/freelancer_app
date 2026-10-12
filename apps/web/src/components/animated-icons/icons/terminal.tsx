@@ -1,6 +1,6 @@
 "use client"
 
-import { steps } from "motion/react"
+import { steps } from "framer-motion"
 
 import { createAnimatedIcon } from "../lib/create-icon"
 import { pivot, slot } from "../lib/motion"

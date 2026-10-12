@@ -1,0 +1,57 @@
+---
+title: Services
+description: Create consultations on a dedicated page — duration, price, opening hours, lead time and no-show rules per service.
+---
+
+A **service** (consultation) is one bookable offering: "Intro call — 30
+minutes, free" or "Strategy session — 60 minutes, paid". Each one has its own
+public page, its own availability window and its own rules.
+
+## Creating one
+
+**Services → New service** (`/dashboard/booking/services`) opens a full-page
+editor (same layout as client pages, not a popup), with a live preview of your
+public page in the right column. A brand-new workspace has no services at
+all — you create the first one; nothing is pre-filled, and nothing you delete
+comes back.
+
+| Field | What it controls |
+| --- | --- |
+| Title, description | What the visitor sees first |
+| Duration | Slot length in minutes |
+| Price | `0` = free (instant confirm); above 0 = invoice + paid-then-confirmed |
+| Weekdays | Which days are bookable — Monday to Sunday pills |
+| Opening hours | Daily start/end in your timezone |
+| Minimum notice | How far ahead a client must book (e.g. 2 hours) |
+| Maximum advance | How far into the future slots appear (default 60 days) |
+| Buffer | Quiet minutes kept around each call |
+| Intake form | Optional — attached to every booking of this service |
+| No-show limit | Strikes allowed before free slots are refused |
+
+## On each card
+
+Every service card carries the whole life cycle of that service, so there is
+no fourth screen to look for:
+
+- **Copy link** — the public `/booking/{token}` URL, ready to paste.
+- **Open** (external-link icon) — the public page itself, in a new tab.
+- **Edit** — the same full-page editor, prefilled, with a
+  [Days off](/docs/modules/booking/days-off) card underneath.
+- **Pause / resume** — stops taking bookings without losing the URL.
+- **Delete** — gone for good, and it stays gone.
+- **Days off** — expands to the per-service away dates.
+
+## Public page behavior
+
+- Inactive services stop taking bookings immediately; the URL then shows a
+  plain "not accepting bookings" note.
+- Slots are generated in 30-day horizons at most, within your max-advance
+  window.
+- Editing availability never invalidates appointments already taken — it only
+  changes which future slots appear.
+
+<Callout type="tip">
+Run two services side by side: a free 20-minute filter call and a paid 60-minute
+deep dive. The free one carries the no-show limit, the paid one is prepaid —
+together they keep your calendar full and your time cheap to give away.
+</Callout>

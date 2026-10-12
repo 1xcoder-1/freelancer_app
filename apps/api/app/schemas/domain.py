@@ -296,22 +296,6 @@ class InteractionOut(BaseModel):
         from_attributes = True
 
 # ------------------------------------------------------------------------------
-# Revenue-At-Stake Aggregate (F4)
-# ------------------------------------------------------------------------------
-# Shared by GET /contracts/at-stake and GET /projects/at-risk. Every bucket is
-# computed in one grouped pass; no per-row N+1. Money is always the workspace
-# currency and never trusts a client-supplied total.
-class RevenueAtStakeOut(BaseModel):
-    currency: str = "USD"
-    total_at_stake: float = 0.0
-    unsigned_contracts_value: float = 0.0
-    unsigned_contracts_count: int = 0
-    unbilled_value: float = 0.0
-    unbilled_hours: float = 0.0
-    unpaid_invoices_value: float = 0.0
-    unpaid_invoices_count: int = 0
-
-# ------------------------------------------------------------------------------
 # Project, Milestone & Task Schemas
 # ------------------------------------------------------------------------------
 class MilestoneCreate(BaseModel):
@@ -1109,13 +1093,6 @@ class BookingConsultationCreate(BaseModel):
         if self.end_minute <= self.start_minute:
             raise ValueError("end_minute must be after start_minute")
         return self
-
-class BookingAppointmentCreate(BaseModel):
-    consultation_id: str = Field(..., min_length=1, max_length=36)
-    client_name: str = Field(..., min_length=2, max_length=255)
-    client_email: str = Field(..., min_length=5, max_length=255)
-    appointment_time: UTCDatetime
-    notes: Optional[str] = Field(None, max_length=10_000)
 
 class PublicAppointmentCreate(BaseModel):
     """Body for the anonymous token-addressed schedule route (B1). The

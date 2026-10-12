@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.workspace import get_or_create_user_workspace
 from app.core.inngest_client import emit
+from app.services.notify import push_notification
 from app.models.contract import Contract, ContractEvent, ContractTemplate, generate_token
 from app.models.project import Project
 from app.models.client import Client
@@ -630,6 +631,12 @@ async def get_public_contract(
         contract.viewed_user_agent = _user_agent(request)
         contract.viewed_ip = _client_ip(request)[:120]
         _record_event(db, contract, "opened", request)
+        await push_notification(
+            db, contract.workspace_id, "contract.viewed",
+            f"Contract opened: {contract.title}",
+            body="The recipient just opened the contract link.",
+            link="/dashboard/projects?tab=contracts",
+        )
         await db.commit()
         await db.refresh(contract)
 
@@ -674,6 +681,12 @@ async def sign_public_contract(
     if payload.recipient_email:
         contract.recipient_email = payload.recipient_email
     _record_event(db, contract, "signed", request)
+    await push_notification(
+        db, contract.workspace_id, "contract.signed",
+        f"Contract signed: {contract.title}",
+        body=(payload.recipient_name or "The client") + " signed the contract.",
+        link="/dashboard/projects?tab=contracts",
+    )
     # N6: only execute fully if the freelancer already counter-signed.
     await _maybe_fully_execute(contract, db, request)
 
@@ -719,6 +732,12 @@ async def decline_public_contract(
 
     contract.status = "declined"
     _record_event(db, contract, "declined", request, note=payload.reason)
+    await push_notification(
+        db, contract.workspace_id, "contract.declined",
+        f"Contract declined: {contract.title}",
+        body=(payload.reason and f"Reason: {payload.reason[:180]}") or "The recipient declined this version.",
+        link="/dashboard/projects?tab=contracts",
+    )
     await db.commit()
     await db.refresh(contract)
 

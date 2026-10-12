@@ -367,7 +367,6 @@ export function ClientsPanel() {
                         key={client.id}
                         title={client.name}
                         subtitle={client.company_name || "Direct Client"}
-                        category={cat}
                         onClick={() => handleOpenDetail(client)}
                         topRightContent={
                           isClientVip ? (

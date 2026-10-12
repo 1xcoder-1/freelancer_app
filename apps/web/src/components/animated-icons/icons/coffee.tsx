@@ -1,6 +1,6 @@
 "use client"
 
-import { stagger } from "motion/react"
+import { stagger } from "framer-motion"
 
 import { createAnimatedIcon } from "../lib/create-icon"
 import { ease, pivot, slot, snap } from "../lib/motion"

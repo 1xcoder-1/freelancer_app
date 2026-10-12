@@ -15,6 +15,8 @@ import {
 } from "@/components/landing/app";
 import { Container, Eyebrow, RadialGlow, Section, WindowFrame } from "@/components/landing/layout";
 import { Rise, Stagger, StaggerItem } from "@/components/landing/motion";
+import { TextAnimate } from "@/components/ui/text-animate";
+import { TextureOverlay } from "@/components/ui/texture-overlay";
 import { cn } from "@/lib/utils";
 
 /* ========================== FEATURE ROWS ==========================
@@ -47,7 +49,13 @@ export function FeatureRow({
             <Eyebrow>{eyebrow}</Eyebrow>
           </StaggerItem>
           <StaggerItem>
-            <h3 className="text-2xl font-medium tracking-tight text-fg sm:text-3xl">{title}</h3>
+            <TextAnimate
+              as="h3"
+              variant="roll"
+              whileInView
+              text={title}
+              className="text-2xl font-medium tracking-tight text-fg sm:text-3xl"
+            />
           </StaggerItem>
           <StaggerItem>
             <p className="max-w-[500px] text-base leading-relaxed text-muted sm:text-lg">{desc}</p>
@@ -81,6 +89,14 @@ export function VisualShell({
   return (
     <div className="relative w-full overflow-hidden min-h-[360px] lg:aspect-4/3">
       <RadialGlow />
+      <TextureOverlay
+        texture="grid"
+        opacity={0.18}
+        style={{
+          maskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black, transparent 75%)",
+          WebkitMaskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black, transparent 75%)",
+        }}
+      />
       <div className="relative z-10 flex h-full w-full items-center justify-center p-4 [perspective:1600px] sm:p-6">
         <Rise className="flex w-full justify-center">
           <div

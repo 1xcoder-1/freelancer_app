@@ -22,6 +22,7 @@ import {
   Calendar,
   CalendarClock,
   AlertCircle,
+  RotateCcw,
 } from "@/components/animated-icons";
 import { toast } from "sonner";
 
@@ -53,6 +54,7 @@ import {
   createPlannerTodo,
   updatePlannerTodo,
   deletePlannerTodo,
+  carryOverPlannerTodos,
   renamePlannerBoard,
   enablePlannerShare,
   rotatePlannerShareToken,
@@ -207,6 +209,7 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [snapOpen, setSnapOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<PlannerSnapshotSummary[]>([]);
+  const [carrying, setCarrying] = useState(false);
 
   const revisionRef = useRef(0);
   const dirtyRef = useRef(false); // unsaved local canvas edits pending
@@ -377,6 +380,25 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     }
   };
 
+  // PL7: one tap pulls every unfinished item dated before today onto today.
+  const carryOver = async () => {
+    setCarrying(true);
+    try {
+      const token = (await getToken()) || undefined;
+      const res = await carryOverPlannerTodos(boardId, token);
+      if (res.moved) {
+        await pullScene();
+        toast.success(`${res.moved} unfinished ${res.moved === 1 ? "item" : "items"} moved to today`);
+      } else {
+        toast.message("Nothing to carry over");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not re-plan the board");
+    } finally {
+      setCarrying(false);
+    }
+  };
+
   // The merged action: drop a todo onto the sketch board as a labelled card.
   const sketchTodo = async (todo: PlannerTodo, index: number) => {
     if (!api) {
@@ -504,6 +526,8 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   const overdue = today ? todos.filter((t) => !t.is_done && isoDayDiff(t.due_date, today) === -1).length : 0;
   const dueToday = today ? todos.filter((t) => !t.is_done && isoDayDiff(t.due_date, today) === 0).length : 0;
   const pendingCount = todos.filter((t) => !t.is_done).length;
+  // Items still parked on a past day on the grid — what carry-over collects.
+  const strandedCount = today ? todos.filter((t) => !t.is_done && t.date && t.date < today).length : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -669,6 +693,17 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
                   </span>
                 )}
               </div>
+            )}
+            {today && strandedCount > 0 && (
+              <button
+                onClick={() => void carryOver()}
+                disabled={carrying}
+                title="Move every unfinished item dated before today onto today"
+                className="mb-2 w-full inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-warn/30 bg-warn/10 text-warn text-[11px] font-semibold hover:bg-warn/20 transition-colors disabled:opacity-60"
+              >
+                {carrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                Carry {strandedCount} unfinished {strandedCount === 1 ? "item" : "items"} to today
+              </button>
             )}
             <div className="flex items-center gap-2">
               <input

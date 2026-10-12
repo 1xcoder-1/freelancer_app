@@ -12,6 +12,7 @@ import {
   Section,
 } from "@/components/landing/layout";
 import { cn } from "@/lib/utils";
+import { TextureCard } from "@/components/ui/texture-card";
 
 /* ------------------------------------------------------------------
    Privacy Policy. Superset legal register: a PageHero opener, then a
@@ -304,6 +305,7 @@ export default function PrivacyPage() {
         <PageHero
           eyebrow="Legal · Privacy"
           title="Privacy Policy"
+          animated={false}
           desc="How Freelance Book collects, uses, stores and protects your personal data — and the rights and choices you have over it."
         />
 
@@ -346,20 +348,22 @@ export default function PrivacyPage() {
                   ))}
                 </div>
 
-                <div className="mt-12 rounded-[2px] border border-line bg-card p-6">
-                  <p className="text-sm leading-6 text-muted">
-                    Questions about your privacy or this policy? Reach us at{" "}
-                    <span className="font-mono text-fg">
-                      privacy@freelancebook.app
-                    </span>
-                    .
-                  </p>
-                  <a href="mailto:privacy@freelancebook.app" className="mt-5 inline-flex">
-                    <MkButton variant="outline" type="button">
-                      Contact support
-                    </MkButton>
-                  </a>
-                </div>
+                <TextureCard className="mt-12">
+                  <div className="p-6">
+                    <p className="text-sm leading-6 text-muted">
+                      Questions about your privacy or this policy? Reach us at{" "}
+                      <span className="font-mono text-fg">
+                        privacy@freelancebook.app
+                      </span>
+                      .
+                    </p>
+                    <a href="mailto:privacy@freelancebook.app" className="mt-5 inline-flex">
+                      <MkButton variant="outline" type="button">
+                        Contact support
+                      </MkButton>
+                    </a>
+                  </div>
+                </TextureCard>
               </div>
             </div>
           </Container>

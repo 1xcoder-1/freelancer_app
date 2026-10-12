@@ -26,6 +26,7 @@ const navLinks = [
   { label: "Features", href: "/features" },
   { label: "Download", href: "/download" },
   { label: "Docs", href: "/docs" },
+  { label: "Changelog", href: "/changelog" },
 ];
 
 const GLASS_BG = "rgba(22, 22, 23, 0.8)";

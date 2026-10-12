@@ -1,0 +1,44 @@
+---
+title: Contracts
+description: Versioned contract revisions, typed e-sign with expiry and audit trail, executed copies that never change after signing.
+---
+
+Contracts are the paperwork behind a "yes" — the agreement a client signs
+before work starts. They live under **Projects → Contracts** in the
+sidebar, next to the projects they govern.
+
+## Same editor, same pipeline
+
+Contracts share their editor, share links and status pipeline with
+[Proposals](/docs/modules/proposals): section blocks, pricing tables that
+pull from client and project data, and the three states — **Sent**,
+**Viewed**, **Executed**.
+
+## A signed contract is never edited
+
+The revision mechanism matters most here. A contract that has been signed
+is locked; to change the deal you draft a **new revision** and it must be
+signed again.
+
+- Every revision has a number, a date and a diff from the previous one.
+- Share links point at one specific revision, so what the client signed
+  stays stable and quotable later.
+- The executed revision is kept as a timestamped copy — that is your
+  record of the deal as agreed.
+
+## E-sign
+
+Send the contract with a **share link**. The client opens it in a browser
+and signs by typing their legal name. No account needed.
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Expiry | 30 days | Link stops accepting signatures after this |
+| Signer name | Free text | Stored with the signature |
+| Notifications | On | You get an email on view and on sign |
+
+<Callout type="info">
+E-sign here is a simple typed signature with an audit trail (who, when,
+what was signed). For jurisdictions that require certified digital
+signatures, download the executed copy and run it through your local tool.
+</Callout>

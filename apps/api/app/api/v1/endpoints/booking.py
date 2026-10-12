@@ -46,10 +46,6 @@ def _minutes_of_day(dt: datetime) -> int:
     return dt.hour * 60 + dt.minute
 
 
-def _slot_end(consultation: BookingConsultation, start: datetime) -> datetime:
-    return start + timedelta(minutes=consultation.duration_minutes)
-
-
 def _conflicts(existing: datetime, consultation: BookingConsultation, start: datetime) -> bool:
     """True when `start..start+duration` overlaps `existing..existing+duration`
     once the required buffer is accounted for on both sides."""
@@ -193,37 +189,15 @@ async def list_consultations(
     stmt = select(BookingConsultation).where(BookingConsultation.workspace_id == workspace.id).order_by(BookingConsultation.created_at.desc())
     consultations = (await db.execute(stmt)).scalars().all()
 
-    # If a new workspace has none, create standard defaults in DB
-    if not consultations:
-        default1 = BookingConsultation(
-            workspace_id=workspace.id,
-            title="30-Min Strategy & Architecture Consultation",
-            description="Clients pick a time on your calendar. Paid consults are only confirmed once the invoice is paid.",
-            duration_minutes=30,
-            price=100.0,
-            meeting_provider="google_meet",
-            is_active=True,
-        )
-        default2 = BookingConsultation(
-            workspace_id=workspace.id,
-            title="15-Min Free Discovery Call",
-            description="Quick introductory call to qualify client leads and review project scopes.",
-            duration_minutes=15,
-            price=0.0,
-            meeting_provider="google_meet",
-            is_active=True,
-        )
-        db.add_all([default1, default2])
-        await db.commit()
-        await db.refresh(default1)
-        await db.refresh(default2)
-        consultations = [default1, default2]
-
-    counts = dict((await db.execute(
-        select(BookingAppointment.consultation_id, func.count(BookingAppointment.id))
-        .where(BookingAppointment.consultation_id.in_([c.id for c in consultations]))
-        .group_by(BookingAppointment.consultation_id)
-    )).all())
+    # No auto-created starter services: a workspace that deletes everything must
+    # see an empty list, not the same two rows resurrected on the next poll.
+    counts = {}
+    if consultations:
+        counts = dict((await db.execute(
+            select(BookingAppointment.consultation_id, func.count(BookingAppointment.id))
+            .where(BookingAppointment.consultation_id.in_([c.id for c in consultations]))
+            .group_by(BookingAppointment.consultation_id)
+        )).all())
 
     return [
         {
@@ -366,7 +340,8 @@ async def delete_consultation(
 
 
 # ------------------------------------------------------------------------------
-# B2 — blackout days ("away this week")
+# B2 — days off ("away this week"). The route keeps its original
+# `/blocked-days` path and table name; only the product term changed.
 # ------------------------------------------------------------------------------
 @router.get("/{consultation_id}/blocked-days")
 async def list_blocked_days(
@@ -603,6 +578,15 @@ async def update_appointment_status(
         appt.client_id = client.id
     await db.commit()
     await db.refresh(appt)
+
+    # Meet/Google event cleanup (booking.google-event-cancel in booking_jobs).
+    if new_status == "cancelled":
+        await emit("booking.status-changed", {
+            "appointment_id": appt.id,
+            "workspace_id": workspace.id,
+            "status": appt.status,
+        })
+
     return await _serialize_appt(db, appt)
 
 

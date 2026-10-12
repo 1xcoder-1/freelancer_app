@@ -2,6 +2,7 @@
 
 import { RadialGlow } from "@/components/landing/layout";
 import { Rise } from "@/components/landing/motion";
+import { TextureOverlay } from "@/components/ui/texture-overlay";
 import {
   MobileClientsScreen,
   MobileInvoicesScreen,
@@ -49,6 +50,14 @@ export function DownloadHeroVisual() {
   return (
     <Rise className="relative -mt-6 overflow-x-clip pb-10 sm:pb-16">
       <RadialGlow />
+      <TextureOverlay
+        texture="scatteredDots"
+        opacity={0.45}
+        style={{
+          maskImage: "radial-gradient(ellipse 55% 60% at 50% 45%, black, transparent 72%)",
+          WebkitMaskImage: "radial-gradient(ellipse 55% 60% at 50% 45%, black, transparent 72%)",
+        }}
+      />
       <div className="relative z-10 flex justify-center">
         <div className="flex scale-[0.68] items-center sm:scale-90 lg:scale-100">
           <LeaningPhone lean="left" z={2}>

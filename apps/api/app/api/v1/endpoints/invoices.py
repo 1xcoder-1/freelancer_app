@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.inngest_client import emit
 from app.core.workspace import get_or_create_user_workspace
+from app.services.notify import push_notification
 from app.models.finance import Invoice, InvoiceItem, InvoicePayment, TimeEntry
 from app.models.client import Client
 from app.models.project import Project
@@ -318,6 +319,21 @@ async def update_invoice_status(
         inv.paid_at = datetime.utcnow()
     elif status_val != "paid" and prev_status == "paid":
         inv.paid_at = None
+    # In-app inbox mirror of the lifecycle (best effort, never blocks):
+    if status_val == "paid" and prev_status != "paid":
+        await push_notification(
+            db, workspace.id, "invoice.paid",
+            f"Invoice {inv.invoice_number} paid",
+            body=f"{inv.total_amount:,.2f} landed for {inv.invoice_number}.",
+            link="/dashboard/projects?tab=invoices",
+        )
+    elif status_val == "overdue" and prev_status != "overdue":
+        await push_notification(
+            db, workspace.id, "invoice.overdue",
+            f"Invoice {inv.invoice_number} is overdue",
+            body=f"{inv.total_amount:,.2f} was due and is still outstanding.",
+            link="/dashboard/projects?tab=invoices",
+        )
     await db.commit()
 
     # draft/sent lifecycle: mark-as-sent (re)schedules the reminder workflow
@@ -454,6 +470,15 @@ async def record_public_payment(
         inv.paid_at = datetime.utcnow()
     await db.commit()
     await db.refresh(payment)
+
+    # In-app inbox mirror of money landing (best effort, never blocks).
+    if now_paid and prev_status != "paid":
+        await push_notification(
+            db, inv.workspace_id, "invoice.paid",
+            f"Invoice {inv.invoice_number} paid",
+            body=f"{inv.total_amount:,.2f} landed via the public pay link.",
+            link="/dashboard/projects?tab=invoices",
+        )
 
     # Commit-then-emit: tell the freelancer the moment money lands (guarded
     # no-op when Inngest is disabled). Only fires on the transition to paid.

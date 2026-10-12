@@ -227,7 +227,6 @@ export default function EditContractPage() {
             currentCount="Edit"
             totalCount="Review"
             subtitle={recipientName ? `Signer: ${recipientName}` : "Agreement"}
-            category="Draft Agreements"
             tags={
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/15 text-sky-400 border-sky-500/25">

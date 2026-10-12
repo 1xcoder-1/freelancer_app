@@ -588,3 +588,39 @@ async def delete_todo(
     await db.delete(todo)
     await _bump(db, board)
     await db.commit()
+
+
+@router.post("/boards/{board_id}/carry-over", response_model=Dict[str, Any])
+async def carry_over_overdue_todos(
+    board_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """PL7: pull every undone todo dated before today onto today.
+
+    The board-level answer to "yesterday overflowed": instead of hunting items
+    one by one, one tap re-plans the incomplete tail onto today. Bumps the
+    board revision so other open editors re-sync, same as any todo write."""
+    from sqlalchemy import update as sa_update
+
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    board = await _owned_board(db, workspace.id, board_id)
+    today = datetime.utcnow().date()
+
+    res = await db.execute(
+        sa_update(PlannerTodo)
+        .where(
+            PlannerTodo.board_id == board.id,
+            PlannerTodo.workspace_id == workspace.id,
+            PlannerTodo.is_done.is_(False),
+            PlannerTodo.date.is_not(None),
+            PlannerTodo.date < today,
+        )
+        .values(date=today)
+        .execution_options(synchronize_session=False)
+    )
+    moved = res.rowcount
+    if moved:
+        await _bump(db, board)
+    await db.commit()
+    return {"moved": moved, "date": today.isoformat()}

@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AutomationsPanel } from "@/components/dashboard/panels/AutomationsPanel";
 import { useUser, useAuth } from "@clerk/nextjs";
 import {
   getInvoices,
@@ -70,7 +69,7 @@ const DEFAULT_CONFIG: WorkspaceConfig = {
   paymentNotes: "",
 };
 
-const SETTINGS_TABS = ["business", "invoicing", "data", "cloud", "automations"];
+const SETTINGS_TABS = ["business", "invoicing", "data", "cloud"];
 
 function SettingsContent() {
   const { user } = useUser();
@@ -383,10 +382,6 @@ function SettingsContent() {
             <TabsTrigger value="cloud" className="flex items-center gap-2">
               <CloudUpload className="w-4 h-4" />
               Cloud
-            </TabsTrigger>
-            <TabsTrigger value="automations" className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Automations
             </TabsTrigger>
           </TabsList>
 
@@ -706,11 +701,6 @@ function SettingsContent() {
                 <p>• You can download all your data anytime from the Data tab.</p>
               </div>
             </Card>
-          </TabsContent>
-
-          {/* TAB 5: Automations (merged from the old Automations page) */}
-          <TabsContent value="automations">
-            <AutomationsPanel />
           </TabsContent>
         </Tabs>
       )}

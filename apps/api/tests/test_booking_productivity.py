@@ -1,5 +1,5 @@
 """Phase 7 — Booking productivity (B1 conflict-free slots, B2 availability &
-blackout days, B3 self-reschedule + status machine, B4 real paid consultations,
+days off, B3 self-reschedule + status machine, B4 real paid consultations,
 B6 no-show strikes) plus workspace isolation.
 
 Hermetic by convention: HTTP-driven against the throwaway SQLite schema; the
@@ -114,7 +114,7 @@ async def test_open_slots_exclude_booked_and_blocked_days(client):
     remaining = [s for s in after.json()["slots"]]
     assert target not in remaining, "a booked slot must stop being offered"
 
-    # A blackout day removes every slot on that date.
+    # A day off removes every slot on that date.
     blocked_day = (datetime.utcnow() + timedelta(days=5)).date().isoformat()
     blk = await client.post(f"/api/v1/booking/{c['id']}/blocked-days?date={blocked_day}")
     assert blk.status_code == 201, blk.text
@@ -240,22 +240,43 @@ async def test_other_workspace_cannot_touch_appointment(client, client_b):
 
 
 # ------------------------------------------------------------------------------
-# Regression (migration 005): the auto-seeded consultations must serialize the
-# canonical availability defaults. On Neon the rows seeded before the B1/B2
-# columns existed held NULLs there and 500'd this list with 16 response
-# validation errors (8 non-optional fields x 2 rows).
+# Regression (migration 005): consultations must serialize the canonical
+# availability defaults. On Neon the rows written before the B1/B2 columns
+# existed held NULLs there and 500'd this list with 16 response validation
+# errors. Also pins that nothing is auto-created — a workspace that deletes its
+# services stays empty.
 # ------------------------------------------------------------------------------
-async def test_seeded_consultations_carry_availability_defaults(client):
+async def test_list_starts_empty_and_carries_availability_defaults(client):
+    empty = await client.get("/api/v1/booking")
+    assert empty.status_code == 200, empty.text
+    assert empty.json() == []
+
+    created = await client.post("/api/v1/booking", json={
+        "title": "Strategy Session",
+        "description": "Deep dive on the scope.",
+        "duration_minutes": 30,
+        "price": 100.0,
+        "meeting_provider": "google_meet",
+        "is_active": True,
+    })
+    assert created.status_code == 201, created.text
+
     res = await client.get("/api/v1/booking")
     assert res.status_code == 200, res.text
-    seeded = res.json()
-    assert len(seeded) == 2
-    for c in seeded:
-        assert c["weekday_mask"] == "1111100"
-        assert c["start_minute"] == 540
-        assert c["end_minute"] == 1020
-        assert c["timezone"] == "UTC"
-        assert c["min_lead_hours"] == 2
-        assert c["max_advance_days"] == 60
-        assert c["buffer_minutes"] == 0
-        assert c["no_show_limit"] == 2
+    rows = res.json()
+    assert len(rows) == 1
+    c = rows[0]
+    assert c["weekday_mask"] == "1111100"
+    assert c["start_minute"] == 540
+    assert c["end_minute"] == 1020
+    assert c["timezone"] == "UTC"
+    assert c["min_lead_hours"] == 2
+    assert c["max_advance_days"] == 60
+    assert c["buffer_minutes"] == 0
+    assert c["no_show_limit"] == 2
+
+    deleted = await client.delete(f"/api/v1/booking/{c['id']}")
+    assert deleted.status_code == 204, deleted.text
+    after = await client.get("/api/v1/booking")
+    assert after.status_code == 200, after.text
+    assert after.json() == []

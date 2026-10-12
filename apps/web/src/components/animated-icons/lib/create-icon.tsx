@@ -1,6 +1,6 @@
 "use client"
 
-import { useAnimate, useInView, useReducedMotion } from "motion/react"
+import { useAnimate, useInView, useReducedMotion } from "framer-motion"
 import { useEffect, useImperativeHandle, useRef, useState } from "react"
 
 import { useIconConfig } from "./context"

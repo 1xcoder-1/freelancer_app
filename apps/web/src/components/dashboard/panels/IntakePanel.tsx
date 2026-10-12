@@ -290,7 +290,6 @@ export function IntakePanel() {
                           currentCount={subCount}
                           totalCount={qCount}
                           subtitle={`${subCount} submission${subCount === 1 ? "" : "s"}`}
-                          category={cat}
                           tags={
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25">

@@ -1,154 +1,42 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
+import { SubTabs } from "@/components/dashboard/SubTabs";
+import { BookAIPanel } from "@/components/dashboard/panels/BookAIPanel";
 import { toast } from "sonner";
-import { z } from "zod";
-import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import {
-  Sparkles,
-  Send,
   FileText,
   Plus,
-  CheckCircle2,
-  Bot,
   Trash2,
   RefreshCw,
   Copy,
   Check,
-  Building,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getProposals,
-  createProposal,
   deleteProposal,
   updateProposalStatus,
-  generateAIProposalPitch,
-  getClients,
   type Proposal,
-  type Client,
 } from "@/lib/api";
-import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useApiData } from "@/hooks/use-api-data";
 
-export default function ProposalsPage() {
+function ProposalsList() {
   const { getToken } = useAuth();
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [clientScope, setClientScope] = useState("");
-  const [targetBudget, setTargetBudget] = useState(1500);
-  const [proposalTitle, setProposalTitle] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedPitch, setGeneratedPitch] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Unsaved-changes guard — an accidental sidebar click while composing a
-  // pitch asks first, and the draft can be restored on return.
-  const formValues = useMemo(
-    () => ({
-      selectedClientId,
-      clientScope,
-      targetBudget: String(targetBudget),
-      proposalTitle,
-      generatedPitch,
-    }),
-    [selectedClientId, clientScope, targetBudget, proposalTitle, generatedPitch]
-  );
-
-  const applyDraft = useCallback((draft: Record<string, unknown>) => {
-    const s = (v: unknown) => (v == null ? null : String(v));
-    if (s(draft.selectedClientId) != null) setSelectedClientId(s(draft.selectedClientId)!);
-    if (s(draft.clientScope) != null) setClientScope(s(draft.clientScope)!);
-    const b = Number(s(draft.targetBudget));
-    if (Number.isFinite(b) && b >= 0) setTargetBudget(b);
-    if (s(draft.proposalTitle) != null) setProposalTitle(s(draft.proposalTitle)!);
-    if (s(draft.generatedPitch) != null) setGeneratedPitch(s(draft.generatedPitch)!);
-  }, []);
-
-  const guard = useUnsavedChangesGuard({
-    values: formValues,
-    draftKey: "proposal-composer",
-    onRestoreDraft: applyDraft,
-  });
-
-  // After a save the composer resets to empty; re-baseline once that flush
-  // lands so the cleared form isn't flagged as unsaved work.
-  const justSavedRef = useRef(false);
-  useEffect(() => {
-    if (justSavedRef.current && !clientScope && !generatedPitch && !proposalTitle) {
-      justSavedRef.current = false;
-      guard.markSaved();
-    }
-  }, [clientScope, generatedPitch, proposalTitle, guard]);
-
-  const { data: pageData, loading, refresh: loadData } = useApiData(
+  const { data: proposalsData, loading, refresh: loadData } = useApiData<Proposal[]>(
     "proposals:data",
-    async (token) => {
-      const [propsRes, clientsRes] = await Promise.all([
-        getProposals(token).catch(() => []),
-        getClients(token).catch(() => []),
-      ]);
-      return { proposals: propsRes, clients: clientsRes };
-    },
+    async (token) => getProposals(token).catch(() => [] as Proposal[]),
     { reportContext: "proposals" }
   );
-
-  const proposals = pageData?.proposals ?? [];
-  const clients = pageData?.clients ?? [];
-
-  const handleGenerateAI = async () => {
-    if (!validateOrToast(z.object({ clientScope: nameSchema("Project scope", 1000), targetBudget: moneySchema("Target budget") }), { clientScope, targetBudget: Number(targetBudget) })) return;
-    try {
-      setIsGenerating(true);
-      const token = (await getToken()) || undefined;
-      const res = await generateAIProposalPitch(clientScope, targetBudget, token);
-      setProposalTitle(res.title);
-      setGeneratedPitch(res.pitch_content);
-    } catch (err) {
-      console.error("AI Generation failed:", err);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleSaveProposal = async () => {
-    if (!validateOrToast(z.object({
-      clientScope: nameSchema("Project scope", 1000),
-      pitch: z.string().trim().min(1, "Generate a pitch before saving"),
-      budget: moneySchema("Budget"),
-    }), { clientScope, pitch: generatedPitch, budget: Number(targetBudget) })) return;
-    try {
-      setIsSaving(true);
-      const token = (await getToken()) || undefined;
-      await createProposal(
-        {
-          title: proposalTitle || `Proposal for ${clientScope.slice(0, 30)}...`,
-          client_id: selectedClientId || undefined,
-          client_scope: clientScope,
-          budget: Number(targetBudget),
-          pitch_content: generatedPitch,
-          status: "sent",
-        },
-        token
-      );
-      setClientScope("");
-      setGeneratedPitch("");
-      setProposalTitle("");
-      setSelectedClientId("");
-      justSavedRef.current = true;
-      loadData();
-      toast.success("Proposal saved");
-    } catch (err) {
-      console.error("Failed to save proposal:", err);
-      toast.error("Could not save proposal");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const proposals = proposalsData ?? [];
 
   const handleDelete = async (id: string) => {
     const ok = await confirmDialog({
@@ -209,201 +97,165 @@ export default function ProposalsPage() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
+          <Link
+            href="/dashboard/proposals/new"
+            className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs shadow-xs hover:shadow-sm active:scale-95 transition-all h-9"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            New Proposal
+          </Link>
         </div>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="bg-card border-line p-6 space-y-4">
-            <Skeleton className="h-6 w-36" />
-            <Skeleton className="h-28 w-full rounded-lg" />
-            <Skeleton className="h-10 w-full rounded-lg" />
-            <Skeleton className="h-11 w-full rounded-lg" />
-          </Card>
-          <Card className="bg-card border-line p-6 space-y-4">
-            <Skeleton className="h-6 w-36" />
-            <Skeleton className="h-16 w-full rounded-xl" />
-            <Skeleton className="h-16 w-full rounded-xl" />
-          </Card>
+      {loading && proposals.length === 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="bg-card border-line p-5 space-y-3">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-12 w-full rounded-lg" />
+            </Card>
+          ))}
         </div>
+      ) : proposals.length === 0 ? (
+        <Card className="bg-card border-dashed border-line p-12 text-center">
+          <FileText className="w-12 h-12 text-faint mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-fg mb-1">No Saved Proposals Yet</h3>
+          <p className="text-muted text-sm max-w-md mx-auto mb-6">
+            Compose a pitch with the AI writer and it lands here — track each one from draft to won.
+          </p>
+          <Link
+            href="/dashboard/proposals/new"
+            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-sm shadow-xs active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />Write Your First Proposal
+          </Link>
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* AI Pitch Generator Input */}
-          <Card className="bg-card border-line p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-accent" />
-              <h3 className="text-base font-bold text-fg">AI Pitch Writer</h3>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {proposals.map((p) => (
+            <Card key={p.id} className="bg-card border-line p-4 rounded-xl hover:border-line-strong transition-all space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-fg truncate">{p.title}</h4>
+                  <p className="text-xs text-muted">
+                    {p.client_name ? `Client: ${p.client_name} • ` : ""}
+                    <span className="font-mono text-accent font-semibold">${p.budget.toLocaleString()}</span>
+                    {" • "}
+                    {p.created_at?.slice(0, 10)}
+                  </p>
+                </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted">Select Client (Optional)</label>
                 <select
-                  value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-line-strong"
+                  value={p.status}
+                  onChange={(e) => handleSetStatus(p.id, e.target.value as "draft" | "sent" | "accepted" | "declined")}
+                  className={
+                    "text-[10px] uppercase font-semibold rounded-lg border px-2 py-1 bg-bg focus:outline-none shrink-0 " +
+                    (p.status === "accepted"
+                      ? "text-accent border-accent/30"
+                      : p.status === "declined"
+                        ? "text-danger border-danger/30"
+                        : "text-muted border-line")
+                  }
+                  title="Update proposal status"
                 >
-                  <option value="">-- General / Direct Pitch --</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.company_name ? `(${c.company_name})` : ""}
-                    </option>
-                  ))}
+                  <option value="draft">Draft</option>
+                  <option value="sent">Sent</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="declined">Declined</option>
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-muted">Client Job Description / Scope *</label>
-                <textarea
-                  value={clientScope}
-                  onChange={(e) => setClientScope(e.target.value)}
-                  placeholder="e.g. Need a Next.js 16 food delivery dashboard with Stripe payments and mobile responsiveness."
-                  rows={4}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-line-strong"
-                />
-              </div>
+              <p className="text-xs text-fg line-clamp-3 font-mono bg-bg p-2 rounded-lg border border-line">
+                {p.pitch_content}
+              </p>
 
-              <div>
-                <label className="text-xs font-semibold text-muted">Proposed Budget ($)</label>
-                <input
-                  type="number"
-                  value={targetBudget}
-                  onChange={(e) => setTargetBudget(Number(e.target.value))}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line text-fg text-sm focus:outline-none focus:border-line-strong"
-                />
-              </div>
-
-              <Button
-                onClick={handleGenerateAI}
-                disabled={isGenerating || !clientScope.trim()}
-                className="w-full bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
-              >
-                <Bot className="w-4 h-4 mr-1.5" />
-                {isGenerating ? "AI is crafting your pitch..." : "Generate Winning Proposal"}
-              </Button>
-            </div>
-
-            {generatedPitch && (
-              <div className="space-y-3 pt-3 border-t border-line animate-in fade-in">
-                <div>
-                  <label className="text-xs font-semibold text-accent">Proposal Title</label>
-                  <input
-                    type="text"
-                    value={proposalTitle}
-                    onChange={(e) => setProposalTitle(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 rounded-lg bg-bg border border-line-strong text-fg text-sm focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-accent">Generated Scope & Pitch Body</label>
-                  <textarea
-                    value={generatedPitch}
-                    onChange={(e) => setGeneratedPitch(e.target.value)}
-                    rows={8}
-                    className="w-full mt-1 p-3 rounded-lg bg-bg border border-line-strong text-fg font-mono text-xs focus:outline-none"
-                  />
-                </div>
-
+              <div className="pt-2 border-t border-line flex items-center justify-between">
                 <Button
-                  onClick={handleSaveProposal}
-                  disabled={isSaving}
-                  className="w-full bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleCopyPitch(p.pitch_content, p.id)}
+                  className="text-xs text-muted hover:text-fg h-7 px-2"
                 >
-                  <Send className="w-4 h-4 mr-1.5" />
-                  {isSaving ? "Saving..." : "Save Proposal"}
+                  {copiedId === p.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 mr-1 text-accent" />
+                      <span className="italic font-medium text-accent">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 mr-1" />
+                      Copy Pitch
+                    </>
+                  )}
                 </Button>
+
+                <button
+                  onClick={() => handleDelete(p.id)}
+                  className="text-faint hover:text-danger p-1 transition-colors"
+                  title="Delete proposal"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-            )}
-          </Card>
-
-          {/* Proposals List */}
-          <Card className="bg-card border-line p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-fg">Saved Proposals ({proposals.length})</h3>
-            </div>
-
-            {proposals.length > 0 ? (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {proposals.map((p) => (
-                  <div
-                    key={p.id}
-                    className="p-4 rounded-xl bg-bg border border-line hover:border-line-strong transition-all space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h4 className="text-sm font-semibold text-fg">{p.title}</h4>
-                        <p className="text-xs text-muted">
-                          {p.client_name ? `Client: ${p.client_name} • ` : ""}
-                          <span className="font-mono text-accent font-semibold">${p.budget.toLocaleString()}</span>
-                          {" • "}
-                          {p.created_at?.slice(0, 10)}
-                        </p>
-                      </div>
-
-                      <select
-                        value={p.status}
-                        onChange={(e) => handleSetStatus(p.id, e.target.value as "draft" | "sent" | "accepted" | "declined")}
-                        className={
-                          "text-[10px] uppercase font-semibold rounded-lg border px-2 py-1 bg-bg focus:outline-none " +
-                          (p.status === "accepted"
-                            ? "text-accent border-accent/30"
-                            : p.status === "declined"
-                              ? "text-danger border-danger/30"
-                              : "text-muted border-line")
-                        }
-                        title="Update proposal status"
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="sent">Sent</option>
-                        <option value="accepted">Accepted</option>
-                        <option value="declined">Declined</option>
-                      </select>
-                    </div>
-
-                    <p className="text-xs text-fg line-clamp-2 font-mono bg-card p-2 rounded-lg border border-line">
-                      {p.pitch_content}
-                    </p>
-
-                    <div className="pt-2 border-t border-line flex items-center justify-between">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleCopyPitch(p.pitch_content, p.id)}
-                        className="text-xs text-muted hover:text-fg h-7 px-2"
-                      >
-                        {copiedId === p.id ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 mr-1 text-accent" />
-                            <span className="italic font-medium text-accent">Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5 mr-1" />
-                            Copy Pitch
-                          </>
-                        )}
-                      </Button>
-
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        className="text-faint hover:text-danger p-1 transition-colors"
-                        title="Delete proposal"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16 text-faint text-xs">
-                No saved proposals yet. Write one on the left and press Save.
-              </div>
-            )}
-          </Card>
+            </Card>
+          ))}
         </div>
       )}
     </div>
+  );
+}
+
+const TABS = [
+  { value: "proposals", label: "Saved Proposals" },
+  { value: "book-ai", label: "Book AI" },
+] as const;
+
+function ProposalsContent() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const tab = searchParams.get("tab");
+  const active = tab === "book-ai" ? "book-ai" : "proposals";
+
+  const handleTabChange = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    // "proposals" is the default view, so drop the param entirely for a clean URL.
+    if (next === "proposals") params.delete("tab");
+    else params.set("tab", next);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  };
+
+  if (active === "book-ai") {
+    return (
+      <div className="space-y-6">
+        <SubTabs tabs={TABS} value={active} onChange={handleTabChange} />
+        <BookAIPanel />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <SubTabs tabs={TABS} value={active} onChange={handleTabChange} />
+      <ProposalsList />
+    </div>
+  );
+}
+
+export default function ProposalsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-72 rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      }
+    >
+      <ProposalsContent />
+    </Suspense>
   );
 }

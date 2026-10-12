@@ -1,0 +1,4 @@
+{
+  "title": "Booking",
+  "pages": ["index", "calls", "services", "days-off"]
+}

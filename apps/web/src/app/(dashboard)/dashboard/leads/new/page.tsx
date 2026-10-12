@@ -600,7 +600,6 @@ export default function NewLeadPage() {
             subtitle={company.trim() || source || "Referral"}
             currentCount={stageObj.step}
             totalCount={5}
-            category={effectiveCategory}
             tags={
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${stageObj.tone}`}>

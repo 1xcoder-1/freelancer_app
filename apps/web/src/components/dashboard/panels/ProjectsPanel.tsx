@@ -301,7 +301,6 @@ export function ProjectsPanel() {
                             currentCount={currentStep}
                             totalCount={totalSteps}
                             subtitle={p.client_name || "Direct Client"}
-                            category={cat}
                             onClick={() => handleOpenDetail(p)}
                             tags={
                               <div className="flex flex-wrap items-center gap-1.5">

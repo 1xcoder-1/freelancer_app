@@ -8,6 +8,8 @@ import { MobileTimerScreen } from "@/components/landing/mobile-app";
 import { ClientsView } from "@/components/landing/app";
 import { ScaledMock } from "@/components/landing/app";
 import { Rise, Stagger, StaggerItem } from "@/components/landing/motion";
+import { TextAnimate } from "@/components/ui/text-animate";
+import { TextureCard } from "@/components/ui/texture-card";
 
 /* ========================= DOWNLOAD SECTION ========================
    "Your book on every screen": a mini MacBook preview with the real
@@ -27,30 +29,32 @@ function DownloadTile({
   note: string;
 }) {
   return (
-    <div
+    <TextureCard
       aria-disabled="true"
-      className="group relative flex items-center gap-4 overflow-hidden rounded-[2px] border border-line bg-card px-5 py-4 transition-colors hover:border-brand/40"
+      className="group relative overflow-hidden transition-colors hover:border-brand/40"
     >
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-gradient-to-r from-brand/[0.05] to-transparent opacity-0 transition-opacity group-hover:opacity-100"
       />
-      <span className="relative flex size-12 shrink-0 items-center justify-center rounded-[2px] border border-line bg-surface text-fg/80 transition-colors group-hover:border-brand/40 group-hover:text-brand">
-        <Icon className="size-5" />
-      </span>
-      <span className="relative min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="block text-[15px] font-medium text-fg">{name}</span>
-          <span className="rounded-[2px] border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#fcbb00]">
-            Soon
+      <div className="relative flex items-center gap-4 px-5 py-4">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-[2px] border border-line bg-surface text-fg/80 transition-colors group-hover:border-brand/40 group-hover:text-brand">
+          <Icon className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="block text-[15px] font-medium text-fg">{name}</span>
+            <span className="rounded-[2px] border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#fcbb00]">
+              Soon
+            </span>
+          </span>
+          <span className="mt-0.5 block text-[13px] leading-5 text-muted">
+            {meta} — {note}
           </span>
         </span>
-        <span className="mt-0.5 block text-[13px] leading-5 text-muted">
-          {meta} — {note}
-        </span>
-      </span>
-      <ArrowDown className="relative size-4 shrink-0 text-muted/40" aria-hidden />
-    </div>
+        <ArrowDown className="size-4 shrink-0 text-muted/40" aria-hidden />
+      </div>
+    </TextureCard>
   );
 }
 
@@ -93,9 +97,13 @@ export function DownloadSection() {
               <Eyebrow>Native apps</Eyebrow>
             </StaggerItem>
             <StaggerItem>
-              <h2 className="mt-4 text-3xl font-medium tracking-tight leading-[1.1] text-fg sm:text-4xl">
-                Take the book with you.
-              </h2>
+              <TextAnimate
+                as="h2"
+                variant="roll"
+                whileInView
+                text="Take the book with you."
+                className="mt-4 text-3xl font-medium tracking-tight leading-[1.1] text-fg sm:text-4xl"
+              />
             </StaggerItem>
             <StaggerItem>
               <p className="max-w-[500px] text-base leading-relaxed text-muted sm:text-lg">

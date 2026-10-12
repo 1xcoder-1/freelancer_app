@@ -16,6 +16,12 @@ import {
   IdCard,
   Settings,
   ArrowRight,
+  MessageSquare,
+  TrendingUp,
+  Star,
+  Link2,
+  Phone,
+  CalendarDays,
 } from "@/components/animated-icons";
 
 export function CommandMenu() {
@@ -26,6 +32,7 @@ export function CommandMenu() {
   // Quick jumps to the app's own sections (matches the sidebar one-word names)
   const searchableItems = [
     { title: "Home", href: "/dashboard", category: "Go to", icon: Home },
+    { title: "Inbox", href: "/dashboard/inbox", category: "Go to", icon: MessageSquare },
     { title: "Clients", href: "/dashboard/clients", category: "Go to", icon: Users },
     { title: "Leads", href: "/dashboard/clients?tab=leads", category: "Go to", icon: Users },
     { title: "Forms", href: "/dashboard/clients?tab=forms", category: "Go to", icon: Users },
@@ -35,7 +42,12 @@ export function CommandMenu() {
     { title: "Money", href: "/dashboard/cashflow", category: "Go to", icon: Wallet },
     { title: "Expenses", href: "/dashboard/cashflow?tab=expenses", category: "Go to", icon: Wallet },
     { title: "Proposals", href: "/dashboard/proposals", category: "Go to", icon: Sparkles },
-    { title: "Booking", href: "/dashboard/booking", category: "Go to", icon: Calendar },
+    { title: "Calls", href: "/dashboard/booking", category: "Go to", icon: Phone },
+    { title: "Services", href: "/dashboard/booking/services", category: "Go to", icon: CalendarDays },
+    { title: "Reports", href: "/dashboard/reports", category: "Go to", icon: TrendingUp },
+    { title: "Testimonials", href: "/dashboard/testimonials", category: "Go to", icon: Star },
+    { title: "Shared Links", href: "/dashboard/links", category: "Go to", icon: Link2 },
+    { title: "Calendar", href: "/dashboard/calendar", category: "Go to", icon: Calendar },
     { title: "Profile", href: "/dashboard/report-card", category: "Go to", icon: IdCard },
     { title: "Settings", href: "/dashboard/settings", category: "Go to", icon: Settings },
   ];

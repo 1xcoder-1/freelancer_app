@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Literal, Optional, Dict, Any, Literal
 from datetime import datetime, timedelta
 
 from app.core.auth import require_authenticated_user
@@ -76,6 +76,10 @@ class CardContent(BaseModel):
 class CardSettings(BaseModel):
     font: str = "geist"        # schibsted | inter | geist
     accent: str = "#f5f5f4"    # dot swatch colour in the settings popover
+    # Profile themes persist in the same JSON blob as font/accent. A Literal
+    # keeps the value whitelisted (an unknown theme is a 422, never junk in the
+    # DB); the default means payloads saved before themes existed still parse.
+    theme: Literal["default", "editorial", "midnight", "warm"] = "default"
 
 class SaveContentRequest(BaseModel):
     content: CardContent

@@ -186,7 +186,6 @@ export default function EditInvoicePage() {
             currentCount={`$${(invoice?.total_amount || 0).toLocaleString()}`}
             totalCount="Amount"
             subtitle={invoice?.client_name ? `Client: ${invoice.client_name}` : "Direct"}
-            category="Invoices & Billing"
             tags={
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/15 text-sky-400 border-sky-500/25 capitalize">

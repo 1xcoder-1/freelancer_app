@@ -590,7 +590,6 @@ export default function NewProjectPage() {
             currentCount={0}
             totalCount={milestones.length || 3}
             subtitle={selectedClient?.name || "Direct Client"}
-            category={effectiveCategory}
             tags={
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full border bg-sky-500/15 text-sky-400 border-sky-500/25">

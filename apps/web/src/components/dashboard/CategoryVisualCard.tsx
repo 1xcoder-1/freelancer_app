@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { SpotlightCard } from "@/components/ui/spotlight-card";
 
 export function ChaiCupIcon({ className = "w-7 h-7" }: { className?: string }) {
   return (
@@ -42,12 +43,11 @@ export function ChaiCupIcon({ className = "w-7 h-7" }: { className?: string }) {
 }
 
 interface CategoryVisualCardProps {
-  title: string | any;
-  currentCount?: number | string | any;
-  totalCount?: number | string | any;
+  title?: string | null;
+  currentCount?: number | string | null;
+  totalCount?: number | string | null;
   topRightContent?: React.ReactNode;
-  subtitle?: string | any;
-  category?: string | any;
+  subtitle?: string | null;
   onClick?: () => void;
   tags?: React.ReactNode;
   icon?: React.ReactNode;
@@ -65,49 +65,28 @@ export function CategoryVisualCard({
   icon,
   className = "",
 }: CategoryVisualCardProps) {
-  // Safe extraction to prevent any [object Object] rendering
-  let safeTitle = "Client Profile";
-  if (typeof title === "string" && title.trim() && title.trim() !== "[object Object]" && !title.includes("[object Object]")) {
-    safeTitle = title.trim();
-  } else if (title && typeof title === "object") {
-    const extracted = (title as any).name || (title as any).title || (title as any).label || "";
-    if (typeof extracted === "string" && extracted.trim() && extracted !== "[object Object]") {
-      safeTitle = extracted.trim();
-    }
-  }
+  const safeTitle =
+    typeof title === "string" && title.trim() ? title.trim() : "Client Profile";
 
-  let cleanSubtitle = "";
-  if (typeof subtitle === "string" && subtitle.trim() && subtitle.trim() !== "[object Object]" && !subtitle.includes("[object Object]")) {
-    cleanSubtitle = subtitle.trim().replace(/^By\s+/i, "").trim();
-  } else if (subtitle && typeof subtitle === "object") {
-    const extracted = (subtitle as any).name || (subtitle as any).company_name || (subtitle as any).label || "";
-    if (typeof extracted === "string" && extracted.trim() && extracted !== "[object Object]") {
-      cleanSubtitle = extracted.trim().replace(/^By\s+/i, "").trim();
-    }
-  }
-
+  const cleanSubtitle =
+    typeof subtitle === "string"
+      ? subtitle.trim().replace(/^By\s+/i, "").trim()
+      : "";
   const displaySubtitle = cleanSubtitle ? `By ${cleanSubtitle}` : "By Direct Client";
 
-  let safeCurrent: string | null = null;
-  if (typeof currentCount === "number") {
-    safeCurrent = String(currentCount);
-  } else if (typeof currentCount === "string" && currentCount.trim() && currentCount !== "[object Object]") {
-    safeCurrent = currentCount.trim();
-  }
+  const textOf = (v?: number | string | null) =>
+    typeof v === "number" ? String(v) : typeof v === "string" && v.trim() ? v.trim() : null;
 
-  let safeTotal: string | null = null;
-  if (typeof totalCount === "number") {
-    safeTotal = String(totalCount);
-  } else if (typeof totalCount === "string" && totalCount.trim() && totalCount !== "[object Object]") {
-    safeTotal = totalCount.trim();
-  }
-
+  const safeCurrent = textOf(currentCount);
+  const safeTotal = textOf(totalCount);
   const hasCounter = safeCurrent !== null && safeTotal !== null;
 
   return (
-    <div
+    <SpotlightCard
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl border border-line dark:border-[#26272d] bg-card dark:bg-[#141518] hover:bg-surface/50 dark:hover:bg-[#18181c] hover:border-line-strong dark:hover:border-[#383942] p-5 sm:p-6 shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none [-webkit-tap-highlight-color:transparent] transition-[transform,border-color,background-color,box-shadow] duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.98] ${className}`}
+      radius={300}
+      glow="rgba(234,88,12,0.09)"
+      className={`rounded-2xl border border-line dark:border-[#26272d] bg-card dark:bg-[#141518] hover:bg-surface/50 dark:hover:bg-[#18181c] hover:border-line-strong dark:hover:border-[#383942] p-5 sm:p-6 shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[180px] select-none [-webkit-tap-highlight-color:transparent] transition-[transform,border-color,background-color,box-shadow] duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.98] ${className}`}
     >
       {/* Background Subtle Grid & Pixel Block Texture */}
       <div
@@ -122,9 +101,6 @@ export function CategoryVisualCard({
           WebkitMaskImage: "radial-gradient(circle at 10% 15%, black 0%, transparent 65%)",
         }}
       />
-
-      {/* Subtle Warm Amber/Orange Ambient Glow at bottom right corner */}
-      <div className="pointer-events-none absolute -bottom-10 -right-10 w-48 h-48 rounded-full bg-gradient-to-tl from-orange-400/20 via-amber-300/10 to-transparent dark:from-orange-500/20 dark:via-amber-500/10 dark:to-transparent blur-2xl opacity-70 dark:opacity-60 group-hover:opacity-90 dark:group-hover:opacity-80 transition-opacity duration-300" />
 
       {/* Top Section: Title & Fraction Counter or Top-Right Badge */}
       <div className="relative z-10 flex items-start justify-between gap-3">
@@ -159,6 +135,6 @@ export function CategoryVisualCard({
           {icon || <ChaiCupIcon className="w-7 h-7" />}
         </div>
       </div>
-    </div>
+    </SpotlightCard>
   );
 }

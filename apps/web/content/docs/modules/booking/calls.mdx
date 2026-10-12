@@ -1,0 +1,58 @@
+---
+title: Calls
+description: Every booked appointment — live stats, status machine, client self-reschedule, payment and reminders.
+---
+
+The **Calls** page (`/dashboard/booking`) is your call pipeline. Four stat
+cards on top show the next call and how long until it, upcoming calls (plus
+today and the next 7 days), what needs you (to confirm, awaiting payment),
+and recorded no-shows. Everything else is one card per appointment, newest
+bookings first.
+
+## Status machine
+
+| Status | Meaning | Who moves it |
+| --- | --- | --- |
+| pending | Booked; paid calls wait for the invoice to be settled | Created by booking |
+| confirmed | The call is on | Payment lands (paid) or you confirm (free) |
+| completed | The call happened — the person is promoted to a Client record | You |
+| cancelled | Dead slot, freed for rebooking | You or the client |
+| no-show | Client missed it — counts as a strike against their email | You |
+
+## Client self-service
+
+Every appointment gets its own scoped token and the client gets a link
+(`/reschedule/{token}`) where they can, without emailing you:
+
+- view their appointment and its status,
+- reschedule to another server-validated slot — up to **3 times**, and the
+  overlap check excludes their own current slot,
+- cancel.
+
+Reschedules re-fire the reminder workflow, so the client always gets the
+link for the *new* time.
+
+## Google Meet + calendar events
+
+With [Google Calendar connected](/docs/integrations/google-calendar), a real
+Google Calendar event with a **live Meet link** is created for every new or
+rescheduled booking, and cancelled when the appointment is cancelled. The
+reminder emails re-read the appointment at send time, so they always contain
+the current link.
+
+## Money
+
+- Paid service: booking creates an invoice automatically; the appointment
+  confirms only when that invoice is marked **paid** by a real payment.
+- Free service: confirmed instantly, `payment_status = free`.
+
+## Reminders
+
+Two durable jobs per booking: an email 24 hours before the call and a
+short-notice nudge 1 hour before — both with the meeting link.
+
+<Callout type="info">
+Booked calls also show up on the dashboard calendar, merged with your local
+events and mirrored Google events — one view for the whole week. See
+[Google Calendar](/docs/integrations/google-calendar).
+</Callout>

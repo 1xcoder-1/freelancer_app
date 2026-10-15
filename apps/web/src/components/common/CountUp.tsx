@@ -23,10 +23,9 @@ export function CountUp({
   format?: (n: number) => string;
 }) {
   const reduceMotion = useReducedMotion();
-  const [display, setDisplay] = React.useState(reduceMotion ? value : 0);
-  // Starts at 0 so the first mount counts up; afterwards each change
-  // tweens from whatever number is currently on screen.
-  const prevValue = React.useRef(0);
+  const [display, setDisplay] = React.useState(value);
+  // Starts with value to avoid sticking at 0; afterwards each change tweens from previous.
+  const prevValue = React.useRef(value);
 
   React.useEffect(() => {
     if (reduceMotion) {
@@ -34,18 +33,23 @@ export function CountUp({
       prevValue.current = value;
       return;
     }
-    // Count from whatever is on screen so later refreshes (polling) tween
-    // between numbers instead of restarting from zero every time.
     const from = prevValue.current;
     prevValue.current = value;
-    if (from === value) return;
+    if (from === value) {
+      setDisplay(value);
+      return;
+    }
 
     let raf = 0;
     const start = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
       setDisplay(Math.round(from + (value - from) * easeOutCubic(t)));
-      if (t < 1) raf = requestAnimationFrame(tick);
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        setDisplay(value);
+      }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

@@ -1,11 +1,11 @@
 """Link pages (Linktree-style public profile).
 
-One page per workspace with a short public slug, an ordered list of link
-buttons, and an append-only event stream powering the stats endpoint.
-Owner routes are workspace-scoped like every other module; public routes
-address the page by slug only (404 — never a "this page exists but is
-private" hint) and are rate-limited via the /link-pages/public/ rule in
-app.core.rate_limit.
+Up to 3 pages per workspace, each with a short public slug, an ordered list
+of link buttons, and an append-only event stream powering the stats endpoints.
+Owner routes are workspace-scoped like every other module (a page_id that
+belongs to another workspace is a plain 404); public routes address the page
+by slug only (404 — never a "this page exists but is private" hint) and are
+rate-limited via the /link-pages/public/ rule in app.core.rate_limit.
 """
 
 import re
@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
@@ -28,6 +28,7 @@ router = APIRouter(prefix="/link-pages", tags=["Link Pages"])
 # Lowercase alnum plus hyphens/dots, 2-64 chars, must start and end alnum.
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,62}[a-z0-9]$")
 _MAX_ITEMS = 100  # a link page with 100 buttons is already unusable
+_MAX_PAGES = 3  # per workspace — the dashboard card grid is designed for 3
 
 
 def _validate_slug(value: str) -> str:
@@ -43,7 +44,8 @@ def _validate_slug(value: str) -> str:
 # ------------------------------------------------------------------------------
 # Schemas (inline, report-card style)
 # ------------------------------------------------------------------------------
-class LinkPageUpsert(BaseModel):
+class LinkPageCreate(BaseModel):
+    name: Optional[str] = Field(None, max_length=120)
     slug: str
     display_name: str = Field(..., min_length=1, max_length=200)
     headline: Optional[str] = Field(None, max_length=200)
@@ -58,7 +60,29 @@ class LinkPageUpsert(BaseModel):
     def _check_slug(cls, v: str) -> str:
         return _validate_slug(v)
 
-    @field_validator("display_name", "headline", "bio", "theme", "template")
+    @field_validator("name", "display_name", "headline", "bio", "theme", "template")
+    @classmethod
+    def _strip(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() if isinstance(v, str) else v
+
+
+class LinkPageUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=120)
+    slug: Optional[str] = Field(None, max_length=64)
+    display_name: Optional[str] = Field(None, min_length=1, max_length=200)
+    headline: Optional[str] = Field(None, max_length=200)
+    bio: Optional[str] = Field(None, max_length=500)
+    avatar_url: Optional[str] = Field(None, max_length=500)
+    theme: Optional[str] = Field(None, max_length=32)
+    template: Optional[str] = Field(None, max_length=32)
+    published: Optional[bool] = None
+
+    @field_validator("slug")
+    @classmethod
+    def _check_slug(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_slug(v) if v is not None else None
+
+    @field_validator("name", "display_name", "headline", "bio", "theme", "template")
     @classmethod
     def _strip(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() if isinstance(v, str) else v
@@ -128,6 +152,7 @@ def _page_payload(page: LinkPage, items: List[LinkItem]) -> Dict[str, Any]:
     return {
         "id": page.id,
         "workspace_id": page.workspace_id,
+        "name": page.name or page.display_name,
         "slug": page.slug,
         "display_name": page.display_name,
         "headline": page.headline,
@@ -137,6 +162,7 @@ def _page_payload(page: LinkPage, items: List[LinkItem]) -> Dict[str, Any]:
         "template": page.template,
         "published": bool(page.published),
         "views_count": page.views_count or 0,
+        "clicks_count": sum((i.clicks_count or 0) for i in items),
         "created_at": page.created_at,
         "updated_at": page.updated_at,
         "items": [_item_payload(i) for i in items],
@@ -179,123 +205,67 @@ def _normalized_referrer(raw: Optional[str]) -> str:
     return f"{host}{path}" if path else host
 
 
-async def _get_my_page(db: AsyncSession, workspace_id: str) -> Optional[LinkPage]:
-    res = await db.execute(select(LinkPage).where(LinkPage.workspace_id == workspace_id))
-    return res.scalar_one_or_none()
+def _clean_name(name: Optional[str], display_name: str) -> str:
+    """Card title falls back to the public display name when unnamed."""
+    return (name or "").strip() or display_name.strip()
+
+
+async def _get_owned_page(db: AsyncSession, workspace_id: str, page_id: str) -> LinkPage:
+    """404 — never a workspace mismatch hint — for foreign or missing ids."""
+    res = await db.execute(
+        select(LinkPage).where(LinkPage.id == page_id, LinkPage.workspace_id == workspace_id)
+    )
+    page = res.scalar_one_or_none()
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This link page does not exist.")
+    return page
 
 
 async def _items_of(db: AsyncSession, page_id: str, active_only: bool = False) -> List[LinkItem]:
-    stmt = select(LinkItem).where(LinkItem.page_id == page_id)
-    if active_only:
-        stmt = stmt.where(LinkItem.active == True)  # noqa: E712
-    stmt = stmt.order_by(LinkItem.sort_order.asc(), LinkItem.created_at.asc())
-    res = await db.execute(stmt)
+    res = await db.execute(_items_stmt([page_id], active_only))
     return list(res.scalars().all())
 
 
-# ------------------------------------------------------------------------------
-# Owner endpoints
-# ------------------------------------------------------------------------------
-@router.get("/my")
-async def get_my_page(
-    db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_authenticated_user),
-):
-    """The workspace's link page with its items, or null when none exists yet."""
-    _, workspace = await get_or_create_user_workspace(db, current_user)
-    page = await _get_my_page(db, workspace.id)
-    if page is None:
-        return None
-    items = await _items_of(db, page.id)
-    return _page_payload(page, items)
+async def _items_by_page(
+    db: AsyncSession, page_ids: List[str], active_only: bool = False
+) -> Dict[str, List[LinkItem]]:
+    """Items for many pages in ONE round trip, keyed by page id."""
+    if not page_ids:
+        return {}
+    res = await db.execute(_items_stmt(page_ids, active_only))
+    grouped: Dict[str, List[LinkItem]] = {pid: [] for pid in page_ids}
+    for item in res.scalars().all():
+        grouped[item.page_id].append(item)
+    return grouped
 
 
-@router.post("/my")
-async def upsert_my_page(
-    payload: LinkPageUpsert,
-    db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_authenticated_user),
-):
-    """Create or update the workspace's page. Slug uniqueness is checked
-    against other workspaces so a taken handle is a clear 409, not a 500."""
-    _, workspace = await get_or_create_user_workspace(db, current_user)
-    page = await _get_my_page(db, workspace.id)
+def _items_stmt(page_ids: List[str], active_only: bool):
+    stmt = select(LinkItem).where(LinkItem.page_id.in_(page_ids))
+    if active_only:
+        stmt = stmt.where(LinkItem.active == True)  # noqa: E712
+    return stmt.order_by(LinkItem.sort_order.asc(), LinkItem.created_at.asc())
 
-    taken = await db.execute(
-        select(LinkPage).where(LinkPage.slug == payload.slug, LinkPage.workspace_id != workspace.id)
+
+async def _pages_of(db: AsyncSession, workspace_id: str) -> List[LinkPage]:
+    res = await db.execute(
+        select(LinkPage)
+        .where(LinkPage.workspace_id == workspace_id)
+        .order_by(LinkPage.created_at.asc())
     )
-    if taken.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This slug is already taken.")
-
-    if page is None:
-        page = LinkPage(workspace_id=workspace.id, slug=payload.slug)
-        db.add(page)
-
-    page.slug = payload.slug
-    page.display_name = payload.display_name
-    page.headline = payload.headline or None
-    page.bio = payload.bio or None
-    page.avatar_url = payload.avatar_url or None
-    page.theme = payload.theme or "default"
-    page.template = payload.template or "classic"
-    page.published = payload.published
-    await db.commit()
-    await db.refresh(page)
-
-    items = await _items_of(db, page.id)
-    return _page_payload(page, items)
+    return list(res.scalars().all())
 
 
-@router.put("/my/items")
-async def replace_my_items(
-    payload: LinkItemsReplace,
-    db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_authenticated_user),
-):
-    """Full replace of the ordered button list — the client always sends the
-    complete list, so ordering can never drift. Click history lives in
-    link_events (item_id SET NULLs), so replacing rows loses no analytics."""
-    _, workspace = await get_or_create_user_workspace(db, current_user)
-    page = await _get_my_page(db, workspace.id)
-    if page is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Create your link page first.")
-
-    await db.execute(delete(LinkItem).where(LinkItem.page_id == page.id))
-    for idx, item_in in enumerate(payload.items):
-        db.add(LinkItem(
-            page_id=page.id,
-            label=item_in.label,
-            url=item_in.url,
-            icon=item_in.icon or None,
-            description=item_in.description or None,
-            # The sent order wins — a full replace renumbers sort_order from 0
-            # so stored ordering can never drift or collide with stale hints.
-            sort_order=idx,
-            active=item_in.active,
-        ))
-    await db.commit()
-
-    items = await _items_of(db, page.id)
-    return {"items": [_item_payload(i) for i in items]}
-
-
-@router.get("/my/stats")
-async def get_my_stats(
-    days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_authenticated_user),
-):
-    """Windowed analytics from the link_events stream: totals + CTR, a
-    zero-filled daily series, per-item click breakdown and top referrers."""
-    _, workspace = await get_or_create_user_workspace(db, current_user)
-    page = await _get_my_page(db, workspace.id)
-    if page is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Create your link page first.")
-
+async def _stats_payload(db: AsyncSession, pages: List[LinkPage], days: int) -> Dict[str, Any]:
+    """Windowed analytics over the given pages (one page or the workspace
+    aggregate): totals + CTR, a zero-filled daily series, per-item click
+    breakdown and top referrers."""
     start = datetime.utcnow() - timedelta(days=days - 1)
     start = start.replace(hour=0, minute=0, second=0, microsecond=0)
     res = await db.execute(
-        select(LinkEvent).where(LinkEvent.page_id == page.id, LinkEvent.created_at >= start)
+        select(LinkEvent).where(
+            LinkEvent.page_id.in_([p.id for p in pages]),
+            LinkEvent.created_at >= start,
+        )
     )
     events = list(res.scalars().all())
 
@@ -316,7 +286,10 @@ async def get_my_stats(
                 buckets[day]["clicks"] += 1
 
     # Per-item breakdown over the window; items replaced since are labelled.
-    live_items = {i.id: i for i in await _items_of(db, page.id)}
+    live_items: Dict[str, LinkItem] = {}
+    for items in (await _items_by_page(db, [p.id for p in pages])).values():
+        for i in items:
+            live_items[i.id] = i
     by_item: Dict[str, int] = {}
     for e in events:
         if e.event_type == "click" and e.item_id:
@@ -348,6 +321,188 @@ async def get_my_stats(
         "items": item_rows,
         "top_referrers": top_referrers,
     }
+
+
+# ------------------------------------------------------------------------------
+# Owner endpoints
+# ------------------------------------------------------------------------------
+@router.get("/my")
+async def list_my_pages(
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """All of the workspace's link pages (0-3), oldest first, items included."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    pages = await _pages_of(db, workspace.id)
+    items_by_page = await _items_by_page(db, [p.id for p in pages])
+    return [_page_payload(p, items_by_page[p.id]) for p in pages]
+
+
+@router.post("/my")
+async def create_my_page(
+    payload: LinkPageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Create one of the workspace's pages (max 3). Slug uniqueness is
+    checked globally so a taken handle is a clear 409, not a 500."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+
+    count_res = await db.execute(
+        select(func.count()).select_from(LinkPage).where(LinkPage.workspace_id == workspace.id)
+    )
+    if (count_res.scalar_one() or 0) >= _MAX_PAGES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You can have up to 3 link pages — delete one to add another.",
+        )
+
+    taken = await db.execute(select(LinkPage).where(LinkPage.slug == payload.slug))
+    if taken.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This slug is already taken.")
+
+    page = LinkPage(
+        workspace_id=workspace.id,
+        name=_clean_name(payload.name, payload.display_name),
+        slug=payload.slug,
+        display_name=payload.display_name,
+        headline=payload.headline or None,
+        bio=payload.bio or None,
+        avatar_url=payload.avatar_url or None,
+        theme=payload.theme or "default",
+        template=payload.template or "classic",
+        published=payload.published,
+    )
+    db.add(page)
+    await db.commit()
+    await db.refresh(page)
+    return _page_payload(page, [])
+
+
+@router.put("/my/{page_id}")
+async def update_my_page(
+    page_id: str,
+    payload: LinkPageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Update the editable fields of one owned page; omitted fields stay."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    page = await _get_owned_page(db, workspace.id, page_id)
+
+    if payload.slug is not None and payload.slug != page.slug:
+        taken = await db.execute(
+            select(LinkPage).where(LinkPage.slug == payload.slug, LinkPage.id != page.id)
+        )
+        if taken.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This slug is already taken.")
+        page.slug = payload.slug
+
+    if payload.name is not None:
+        page.name = _clean_name(payload.name, payload.display_name or page.display_name)
+    if payload.display_name is not None:
+        page.display_name = payload.display_name
+    if "headline" in payload.model_fields_set:
+        page.headline = payload.headline or None
+    if "bio" in payload.model_fields_set:
+        page.bio = payload.bio or None
+    if "avatar_url" in payload.model_fields_set:
+        page.avatar_url = payload.avatar_url or None
+    if payload.theme is not None:
+        page.theme = payload.theme
+    if payload.template is not None:
+        page.template = payload.template
+    if payload.published is not None:
+        page.published = payload.published
+    await db.commit()
+    await db.refresh(page)
+
+    return _page_payload(page, await _items_of(db, page.id))
+
+
+@router.delete("/my/{page_id}")
+async def delete_my_page(
+    page_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Remove one of the workspace's pages; items and events cascade, which
+    also frees a slot under the 3-page limit."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    page = await _get_owned_page(db, workspace.id, page_id)
+    await db.delete(page)
+    await db.commit()
+    return {"deleted": True}
+
+
+@router.put("/my/{page_id}/items")
+async def replace_my_items(
+    page_id: str,
+    payload: LinkItemsReplace,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Full replace of the ordered button list — the client always sends the
+    complete list, so ordering can never drift. Click history lives in
+    link_events (item_id SET NULLs), so replacing rows loses no analytics."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    page = await _get_owned_page(db, workspace.id, page_id)
+
+    # Fetch existing items for this page to preserve click counts and IDs where possible
+    existing_items = await _items_of(db, page.id)
+    existing_by_label_url = {(i.label.strip().lower(), i.url.strip()): i for i in existing_items}
+
+    await db.execute(delete(LinkItem).where(LinkItem.page_id == page.id))
+    for idx, item_in in enumerate(payload.items):
+        old = existing_by_label_url.get((item_in.label.strip().lower(), item_in.url.strip()))
+        preserved_id = old.id if old else None
+        preserved_clicks = (old.clicks_count or 0) if old else 0
+
+        item_kwargs: Dict[str, Any] = {
+            "page_id": page.id,
+            "label": item_in.label,
+            "url": item_in.url,
+            "icon": item_in.icon or None,
+            "description": item_in.description or None,
+            "sort_order": idx,
+            "active": item_in.active,
+            "clicks_count": preserved_clicks,
+        }
+        if preserved_id:
+            item_kwargs["id"] = preserved_id
+
+        db.add(LinkItem(**item_kwargs))
+    page.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {"items": [_item_payload(i) for i in await _items_of(db, page.id)]}
+
+
+@router.get("/my/stats")
+async def get_my_stats(
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Aggregate analytics across every page of the workspace."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    pages = await _pages_of(db, workspace.id)
+    if not pages:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Create a link page first.")
+    return await _stats_payload(db, pages, days)
+
+
+@router.get("/my/{page_id}/stats")
+async def get_page_stats(
+    page_id: str,
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Windowed analytics for one owned page."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    page = await _get_owned_page(db, workspace.id, page_id)
+    return await _stats_payload(db, [page], days)
 
 
 # ------------------------------------------------------------------------------

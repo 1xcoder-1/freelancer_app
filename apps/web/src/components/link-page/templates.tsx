@@ -2,32 +2,13 @@
 
 import React from "react";
 
-export interface LinkPageRenderItem {
-  id: string;
-  label: string;
-  url: string;
-  icon?: string | null;
-  description?: string | null;
-}
-
-export interface LinkPageRenderData {
-  display_name: string;
-  headline?: string | null;
-  bio?: string | null;
-  avatar_url?: string | null;
-  items: LinkPageRenderItem[];
-}
-
-export const LINK_TEMPLATES = [
-  { key: "classic", name: "Classic Dark", blurb: "Timeless Linktree-style dark page with pill buttons" },
-  { key: "minimal", name: "Editorial Minimal", blurb: "Quiet light layout with serif type and underline links" },
-  { key: "gradient", name: "Aurora Gradient", blurb: "Vivid gradient backdrop with frosted glass cards" },
-  { key: "bold", name: "Studio Bold", blurb: "Black canvas, oversized type and numbered rows" },
-  { key: "cards", name: "Warm Cards", blurb: "Soft two-column cards with descriptions" },
-  { key: "neon", name: "Terminal Neon", blurb: "Monospace glow for developers and designers" },
-] as const;
-
-export type LinkTemplateKey = (typeof LINK_TEMPLATES)[number]["key"];
+export * from "./template-constants";
+import {
+  LINK_TEMPLATES,
+  type LinkTemplateKey,
+  type LinkPageRenderData,
+  type LinkPageRenderItem,
+} from "./template-constants";
 
 interface TemplateProps {
   data: LinkPageRenderData;
@@ -149,34 +130,51 @@ function EditorialMinimal({ data, onLinkClick, inert }: TemplateProps) {
   );
 }
 
-// 3. Aurora Gradient -----------------------------------------------------------
-function AuroraGradient({ data, onLinkClick, inert }: TemplateProps) {
+// 3. Split Cover -----------------------------------------------------------------
+// Orange cover column beside a numbered link list — stacks to a top band on
+// narrow render slots (phone preview, thumbnails).
+function SplitCover({ data, onLinkClick, inert }: TemplateProps) {
   return (
-    <div
-      style={{ minHeight: "100%", background: "linear-gradient(160deg, #4F46E5 0%, #7C3AED 45%, #DB2777 100%)" }}
-      className="px-6 py-14 text-center"
-    >
-      <div className="max-w-sm mx-auto">
-        <Avatar data={data} size={96} ring="rgba(255,255,255,0.6)" fallbackBg="rgba(255,255,255,0.15)" fg="#ffffff" />
-        <h1 className="text-2xl font-extrabold mt-5 text-white tracking-tight drop-shadow-sm">{data.display_name}</h1>
-        {data.headline && <p className="text-sm mt-1.5 text-white/80">{data.headline}</p>}
-        {data.bio && <p className="text-xs mt-3 text-white/70 leading-relaxed whitespace-pre-line">{data.bio}</p>}
-        <div className="mt-8 space-y-3.5">
-          {data.items.map((item) => (
+    <div style={{ background: "#0E0F11", minHeight: "100%" }} className="grid sm:grid-cols-[40%_minmax(0,1fr)]">
+      <div
+        style={{ background: "linear-gradient(165deg, #D25611 0%, #A94309 100%)" }}
+        className="px-6 py-12 text-center sm:flex sm:flex-col sm:justify-center"
+      >
+        <Avatar data={data} size={72} ring="rgba(255,255,255,0.7)" fallbackBg="rgba(0,0,0,0.25)" fg="#ffffff" />
+        <h1 className="text-xl font-bold text-white mt-4 tracking-tight">{data.display_name}</h1>
+        {data.headline && (
+          <p className="text-[10px] mt-1.5 uppercase tracking-[0.2em] font-semibold text-white/75">{data.headline}</p>
+        )}
+        {data.bio && <p className="text-[11px] mt-3 text-white/70 leading-relaxed whitespace-pre-line">{data.bio}</p>}
+      </div>
+      <div className="px-5 sm:px-7 py-10">
+        <p style={{ color: "#6b6f76" }} className="font-mono text-[10px] uppercase tracking-[0.2em]">Links</p>
+        <div className="mt-3">
+          {data.items.map((item, idx) => (
             <a
               key={item.id}
               href={inert ? undefined : item.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={guard(inert, () => onLinkClick?.(item))}
-              style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.25)" }}
-              className="block rounded-2xl px-5 py-4 text-sm font-semibold text-white transition-all duration-150 hover:bg-white/20 hover:-translate-y-0.5"
+              style={{ borderColor: "#1d1f23" }}
+              className="group flex items-center gap-3 py-3 border-b transition-colors"
             >
-              <span className="block">{item.icon && <span className="mr-2">{item.icon}</span>}{item.label}</span>
-              {item.description && <span className="block text-[11px] font-normal text-white/65 mt-0.5">{item.description}</span>}
+              <span style={{ color: "#D25611" }} className="font-mono text-[10px] w-6 shrink-0">
+                {String(idx + 1).padStart(2, "0")}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-white truncate">
+                  {item.icon && <span className="mr-1.5">{item.icon}</span>}{item.label}
+                </span>
+                {item.description && (
+                  <span style={{ color: "#8a8f98" }} className="block text-[11px] mt-0.5 truncate">{item.description}</span>
+                )}
+              </span>
+              <span style={{ color: "#D25611" }} className="text-sm shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
             </a>
           ))}
-          {data.items.length === 0 && <p className="text-white/60 text-sm mt-6">No links yet.</p>}
+          {data.items.length === 0 && <p style={{ color: "#4a4e56" }} className="text-sm py-6">No links yet.</p>}
         </div>
       </div>
     </div>
@@ -277,7 +275,7 @@ function TerminalNeon({ data, onLinkClick, inert }: TemplateProps) {
           {data.display_name}
           <span style={{ color: "#F472B6" }} className="ml-1 animate-pulse">_</span>
         </h1>
-        {data.headline && <p style={{ color: "#94A3B8" }} className="font-mono text-xs mt-1.5">// {data.headline}</p>}
+        {data.headline && <p style={{ color: "#94A3B8" }} className="font-mono text-xs mt-1.5">{"// "}{data.headline}</p>}
         {data.bio && <p style={{ color: "#64748B" }} className="font-mono text-[11px] mt-3 leading-relaxed whitespace-pre-line">{data.bio}</p>}
         <div className="mt-8 space-y-3">
           {data.items.map((item) => (
@@ -304,7 +302,7 @@ function TerminalNeon({ data, onLinkClick, inert }: TemplateProps) {
 const REGISTRY: Record<LinkTemplateKey, React.ComponentType<TemplateProps>> = {
   classic: ClassicDark,
   minimal: EditorialMinimal,
-  gradient: AuroraGradient,
+  split: SplitCover,
   bold: StudioBold,
   cards: WarmCards,
   neon: TerminalNeon,

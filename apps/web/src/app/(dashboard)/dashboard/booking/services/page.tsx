@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, Pause, Phone, Plus, RefreshCw } from "@/components/animated-icons";
+import { ArrowLeft, CalendarDays, Pause, Phone, Plus, RefreshCw } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/dashboard/patterns";
@@ -25,31 +25,40 @@ export default function BookingServicesPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
-        <div>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Services</h1>
-          <p className="text-muted text-sm mt-1">
-            What clients can book — each service has its own link, hours and days off.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refresh(true)}
-            disabled={loading}
-            className="border-line text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-          <Link
-            href="/dashboard/booking/new"
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs shadow-xs active:scale-95 transition-all duration-150 px-3.5"
-          >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            New service
-          </Link>
+      <div className="space-y-2">
+        <Link
+          href="/dashboard/booking"
+          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors mb-1"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Bookings</span>
+        </Link>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+          <div>
+            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Services</h1>
+            <p className="text-muted text-sm mt-1">
+              What clients can book — each service has its own link, hours and days off.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refresh(true)}
+              disabled={loading}
+              className="border-line text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+            <Link
+              href="/dashboard/booking/new"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs shadow-xs active:scale-95 transition-all duration-150 px-3.5"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              New service
+            </Link>
+          </div>
         </div>
       </div>
 

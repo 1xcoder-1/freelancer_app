@@ -50,7 +50,12 @@ if db_url.startswith("postgresql"):
     engine_kwargs["max_overflow"] = 15
 if not db_url.startswith("sqlite"):
     engine_kwargs["pool_pre_ping"] = True
-    engine_kwargs["pool_recycle"] = 60
+    # Neon sits ~300 ms away per round trip, so dropping a pooled connection
+    # every 60 s made any pause in browsing cost a fresh TLS handshake (~0.8 s)
+    # on the next request. 4 min keeps connections reusable inside a browsing
+    # session while staying under the pooler's idle cutoff; pre_ping above
+    # still catches a connection the pooler dropped early.
+    engine_kwargs["pool_recycle"] = 240
 
 engine = create_async_engine(db_url, **engine_kwargs)
 

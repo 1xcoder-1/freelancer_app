@@ -5,7 +5,7 @@ from app.models.base import Base, TimestampMixin
 
 
 class LinkPage(Base, TimestampMixin):
-    """A Linktree-style public profile page: one per workspace.
+    """A Linktree-style public profile page: up to 3 per workspace.
 
     The page owns a short handle (slug) that strangers open at /p/{slug},
     a ordered list of LinkItems, and lifetime counters. Publishing is an
@@ -13,12 +13,16 @@ class LinkPage(Base, TimestampMixin):
     never a "private" hint)."""
     __tablename__ = "link_pages"
 
-    # One link page per workspace; the workspace row is the tenant guard used
-    # by every other table in the app.
+    # The workspace row is the tenant guard used by every other table; a
+    # workspace may hold up to 3 pages (enforced in the endpoint, not here,
+    # so a concurrent create just fails the count check cleanly).
     workspace_id: Mapped[str] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=False, unique=True, index=True,
+        nullable=False, index=True,
     )
+    # Owner-facing card title ("Work", "Personal") — display_name stays what
+    # visitors see on the public page.
+    name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     # Lowercase handle (alnum + hyphen/dot, 2-64 chars — validated in the
     # endpoint). Globally unique because it addresses a public URL.
     slug: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)

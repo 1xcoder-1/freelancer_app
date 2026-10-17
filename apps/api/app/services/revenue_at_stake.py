@@ -88,6 +88,7 @@ async def compute_revenue_at_stake(
             Project.client_id,
             func.coalesce(func.sum(TimeEntry.duration_seconds), 0),
             func.count(TimeEntry.id),
+            func.coalesce(func.sum(TimeEntry.duration_seconds / 3600.0 * TimeEntry.hourly_rate), 0.0),
         )
         .join(Project, TimeEntry.project_id == Project.id)
         .where(
@@ -101,20 +102,8 @@ async def compute_revenue_at_stake(
     unbilled_time: List[Dict[str, Any]] = []
     unbilled_value = 0.0
     unbilled_hours_total = 0.0
-    for project_id, project_title, client_id, seconds, entry_count in unbilled_rows:
+    for project_id, project_title, client_id, seconds, entry_count, value in unbilled_rows:
         hours = round((seconds or 0) / 3600.0, 2)
-        # Value each project's unbilled hours at its own rate (entries default to
-        # the project rate; the column-level hourly_rate is authoritative per row,
-        # so sum the money server-side rather than re-deriving from one rate).
-        value = await db.scalar(
-            select(func.coalesce(func.sum(TimeEntry.duration_seconds / 3600.0 * TimeEntry.hourly_rate), 0.0))
-            .where(
-                TimeEntry.workspace_id == workspace_id,
-                TimeEntry.project_id == project_id,
-                TimeEntry.is_billable.is_(True),
-                TimeEntry.is_invoiced.is_(False),
-            )
-        )
         value = float(value or 0.0)
         unbilled_value += value
         unbilled_hours_total += hours

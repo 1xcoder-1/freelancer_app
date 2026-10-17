@@ -18,6 +18,7 @@ export default function DashboardLayout({
   // (back / rename / sync / theme), so it gets an un-padded area and skips the
   // shared top bar. The board LIST (/dashboard/planner) stays a normal page.
   const isPlannerBoard = /^\/dashboard\/planner\/[^/]+\/?$/.test(pathname || "");
+  const hideTopBar = isPlannerBoard;
   const fullBleed = isReportCard || isPlannerBoard;
 
   return (
@@ -27,12 +28,10 @@ export default function DashboardLayout({
         <DashboardSidebar />
       </Suspense>
 
-      {/* Main Content Area — page y-axis scrollbars stay visible app-wide
-          (Clients, Leads and all other modules) using the sleek themed
-          scrollbar styling in globals.css. */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative bg-bg">
+      {/* Main Content Area — hidden y-axis scrollbar while retaining smooth scrolling */}
+      <main className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative bg-bg scrollbar-hide">
         {/* Top utility bar: command palette + real-time theme toggle (matches sidebar background & dashed border, aligned to right) */}
-        {!isPlannerBoard && (
+        {!hideTopBar && (
           <div className="sticky top-0 z-30 flex items-center justify-end gap-3 px-6 md:px-8 h-16 shrink-0 bg-card border-b border-dashed border-line">
             {!isReportCard && <CommandMenu />}
             <ThemeToggle />

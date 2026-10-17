@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast, nameSchema, optionalTextSchema } from "@/lib/validation";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { logHandledError } from "@/lib/log-error";
 
 const expenseSchema = z.object({
   category: nameSchema("Category"),
@@ -161,7 +162,7 @@ export function ExpensesPanel() {
         setSelectedExpense(created);
       }
     } catch (err) {
-      console.error("Error creating expense:", err);
+      logHandledError("Error creating expense:", err);
       toast.error("Could not record expense");
     } finally {
       setSaving(false);
@@ -183,7 +184,7 @@ export function ExpensesPanel() {
       await loadData();
       toast.success(!expense.is_recurring ? "Marked as recurring monthly" : "Marked as one-time");
     } catch (err) {
-      console.error("Error toggling recurring:", err);
+      logHandledError("Error toggling recurring:", err);
       toast.error("Could not update recurring state");
     }
   };
@@ -208,7 +209,7 @@ export function ExpensesPanel() {
       await loadData();
       toast.success("Expense deleted");
     } catch (err) {
-      console.error("Error deleting expense:", err);
+      logHandledError("Error deleting expense:", err);
       toast.error("Could not delete expense");
     }
   };

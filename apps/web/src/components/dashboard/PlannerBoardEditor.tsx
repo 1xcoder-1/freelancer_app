@@ -330,6 +330,7 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     setLoading(true);
     void pullScene().finally(() => mountedRef.current && setLoading(false));
     const poll = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       if (!dirtyRef.current) void pollHead();
     }, POLL_MS);
     return () => {

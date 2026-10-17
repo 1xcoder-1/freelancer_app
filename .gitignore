@@ -15,6 +15,9 @@ build/
 *.db
 *.sqlite*
 .turbo/
+.next/
+.next-probe-a/
+
 
 # PR Lens writes its previews here. They are rebuilt on demand.
 .pr-lens/

@@ -25,6 +25,7 @@ import {
   type BookAICitation,
   type BookAIStatusResponse,
 } from "@/lib/book-ai-api";
+import { logHandledError } from "@/lib/log-error";
 
 interface ChatMessage {
   id: string;
@@ -66,7 +67,7 @@ export function BookAIPanel() {
       const res = await generateAIProposalPitch(clientScope, Number(targetBudget), token);
       setDraft({ title: res.title, pitch: res.pitch_content });
     } catch (err) {
-      console.error("Book AI draft failed:", err);
+      logHandledError("Book AI draft failed:", err);
       toast.error("Could not draft the proposal. Try again.");
     } finally {
       setIsDrafting(false);
@@ -99,7 +100,7 @@ export function BookAIPanel() {
       const token = (await getToken()) || undefined;
       setStatus(await getBookAIStatus(token));
     } catch (err) {
-      console.error("Book AI status check failed:", err);
+      logHandledError("Book AI status check failed:", err);
       setStatus({ available: false, capabilities: [] });
     } finally {
       setStatusLoading(false);
@@ -143,7 +144,7 @@ export function BookAIPanel() {
           },
         ]);
       } catch (err) {
-        console.error("Book AI ask failed:", err);
+        logHandledError("Book AI ask failed:", err);
         setMessages((prev) => [
           ...prev,
           {

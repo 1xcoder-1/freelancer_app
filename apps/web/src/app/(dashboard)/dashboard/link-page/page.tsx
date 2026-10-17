@@ -1,497 +1,367 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp } from "lucide-react";
 import {
-  Plus,
-  Trash2,
+  ArrowUpRight,
   ExternalLink,
-  RefreshCw,
   Eye,
-  X,
   Globe,
+  Link2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  TrendingUp,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { StatCard } from "@/components/dashboard/patterns";
 import {
-  getMyLinkPage,
-  upsertMyLinkPage,
-  replaceMyLinkPageItems,
+  createLinkPagePreviewToken,
+  deleteLinkPage,
+  getMyLinkPages,
+  getMyLinkPageStats,
   type LinkPage,
-  type LinkPageItemInput,
+  type LinkPageStats,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { LinkPageRender, LINK_TEMPLATES } from "@/components/link-page/templates";
-import { LinkPageStatsPanel } from "@/components/link-page/LinkPageStatsPanel";
-import { celebrate } from "@/components/common/Celebration";
+import { LINK_TEMPLATES } from "@/components/link-page/template-constants";
+import { confirmDialog } from "@/components/common/ConfirmDialog";
+import { logHandledError } from "@/lib/log-error";
 
-const SLUG_RE = /^[a-z0-9][a-z0-9.\-]{0,62}[a-z0-9]$/;
+const MAX_PAGES = 3;
 
-interface DraftItem {
-  key: string;
-  label: string;
-  url: string;
-  icon: string;
-  description: string;
-  active: boolean;
-}
-
-const EMPTY_ITEM: Omit<DraftItem, "key"> = { label: "", url: "", icon: "", description: "", active: true };
-
-function newKey(): string {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function normalizeUrl(v: string): string {
-  const t = v.trim();
-  if (!t) return t;
-  if (/^https?:\/\//i.test(t)) return t;
-  return `https://${t}`;
-}
-
-export default function LinkPageBuilder() {
+/* Overview — real-time headline metric cards at the top, action buttons below them,
+   followed by the link tree roster cards (max 3). */
+export default function LinkPageOverview() {
   const { getToken } = useAuth();
+  const router = useRouter();
 
-  const { data: page, loading, refresh } = useApiData<LinkPage | null>(
+  // 30s polling keeps aggregate analytics fresh; switching back to the tab
+  // triggers an instant refresh via the focus listener below.
+  const { data: pages, loading, refresh } = useApiData<LinkPage[]>(
     "linkpage:my",
-    async (token) => getMyLinkPage(token),
-    { reportContext: "link-page" }
+    async (token) => getMyLinkPages(token),
+    { reportContext: "link-page-overview", pollMs: 30_000 }
   );
 
-  const [slug, setSlug] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [headline, setHeadline] = useState("");
-  const [bio, setBio] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
-  const [template, setTemplate] = useState<string>("classic");
-  const [published, setPublished] = useState(false);
-  const [items, setItems] = useState<DraftItem[]>([]);
-  const [saving, setSaving] = useState(false);
+  // Real-time aggregate analytics for recent 30 days
+  const { data: statsData, refresh: refreshStats } = useApiData<LinkPageStats | null>(
+    "linkpage:my:stats:30",
+    async (token) => getMyLinkPageStats(30, token).catch(() => null),
+    { reportContext: "link-page-overview-stats", pollMs: 30_000 }
+  );
 
-  // Seed the editor once the stored page arrives (or with a fresh start).
-  const seededRef = useRef(false);
+  const list = pages ?? [];
+  const atLimit = list.length >= MAX_PAGES;
+
+  // 1. Calculate per-page live metrics (unifying direct item counters & event stream breakdown)
+  const aggregateViews = Number(statsData?.totals?.views) || 0;
+  const aggregateClicks = Math.max(
+    Number(statsData?.totals?.clicks) || 0,
+    (statsData?.items ?? []).reduce((sum, i) => sum + (Number(i.clicks) || 0), 0)
+  );
+
+  const pageMetrics = list.map((page) => {
+    const cardClicksFromStats = (statsData?.items ?? [])
+      .filter((si) => page.items.some((pi) => pi.id === si.id || pi.label === si.label))
+      .reduce((sum, si) => sum + (Number(si.clicks) || 0), 0);
+    const cardClicksFromItems = page.items.reduce(
+      (s, i) => s + (Number(i.clicks_count) || 0),
+      0
+    );
+    const cardClicks = Math.max(cardClicksFromItems, cardClicksFromStats);
+
+    const cardViews = Math.max(
+      Number(page.views_count) || 0,
+      list.length === 1 ? aggregateViews : 0
+    );
+
+    return { page, cardViews, cardClicks };
+  });
+
+  // 2. Real-time aggregated totals across all link pages (always 100% in sync with the cards below)
+  const totalViews = Math.max(
+    pageMetrics.reduce((sum, m) => sum + m.cardViews, 0),
+    aggregateViews,
+    list.reduce((sum, p) => sum + (Number(p.views_count) || 0), 0)
+  );
+
+  const totalClicks = Math.max(
+    pageMetrics.reduce((sum, m) => sum + m.cardClicks, 0),
+    aggregateClicks,
+    list.reduce((sum, p) => sum + (p.items || []).reduce((s, i) => s + (Number(i.clicks_count) || 0), 0), 0)
+  );
+
+  // Integer percentage (no decimal point) e.g. 0%, 20%, 40%
+  const rawCtr = totalViews > 0 ? (totalClicks / totalViews) * 100 : (Number(statsData?.totals?.ctr) || 0);
+  const ctrInt = Math.round(rawCtr);
+  const livePages = list.filter((p) => p.published).length;
+
+  const refreshAll = async (notify = false) => {
+    invalidateCache("linkpage:my");
+    invalidateCache("linkpage:my:stats:30");
+    invalidateCache("linkpage:stats:30");
+    await Promise.all([refresh(true), refreshStats(true)]);
+    if (notify) toast.success("Real-time data refreshed");
+  };
+
+  // Live preview opens at the same public URL as the published page
+  // (/p/{slug}?preview={token}) in a new tab, fed by the editor's WS stream.
+  const openPreview = async (page: LinkPage) => {
+    const previewTab = window.open("", "_blank");
+    try {
+      const { token } = await createLinkPagePreviewToken(page.id, (await getToken()) || undefined);
+      if (previewTab) {
+        previewTab.location.href = `/p/${page.slug}?preview=${encodeURIComponent(token)}`;
+      } else {
+        toast.error("Please allow pop-ups for this site to open the preview.");
+      }
+    } catch (e) {
+      logHandledError("Preview launch failed:", e);
+      previewTab?.close();
+      toast.error("Could not open the preview. Please try again.");
+    }
+  };
+
+  // Instant real-time refresh whenever user switches back from viewing public page in another tab
   useEffect(() => {
-    if (loading || seededRef.current) return;
-    seededRef.current = true;
-    if (page) {
-      setSlug(page.slug);
-      setDisplayName(page.display_name);
-      setHeadline(page.headline ?? "");
-      setBio(page.bio ?? "");
-      setAvatarUrl(page.avatar_url ?? "");
-      setTemplate(page.template);
-      setPublished(page.published);
-      setItems(
-        page.items.map((i) => ({
-          key: i.id,
-          label: i.label,
-          url: i.url,
-          icon: i.icon ?? "",
-          description: i.description ?? "",
-          active: i.active !== false,
-        }))
-      );
-    } else {
-      const guess = (typeof window !== "undefined" ? window.location.hostname : "").replace(/\W+/g, "-");
-      setSlug(guess ? `${guess}-links`.slice(0, 60) : "my-links");
-    }
-  }, [loading, page]);
+    const handleSync = () => {
+      invalidateCache("linkpage:my");
+      invalidateCache("linkpage:my:stats:30");
+      invalidateCache("linkpage:stats:30");
+      void refresh(false);
+      void refreshStats(false);
+    };
+    window.addEventListener("focus", handleSync);
+    window.addEventListener("visibilitychange", handleSync);
+    return () => {
+      window.removeEventListener("focus", handleSync);
+      window.removeEventListener("visibilitychange", handleSync);
+    };
+  }, [refresh, refreshStats]);
 
-  const previewData = useMemo(
-    () => ({
-      display_name: displayName || "Your Name",
-      headline: headline || null,
-      bio: bio || null,
-      avatar_url: avatarUrl || null,
-      items: items.filter((i) => i.active && i.label.trim()).map((i) => ({
-        id: i.key,
-        label: i.label.trim(),
-        url: normalizeUrl(i.url),
-        icon: i.icon.trim() || null,
-        description: i.description.trim() || null,
-      })),
-    }),
-    [displayName, headline, bio, avatarUrl, items]
-  );
-
-  const updateItem = (key: string, patch: Partial<DraftItem>) =>
-    setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
-
-  const removeItem = (key: string) => setItems((prev) => prev.filter((it) => it.key !== key));
-
-  const moveItem = (idx: number, dir: -1 | 1) => {
-    setItems((prev) => {
-      const next = [...prev];
-      const target = idx + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[idx], next[target]] = [next[target], next[idx]];
-      return next;
+  const removeTree = async (page: LinkPage) => {
+    const ok = await confirmDialog({
+      title: "Delete link page",
+      message: `"${page.name}" and its ${page.items.length} link${page.items.length === 1 ? "" : "s"} go offline immediately at /p/${page.slug}. Its analytics history is removed too.`,
+      confirmLabel: "Delete",
+      danger: true,
     });
-  };
-
-  const validate = (): string | null => {
-    if (!SLUG_RE.test(slug.trim().toLowerCase()))
-      return "Slug must be 2-64 chars: lowercase letters, numbers, hyphens or dots.";
-    if (!displayName.trim()) return "Display name is required.";
-    for (const it of items) {
-      if (!it.label.trim()) return "Every link needs a label.";
-      if (!/^https?:\/\/.+/.test(normalizeUrl(it.url))) return `Link "${it.label}" needs a valid URL.`;
-    }
-    if (published && items.filter((i) => i.active).length === 0)
-      return "Add at least one active link before publishing.";
-    return null;
-  };
-
-  const persist = async (nextPublished: boolean): Promise<boolean> => {
-    const err = validate();
-    if (err) {
-      toast.error(err);
-      return false;
-    }
-    setSaving(true);
+    if (!ok) return;
     try {
       const token = (await getToken()) || undefined;
-      const saved = await upsertMyLinkPage(
-        {
-          slug: slug.trim().toLowerCase(),
-          display_name: displayName.trim(),
-          headline: headline.trim() || undefined,
-          bio: bio.trim() || undefined,
-          avatar_url: avatarUrl.trim() || undefined,
-          theme: "default",
-          template,
-          published: nextPublished,
-        },
-        token
-      );
-      const payload: LinkPageItemInput[] = items.map((it) => ({
-        label: it.label.trim(),
-        url: normalizeUrl(it.url),
-        icon: it.icon.trim() || undefined,
-        description: it.description.trim() || undefined,
-        active: it.active,
-      }));
-      if (payload.length > 0 || saved.items.length > 0) {
-        await replaceMyLinkPageItems(payload, token);
-      }
-      setPublished(nextPublished);
+      await deleteLinkPage(page.id, token);
       invalidateCache("linkpage:my");
-      invalidateCache("linkpage:stats:7");
+      invalidateCache("linkpage:my:stats:30");
       invalidateCache("linkpage:stats:30");
-      invalidateCache("linkpage:stats:90");
-      await refresh(true);
-      return true;
-    } catch (e) {
-      console.error("Failed to save link page:", e);
-      toast.error(e instanceof Error ? e.message : "Could not save link page");
-      return false;
-    } finally {
-      setSaving(false);
+      toast.success("Link page deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete the link page");
     }
   };
 
-  const publicUrl = typeof window !== "undefined" ? `${window.location.origin}/p/${slug}` : `/p/${slug}`;
-
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Link Page</h1>
-            <span
-              className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${
-                published ? "bg-ok/10 text-ok border-ok/30" : "bg-surface text-muted border-line"
-              }`}
-            >
-              {published ? "Published" : "Draft"}
-            </span>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Your own Linktree-style page at <span className="font-mono text-xs">/p/{slug || "your-handle"}</span> — fill in your links, pick a template and publish.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="space-y-6 enter-stagger animate-in fade-in duration-300">
+
+      {/* 4 Compact Metric Cards — Top Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        {loading && list.length === 0 ? (
+          <>
+            <Skeleton className="h-[145px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[145px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[145px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[145px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            {/* Card 1: Total Views */}
+            <StatCard
+              label="Total Views"
+              value={totalViews.toLocaleString()}
+              icon={Eye}
+              className="min-h-[145px] p-5"
+              rows={[
+                {
+                  text: livePages > 0 ? `${livePages} live page${livePages === 1 ? "" : "s"}` : "No live pages",
+                  dot: livePages > 0 ? "ok" : "warn",
+                },
+              ]}
+            />
+
+            {/* Card 2: Total Clicks */}
+            <StatCard
+              label="Total Clicks"
+              value={totalClicks.toLocaleString()}
+              icon={ArrowUpRight}
+              className="min-h-[145px] p-5"
+              rows={[
+                {
+                  text: `${totalClicks} link clicks`,
+                  dot: totalClicks > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+
+            {/* Card 3: Click Rate (CTR) */}
+            <StatCard
+              label="Click Rate (CTR)"
+              value={`${ctrInt}%`}
+              icon={TrendingUp}
+              className="min-h-[145px] p-5"
+              rows={[
+                {
+                  text: `${ctrInt}% CTR`,
+                  dot: ctrInt > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+
+            {/* Card 4: Link Pages Quota */}
+            <StatCard
+              label="Link Pages"
+              value={`${list.length} of ${MAX_PAGES}`}
+              icon={Globe}
+              className="min-h-[145px] p-5"
+              rows={[
+                {
+                  text: atLimit ? "Maximum quota used" : `${MAX_PAGES - list.length} slot${MAX_PAGES - list.length === 1 ? "" : "s"} left`,
+                  dot: atLimit ? "warn" : "ok",
+                },
+              ]}
+            />
+
+          </>
+        )}
+      </div>
+
+      {/* Roster Section Header with Action Buttons in the same row */}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        <h2 className="text-sm font-medium text-fg">Your link pages</h2>
+
+        <div className="flex items-center gap-2.5">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refresh(true)}
+            onClick={() => void refreshAll(true)}
             disabled={loading}
-            className="border-line text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
-            title="Refresh"
+            className="rounded-xl bg-card border-line text-fg w-8 h-8 p-0 flex items-center justify-center shrink-0 hover:bg-surface"
+            title="Refresh stats"
+            aria-label="Refresh stats"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          {published && (
-            <a
-              href={publicUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center p-2 rounded-xl border border-line bg-bg hover:bg-surface text-muted hover:text-fg text-xs h-9"
-              title="Open published page"
-            >
-              <ExternalLink className="w-4 h-4 mr-1.5" /> Open
-            </a>
-          )}
-          <Button
-            size="sm"
-            onClick={() => persist(published).then((ok) => ok && toast.success("Link page saved"))}
-            disabled={saving}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+
+          <Link
+            href="/dashboard/link-page/new"
+            aria-disabled={atLimit}
+            title={atLimit ? "Limit of 3 reached — delete one to add another" : "Create a link page"}
           >
-            {saving ? "Saving..." : "Save"}
-          </Button>
-          {published ? (
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => persist(false).then((ok) => ok && toast.success("Link page unpublished"))}
-              disabled={saving}
-              className="border-line text-fg"
+              disabled={atLimit}
+              className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
             >
-              <X className="w-3.5 h-3.5 mr-1.5" /> Unpublish
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> New page
             </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() =>
-                persist(true).then((ok) => {
-                  if (ok) {
-                    toast.success("Link page is live");
-                    celebrate("Page published");
-                  }
-                })
-              }
-              disabled={saving}
-              className="bg-ok/90 hover:bg-ok text-white font-semibold shadow-sm"
-            >
-              <Eye className="w-3.5 h-3.5 mr-1.5" /> Publish
-            </Button>
-          )}
+          </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left: editor */}
-        <div className="lg:col-span-7 space-y-5">
-          {/* Identity */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-info" />
-              <h2 className="text-sm font-medium text-fg">Identity</h2>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Public handle (slug)</label>
-                <div className="flex items-center gap-0">
-                  <span className="h-10 inline-flex items-center px-3 rounded-l-xl border border-r-0 border-line bg-surface/70 text-muted text-xs font-mono whitespace-nowrap">
-                    /p/
-                  </span>
-                  <input
-                    type="text"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9.\-]/g, ""))}
-                    className="w-full h-10 px-3.5 rounded-r-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all"
-                    placeholder="alex-works"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Display name <span className="text-accent">*</span></label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="e.g. Alex Morgan"
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Headline</label>
-                <input
-                  type="text"
-                  value={headline}
-                  onChange={(e) => setHeadline(e.target.value)}
-                  placeholder="Freelance product engineer"
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Avatar URL (optional)</label>
-                <input
-                  type="text"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://…/me.jpg"
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-fg block">Short bio</label>
-              <textarea
-                rows={2}
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="One or two lines visitors see under your name."
-                className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
-              />
-            </div>
-          </Card>
-
-          {/* Template picker */}
-          <Card className="p-5 sm:p-6 rounded-2xl border border-line bg-card space-y-4 shadow-xs">
-            <div className="flex items-center justify-between pb-1 border-b border-line/50">
-              <h2 className="text-sm font-medium text-fg">Template</h2>
-              <span className="text-[11px] font-mono text-muted tracking-wider">6 designs</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {LINK_TEMPLATES.map((t) => {
-                const activeT = template === t.key;
-                return (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => setTemplate(t.key)}
-                    className={`text-left rounded-xl border p-3 transition-all cursor-pointer ${
-                      activeT
-                        ? "border-accent ring-2 ring-accent/25 bg-accent-soft/40"
-                        : "border-line bg-surface/50 hover:border-line-strong"
-                    }`}
-                  >
-                    <div className="h-14 rounded-lg overflow-hidden border border-line/60 mb-2 pointer-events-none">
-                      <div className="origin-top-left scale-[0.22] w-[455%]">
-                        <LinkPageRender template={t.key} inert data={{ display_name: "A B", headline: "Headline", items: [
-                          { id: "1", label: "Portfolio", url: "#", icon: null, description: null },
-                          { id: "2", label: "Booking", url: "#", icon: null, description: null },
-                        ] }} />
-                      </div>
-                    </div>
-                    <div className="text-xs font-semibold text-fg">{t.name}</div>
-                    <div className="text-[10px] text-muted mt-0.5 leading-snug">{t.blurb}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
-          {/* Links editor */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-fg">Links ({items.length})</h2>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setItems((prev) => [...prev, { key: newKey(), ...EMPTY_ITEM }])}
-                className="border-line text-fg"
-              >
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add link
-              </Button>
-            </div>
-
-            {items.length === 0 ? (
-              <p className="text-xs text-faint text-center py-6">
-                No links yet — add Portfolio, Booking, GitHub, Buy me a coffee… whatever you want on one page.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {items.map((it, idx) => (
-                  <div key={it.key} className={`rounded-xl border p-3.5 space-y-2.5 ${it.active ? "border-line bg-surface/40" : "border-line/60 bg-surface/20 opacity-60"}`}>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={it.icon}
-                        onChange={(e) => updateItem(it.key, { icon: e.target.value.slice(0, 8) })}
-                        placeholder="🙂"
-                        title="Emoji icon (optional)"
-                        className="w-12 h-9 shrink-0 px-1 text-center rounded-lg border border-line bg-bg text-fg text-sm focus:border-accent focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        value={it.label}
-                        onChange={(e) => updateItem(it.key, { label: e.target.value })}
-                        placeholder="Label — e.g. My Portfolio"
-                        className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-line bg-bg text-fg text-sm focus:border-accent focus:outline-none"
-                      />
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button type="button" onClick={() => moveItem(idx, -1)} disabled={idx === 0}
-                          className="p-1.5 rounded-lg text-faint hover:text-fg hover:bg-surface disabled:opacity-30" title="Move up">
-                          <ArrowUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button type="button" onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1}
-                          className="p-1.5 rounded-lg text-faint hover:text-fg hover:bg-surface disabled:opacity-30" title="Move down">
-                          <ArrowDown className="w-3.5 h-3.5" />
-                        </button>
-                        <button type="button" onClick={() => removeItem(it.key)}
-                          className="p-1.5 rounded-lg text-faint hover:text-danger hover:bg-danger/10" title="Remove">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <input
-                      type="text"
-                      value={it.url}
-                      onChange={(e) => updateItem(it.key, { url: e.target.value })}
-                      placeholder="https://…"
-                      className="w-full h-9 px-3 rounded-lg border border-line bg-bg text-fg text-xs font-mono focus:border-accent focus:outline-none"
-                    />
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={it.description}
-                        onChange={(e) => updateItem(it.key, { description: e.target.value })}
-                        placeholder="Short description (optional)"
-                        className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-line bg-bg text-fg text-xs focus:border-accent focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => updateItem(it.key, { active: !it.active })}
-                        className={`shrink-0 h-9 px-3 rounded-lg border text-xs font-medium transition-all ${
-                          it.active ? "bg-accent-soft text-accent border-accent/30" : "bg-surface text-muted border-line"
-                        }`}
-                      >
-                        {it.active ? "Visible" : "Hidden"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* Right: sticky live preview */}
-        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-medium text-muted">Live Preview</span>
-            <span className="text-[11px] font-mono text-muted">{LINK_TEMPLATES.find((t) => t.key === template)?.name}</span>
+      {/* If no pages exist yet, show the onboarding prompt */}
+      {!loading && list.length === 0 ? (
+        <Card className="rounded-2xl border-dashed border-line bg-card p-10 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
+            <Globe className="w-7 h-7 text-accent" />
           </div>
-          <Card className="rounded-2xl border-line bg-card p-3 shadow-xs overflow-hidden">
-            <div className="rounded-xl overflow-hidden border border-line/60 max-h-[620px] overflow-y-auto">
-              <LinkPageRender template={template} data={previewData} inert />
-            </div>
-          </Card>
-          {published && (
-            <a
-              href={publicUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 w-full h-10 rounded-xl border border-line bg-surface/60 text-fg text-xs font-medium hover:border-line-strong transition-all"
-            >
-              <ExternalLink className="w-3.5 h-3.5" /> {publicUrl}
-            </a>
-          )}
-        </div>
-      </div>
+          <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+            No link pages yet
+          </h2>
+          <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+            Pick a handle, choose one of six designs and drop in your links —
+            publishing puts it live at /p/your-handle instantly.
+          </p>
+          <Link href="/dashboard/link-page/new" className="mt-6 inline-flex">
+            <Button size="sm" className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm">
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> New page
+            </Button>
+          </Link>
+        </Card>
+      ) : (
+        <>
+          {/* The trees — roster-style cards, click one to open its dashboard */}
+          <div className="space-y-3 mt-2.5">
 
-      {/* Analytics dashboard */}
-      <LinkPageStatsPanel />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6 stagger-grid">
+              {loading && list.length === 0
+                ? [1, 2, 3].map((i) => <Skeleton key={i} className="h-[210px] w-full rounded-2xl" />)
+                : list.map((page) => {
+                  const templateName = LINK_TEMPLATES.find((t) => t.key === page.template)?.name ?? page.template;
+                  return (
+                    <CategoryVisualCard
+                      key={page.id}
+                      title={page.name || page.display_name}
+                      subtitle={page.display_name || "Profile"}
+                      onClick={() => router.push(`/dashboard/link-page/${page.id}`)}
+                      icon={<Link2 className="w-4 h-4 text-accent" />}
+                      topRightContent={
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <span
+                            className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border capitalize ${page.published
+                                ? "bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/25"
+                                : "bg-sky-500/10 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25"
+                              }`}
+                          >
+                            {page.published ? "Live" : "Draft"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void openPreview(page)}
+                            className="w-7 h-7 rounded-lg border border-line bg-surface/60 dark:bg-white/5 flex items-center justify-center text-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
+                            title="Preview link page in new tab"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          {page.published && (
+                            <a
+                              href={`/p/${page.slug}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg border border-line bg-surface/60 dark:bg-white/5 flex items-center justify-center text-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
+                              title="Open live page"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void removeTree(page)}
+                            className="w-7 h-7 rounded-lg border border-line bg-surface/60 dark:bg-white/5 flex items-center justify-center text-muted hover:text-danger hover:bg-danger/10 hover:border-danger/30 transition-colors cursor-pointer"
+                            title="Delete link page"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      }
+                      tags={
+                        <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                          <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
+                            {templateName}
+                          </span>
+                        </div>
+                      }
+                    />
+                  );
+                })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

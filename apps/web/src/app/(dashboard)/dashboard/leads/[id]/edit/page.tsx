@@ -20,6 +20,7 @@ import { invalidateCache } from "@/hooks/use-api-data";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { logHandledError } from "@/lib/log-error";
 
 const leadFormSchema = z.object({
   name: z
@@ -231,7 +232,7 @@ export default function EditLeadPage() {
           setNotes(cleanNotes);
         }
       } catch (err) {
-        console.error("Error loading lead:", err);
+        logHandledError("Error loading lead:", err);
         toast.error("Failed to load lead details");
       } finally {
         if (mounted) setLoading(false);

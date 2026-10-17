@@ -44,6 +44,7 @@ import {
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 // Human labels for the N1 audit events the backend appends.
 const EVENT_LABELS: Record<string, string> = {
@@ -118,7 +119,7 @@ export default function ContractDetailPage() {
       setShowSignForm(false);
       refreshAll();
     } catch (err) {
-      console.error("Error counter-signing:", err);
+      logHandledError("Error counter-signing:", err);
       toast.error("Could not record your counter-signature");
     } finally {
       setSigning(false);
@@ -146,7 +147,7 @@ export default function ContractDetailPage() {
       toast.success("Re-sent as a new version");
       refreshAll();
     } catch (err) {
-      console.error("Error re-sending:", err);
+      logHandledError("Error re-sending:", err);
       toast.error("Could not re-send this contract");
     }
   };
@@ -163,7 +164,7 @@ export default function ContractDetailPage() {
       invalidateCache("contracts:templates");
       toast.success("Saved as a reusable template");
     } catch (err) {
-      console.error("Error saving template:", err);
+      logHandledError("Error saving template:", err);
       toast.error("Could not save as template");
     }
   };
@@ -195,7 +196,7 @@ export default function ContractDetailPage() {
       toast.success("Signing link rotated — copy the new link");
       refreshAll();
     } catch (err) {
-      console.error("Error rotating signing link:", err);
+      logHandledError("Error rotating signing link:", err);
       toast.error("Could not rotate the signing link");
     } finally {
       setRotating(false);
@@ -219,7 +220,7 @@ export default function ContractDetailPage() {
       toast.success("Contract deleted");
       router.push("/dashboard/contracts");
     } catch (err) {
-      console.error("Error deleting contract:", err);
+      logHandledError("Error deleting contract:", err);
       toast.error("Could not delete contract");
     }
   };

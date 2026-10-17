@@ -35,6 +35,7 @@ import {
 import { invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 export default function IntakeDetailPage() {
   const router = useRouter();
@@ -65,7 +66,7 @@ export default function IntakeDetailPage() {
         setForm(formData);
         setSubmissions(subsData || []);
       } catch (err) {
-        console.error("Error loading intake form:", err);
+        logHandledError("Error loading intake form:", err);
         toast.error("Could not load intake questionnaire");
       } finally {
         if (mounted) setLoading(false);
@@ -98,7 +99,7 @@ export default function IntakeDetailPage() {
       invalidateCache("dashboard:data");
       toast.success("Client response converted to Pipeline Lead!");
     } catch (err: any) {
-      console.error("Failed to convert submission:", err);
+      logHandledError("Failed to convert submission:", err);
       toast.error(err?.response?.data?.detail || "Could not convert submission to lead");
     } finally {
       setConvertingId(null);
@@ -124,7 +125,7 @@ export default function IntakeDetailPage() {
       toast.success("Intake form deleted");
       router.push("/dashboard/intake");
     } catch (err) {
-      console.error(err);
+      logHandledError(err);
       toast.error("Failed to delete intake form");
     } finally {
       setDeleting(false);

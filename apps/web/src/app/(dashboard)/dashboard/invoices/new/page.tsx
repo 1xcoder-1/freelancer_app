@@ -24,6 +24,7 @@ import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast } from "@/lib/validation";
+import { logHandledError } from "@/lib/log-error";
 
 const invoiceSchema = z.object({
   invoiceNumber: z.string().trim().min(1, "Invoice number is required"),
@@ -172,7 +173,7 @@ export default function NewInvoicePage() {
       toast.success("Invoice created & sent to client!");
       router.push(`/dashboard/invoices/${created.id}`);
     } catch (err: any) {
-      console.error("Error creating invoice:", err);
+      logHandledError("Error creating invoice:", err);
       toast.error(err?.response?.data?.detail || "Could not create invoice");
     } finally {
       setSubmitting(false);

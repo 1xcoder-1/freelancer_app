@@ -38,6 +38,7 @@ import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
+import { logHandledError } from "@/lib/log-error";
 
 const workspaceSchema = z.object({
   businessName: nameSchema("Business name", 150),
@@ -124,7 +125,7 @@ function SettingsContent() {
       try {
         await loadSettings();
       } catch (err) {
-        console.error("Failed to load workspace settings:", err);
+        logHandledError("Failed to load workspace settings:", err);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -165,7 +166,7 @@ function SettingsContent() {
       toast.success("Settings saved");
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err) {
-      console.error("Failed to save workspace settings:", err);
+      logHandledError("Failed to save workspace settings:", err);
       toast.error("Could not save settings. Please check your input and try again.");
     } finally {
       setSaving(false);
@@ -209,7 +210,7 @@ function SettingsContent() {
       URL.revokeObjectURL(url);
       toast.success("Backup downloaded");
     } catch (err) {
-      console.error("Export JSON failed:", err);
+      logHandledError("Export JSON failed:", err);
       toast.error("Could not export your data");
     } finally {
       setExporting(false);
@@ -277,7 +278,7 @@ function SettingsContent() {
       URL.revokeObjectURL(url);
       toast.success("CSV exported");
     } catch (err) {
-      console.error("Export CSV failed:", err);
+      logHandledError("Export CSV failed:", err);
       toast.error("Could not export the CSV");
     } finally {
       setExporting(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
   Clock,
@@ -27,19 +27,49 @@ import {
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
+
+function formatTimer(total: number) {
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+// Isolated leaf so the 1Hz tick re-renders only the clock text, not the
+// whole page (entry list, form, and cards included). The parent keys this
+// component on the session identity, so every server sync remounts it and
+// drift restarts from exact server truth — no reset state needed here.
+function LiveTimerDisplay({ session }: { session: TimerSession | null }) {
+  const [drift, setDrift] = useState(0);
+  const running = !!session?.is_running;
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setDrift((d) => d + 1), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  const displayedSeconds = session
+    ? session.elapsed_seconds + (session.is_running ? drift : 0)
+    : 0;
+
+  return (
+    <span className="font-mono text-3xl font-bold text-info">
+      {formatTimer(displayedSeconds)}
+    </span>
+  );
+}
 
 export default function TimeTrackerPage() {
   const { getToken } = useAuth();
 
   // Server-authoritative timer: the run lives in the DB, so this component only
-  // renders it. `drift` is the wall-clock seconds since the last server sync,
-  // added purely for a smooth ticking display while running.
+  // renders it. Live tick smoothing is handled by the LiveTimerDisplay leaf.
   const [session, setSession] = useState<TimerSession | null>(null);
-  const [drift, setDrift] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
-  const driftTimer = useRef<NodeJS.Timeout | null>(null);
 
   const { data: pageData, loading, refresh: loadData } = useApiData(
     "time-tracker:data",
@@ -68,7 +98,6 @@ export default function TimeTrackerPage() {
       try {
         const active = await getActiveTimer(token);
         setSession(active);
-        setDrift(0);
       } catch {
         // keep whatever we were showing; a poll failure shouldn't blank the clock
       }
@@ -89,17 +118,6 @@ export default function TimeTrackerPage() {
     };
   }, [getToken, syncActive]);
 
-  // Tick the display clock while a run is active.
-  useEffect(() => {
-    if (driftTimer.current) clearInterval(driftTimer.current);
-    if (session?.is_running) {
-      driftTimer.current = setInterval(() => setDrift((d) => d + 1), 1000);
-    }
-    return () => {
-      if (driftTimer.current) clearInterval(driftTimer.current);
-    };
-  }, [session?.is_running]);
-
   // Re-sync to server truth when the tab regains focus (long idle, phone swap).
   useEffect(() => {
     const onFocus = async () => {
@@ -109,10 +127,6 @@ export default function TimeTrackerPage() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [getToken, syncActive]);
-
-  const displayedSeconds = session
-    ? session.elapsed_seconds + (session.is_running ? drift : 0)
-    : 0;
 
   const resolveToken = async () => (await getToken()) || undefined;
 
@@ -133,10 +147,9 @@ export default function TimeTrackerPage() {
         token
       );
       setSession(s);
-      setDrift(0);
       toast.success("Timer started");
     } catch (err) {
-      console.error("Error starting timer:", err);
+      logHandledError("Error starting timer:", err);
       toast.error("Could not start the timer");
     } finally {
       setBusy(false);
@@ -150,9 +163,8 @@ export default function TimeTrackerPage() {
       const token = await resolveToken();
       const s = await pauseTimer(session.id, token);
       setSession(s);
-      setDrift(0);
     } catch (err) {
-      console.error("Error pausing timer:", err);
+      logHandledError("Error pausing timer:", err);
     } finally {
       setBusy(false);
     }
@@ -165,9 +177,8 @@ export default function TimeTrackerPage() {
       const token = await resolveToken();
       const s = await resumeTimer(session.id, token);
       setSession(s);
-      setDrift(0);
     } catch (err) {
-      console.error("Error resuming timer:", err);
+      logHandledError("Error resuming timer:", err);
     } finally {
       setBusy(false);
     }
@@ -180,13 +191,12 @@ export default function TimeTrackerPage() {
       const token = await resolveToken();
       await stopTimer(session.id, token);
       setSession(null);
-      setDrift(0);
       setDescription("");
       invalidateCache("dashboard:data");
       loadData();
       toast.success("Time saved");
     } catch (err) {
-      console.error("Error stopping timer:", err);
+      logHandledError("Error stopping timer:", err);
       toast.error("Could not stop the timer");
     } finally {
       setBusy(false);
@@ -208,16 +218,9 @@ export default function TimeTrackerPage() {
       loadData();
       toast.success("Time entry deleted");
     } catch (err) {
-      console.error("Error deleting time entry:", err);
+      logHandledError("Error deleting time entry:", err);
       toast.error("Could not delete time entry");
     }
-  };
-
-  const formatTimer = (total: number) => {
-    const hrs = Math.floor(total / 3600);
-    const mins = Math.floor((total % 3600) / 60);
-    const secs = total % 60;
-    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const running = !!session?.is_running;
@@ -279,7 +282,10 @@ export default function TimeTrackerPage() {
 
           <div className="md:col-span-1 flex flex-col items-end gap-2">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-3xl font-bold text-info">{formatTimer(displayedSeconds)}</span>
+              <LiveTimerDisplay
+                key={session ? `${session.id}:${session.elapsed_seconds}:${session.is_running}` : "idle"}
+                session={session}
+              />
             </div>
 
             {!session && (

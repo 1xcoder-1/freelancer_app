@@ -37,6 +37,7 @@ import {
 import { invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 const STAGES: Array<{ key: LeadStage; label: string; step: number; tone: string }> = [
   { key: "new", label: "New Lead", step: 1, tone: "bg-surface text-muted" },
@@ -90,7 +91,7 @@ export default function LeadDetailPage() {
         if (!mounted) return;
         setLead(leadData);
       } catch (err) {
-        console.error("Error loading lead:", err);
+        logHandledError("Error loading lead:", err);
         toast.error("Could not load lead profile");
       } finally {
         if (mounted) setLoading(false);
@@ -157,7 +158,7 @@ export default function LeadDetailPage() {
       toast.success(mergeInto ? "Lead merged into the existing client!" : "Lead converted to Client roster!");
       router.push(`/dashboard/clients/${client.id}`);
     } catch (err) {
-      console.error("Error converting lead:", err);
+      logHandledError("Error converting lead:", err);
       toast.error((err as Error)?.message || "Could not convert lead to client");
       setBusyAction(false);
     }

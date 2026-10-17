@@ -26,6 +26,8 @@ from app.api.v1.endpoints import (
     reports,
     links,
     link_pages,
+    link_page_preview,
+    stock,
     book_ai
 )
 
@@ -56,6 +58,8 @@ api_router.include_router(testimonials.router)
 api_router.include_router(reports.router)
 api_router.include_router(links.router)
 api_router.include_router(link_pages.router)
+api_router.include_router(link_page_preview.router)
+api_router.include_router(stock.router)
 api_router.include_router(book_ai.router)
 
 

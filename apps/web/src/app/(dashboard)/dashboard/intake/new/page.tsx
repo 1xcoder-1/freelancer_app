@@ -23,6 +23,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -241,7 +242,7 @@ export default function NewIntakeFormPage() {
       celebrate("Form published");
       router.push(`/dashboard/intake/${created.id}`);
     } catch (err: any) {
-      console.error(err);
+      logHandledError(err);
       toast.error(err?.response?.data?.detail || "Failed to create intake form");
     } finally {
       setSaving(false);

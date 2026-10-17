@@ -26,6 +26,7 @@ import { getInvoice, updateInvoiceStatus, deleteInvoice, type Invoice } from "@/
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -55,7 +56,7 @@ export default function InvoiceDetailPage() {
       loadInvoice(true);
       toast.success(`Invoice marked as ${newStatus}`);
     } catch (err) {
-      console.error("Error updating invoice status:", err);
+      logHandledError("Error updating invoice status:", err);
       toast.error("Could not update invoice status");
     } finally {
       setBusy(false);
@@ -95,7 +96,7 @@ export default function InvoiceDetailPage() {
       toast.success("Invoice deleted");
       router.push("/dashboard/invoices");
     } catch (err) {
-      console.error("Error deleting invoice:", err);
+      logHandledError("Error deleting invoice:", err);
       toast.error("Could not delete invoice");
     }
   };

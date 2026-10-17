@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -18,28 +19,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/dashboard/patterns";
-import { LINK_TEMPLATES } from "@/components/link-page/template-constants";
-import { getMyLinkPages, getLinkPageStats, type LinkPage, type LinkPageStats } from "@/lib/api";
+import { getMyLinkPages, getLinkPageStats, createLinkPagePreviewToken, type LinkPage, type LinkPageStats } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { LinkPageStatsPanel } from "@/components/link-page/LinkPageStatsPanel";
+import { logHandledError } from "@/lib/log-error";
 
 /* Dashboard for one link tree — its live URL, 4 real-time headline cards,
    and windowed analytics panel. Header structure mirrors the client project detail page. */
 export default function LinkTreeDashboard() {
   const params = useParams();
   const pageId = (params?.id as string) || "";
+  const { getToken } = useAuth();
 
   const { data: pages, loading, refresh } = useApiData<LinkPage[]>(
     "linkpage:my",
     async (token) => getMyLinkPages(token),
-    { reportContext: "link-page-tree", pollMs: 3_000, ttlMs: 0 }
+    { reportContext: "link-page-tree", pollMs: 30_000 }
   );
 
   // Real-time windowed analytics for this specific link page (recent 30 days)
   const { data: statsData, refresh: refreshStats } = useApiData<LinkPageStats | null>(
     `linkpage:stats:${pageId}:30`,
     async (token) => getLinkPageStats(pageId, 30, token).catch(() => null),
-    { reportContext: "link-page-tree-stats", pollMs: 3_000, ttlMs: 0 }
+    { reportContext: "link-page-tree-stats", pollMs: 30_000 }
   );
 
   const page = (pages ?? []).find((p) => p.id === pageId);
@@ -70,6 +72,24 @@ export default function LinkTreeDashboard() {
       window.removeEventListener("visibilitychange", handleSync);
     };
   }, [pageId, refresh, refreshStats]);
+
+  // Live preview opens the public URL with a short-lived draft token; the
+  // editor's WebSocket stream keeps the tab in sync.
+  const openPreview = async () => {
+    const previewTab = window.open("", "_blank");
+    try {
+      const { token } = await createLinkPagePreviewToken(pageId, (await getToken()) || undefined);
+      if (previewTab && page) {
+        previewTab.location.href = `/p/${page.slug}?preview=${encodeURIComponent(token)}`;
+      } else if (!previewTab) {
+        toast.error("Please allow pop-ups for this site to open the preview.");
+      }
+    } catch (e) {
+      logHandledError("Preview launch failed:", e);
+      previewTab?.close();
+      toast.error("Could not open the preview. Please try again.");
+    }
+  };
 
   const copyPublicUrl = async (slug: string) => {
     try {
@@ -137,7 +157,6 @@ export default function LinkTreeDashboard() {
   const configuredActiveCount = (page.items ?? []).filter((i) => i.active !== false).length;
   const configuredTotalCount = (page.items ?? []).length;
   const statsItemsCount = (statsData?.items ?? []).length;
-  const totalLinks = Math.max(configuredTotalCount, statsItemsCount);
   const activeItemsCount = configuredTotalCount > 0
     ? configuredActiveCount
     : statsItemsCount;
@@ -148,7 +167,6 @@ export default function LinkTreeDashboard() {
     .filter((i) => (Number(i.clicks_count) || 0) > 0)
     .sort((a, b) => (Number(b.clicks_count) || 0) - (Number(a.clicks_count) || 0))[0];
   const topItemLabel = topConfiguredItem?.label || topStatsItem?.label || null;
-  const templateName = LINK_TEMPLATES.find((t) => t.key === page.template)?.name ?? page.template;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 animate-in fade-in duration-300">
@@ -201,17 +219,16 @@ export default function LinkTreeDashboard() {
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
-            <Link href={`/dashboard/link-page/preview/${page.id}`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs rounded-xl h-9 w-9 p-0 border-line text-muted hover:text-fg hover:bg-surface cursor-pointer transition-colors"
-                title="Preview link page"
-                aria-label="Preview link page"
-              >
-                <Eye className="w-3.5 h-3.5" />
-              </Button>
-            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void openPreview()}
+              className="text-xs rounded-xl h-9 w-9 p-0 border-line text-muted hover:text-fg hover:bg-surface cursor-pointer transition-colors"
+              title="Preview link page in new tab"
+              aria-label="Preview link page in new tab"
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </Button>
             {page.published && (
               <a href={`/p/${page.slug}`} target="_blank" rel="noopener noreferrer">
                 <Button

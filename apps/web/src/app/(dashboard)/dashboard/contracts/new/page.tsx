@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast } from "@/lib/validation";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 const contractSchema = z.object({
   title: z.string().trim().min(2, "Title must be at least 2 characters").max(100, "Title is too long"),
@@ -175,7 +176,7 @@ export default function NewContractPage() {
       toast.success("Contract created & public signing link generated!");
       router.push(`/dashboard/contracts/${created.id}`);
     } catch (err: any) {
-      console.error("Error creating contract:", err);
+      logHandledError("Error creating contract:", err);
       toast.error(err?.response?.data?.detail || "Could not create contract");
     } finally {
       setSubmitting(false);

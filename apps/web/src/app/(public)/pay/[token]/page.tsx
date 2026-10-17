@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import {
   Receipt,
@@ -51,6 +51,7 @@ export default function PublicPaymentPage() {
     if (!token) return;
     try {
       const data = await getPublicInvoice(token);
+      if (data.amount_due <= 0) settledRef.current = true;
       setInvoice(data);
       // Default the amount field to whatever is still owed.
       setAmount((prev) => (prev === "" ? data.amount_due.toFixed(2) : prev));
@@ -61,11 +62,17 @@ export default function PublicPaymentPage() {
     }
   }, [token]);
 
+  const settledRef = useRef(false);
+
   useEffect(() => {
     load();
     // Lightweight real-time: re-pull every 15s so a payment made in another tab
-    // is reflected without a manual refresh.
-    const id = setInterval(load, 15_000);
+    // is reflected without a manual refresh. Stops entirely once the invoice is
+    // settled and pauses in hidden tabs.
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible" || settledRef.current) return;
+      void load();
+    }, 15_000);
     return () => clearInterval(id);
   }, [load]);
 

@@ -26,6 +26,7 @@ import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { celebrate } from "@/components/common/Celebration";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 const composerSchema = z.object({
   clientScope: nameSchema("Project scope", 1000),
@@ -95,7 +96,7 @@ export default function NewProposalPage() {
       setGeneratedPitch(res.pitch_content);
       toast.success("Pitch generated — review and edit below");
     } catch (err) {
-      console.error("AI Generation failed:", err);
+      logHandledError("AI Generation failed:", err);
       toast.error("AI could not generate a pitch");
     } finally {
       setIsGenerating(false);
@@ -126,7 +127,7 @@ export default function NewProposalPage() {
       guard.markSaved();
       router.push("/dashboard/proposals");
     } catch (err) {
-      console.error("Failed to save proposal:", err);
+      logHandledError("Failed to save proposal:", err);
       toast.error("Could not save proposal");
     } finally {
       setIsSaving(false);

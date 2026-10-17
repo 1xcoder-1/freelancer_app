@@ -14,12 +14,11 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const isReportCard = pathname?.startsWith("/dashboard/report-card");
-  const isLinkPagePreview = pathname?.startsWith("/dashboard/link-page/preview");
   // The board editor is a full-screen canvas surface: it owns its own header
   // (back / rename / sync / theme), so it gets an un-padded area and skips the
   // shared top bar. The board LIST (/dashboard/planner) stays a normal page.
   const isPlannerBoard = /^\/dashboard\/planner\/[^/]+\/?$/.test(pathname || "");
-  const hideTopBar = isPlannerBoard || isLinkPagePreview;
+  const hideTopBar = isPlannerBoard;
   const fullBleed = isReportCard || isPlannerBoard;
 
   return (

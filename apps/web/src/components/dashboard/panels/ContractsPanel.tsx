@@ -26,6 +26,7 @@ import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -99,7 +100,7 @@ export function ContractsPanel() {
       loadData(true);
       toast.success("Contract deleted");
     } catch (err) {
-      console.error("Error deleting contract:", err);
+      logHandledError("Error deleting contract:", err);
       toast.error("Could not delete contract");
     }
   };

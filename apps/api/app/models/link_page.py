@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -31,7 +31,11 @@ class LinkPage(Base, TimestampMixin):
     bio: Mapped[str] = mapped_column(String(500), nullable=True)
     avatar_url: Mapped[str] = mapped_column(String(500), nullable=True)
     theme: Mapped[str] = mapped_column(String(32), default="default", nullable=False)
-    template: Mapped[str] = mapped_column(String(32), default="classic", nullable=False)
+    template: Mapped[str] = mapped_column(String(32), default="paper", nullable=False)
+    # Optional cover photo (Cloudinary) behind the page; overlay is the scrim
+    # opacity (0.0-1.0) that keeps text readable on busy photos.
+    background_image_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    background_overlay: Mapped[float] = mapped_column(Float, nullable=True)
     published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Lifetime page views. Analytics windows read link_events; this counter
     # is the cheap badge the page itself shows.
@@ -54,6 +58,11 @@ class LinkItem(Base, TimestampMixin):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     icon: Mapped[str] = mapped_column(String(40), nullable=True)
     description: Mapped[str] = mapped_column(String(300), nullable=True)
+    # Optional thumbnail image (Cloudinary) shown by the image-card templates.
+    image_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    # 'link' | 'header' | 'divider' — replaces the isHeadingItem icon/url
+    # guessing game; validated in the endpoint schema.
+    item_type: Mapped[str] = mapped_column(String(16), default="link", nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Lifetime clicks on this item (the windowed stats come from link_events).

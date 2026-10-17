@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as Sentry from '@sentry/nextjs';
+import { logHandledError } from "@/lib/log-error";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -2071,6 +2072,8 @@ export const uploadFileToCloudinary = async (
   fileName?: string
 ): Promise<{ url: string; name: string; size: number; type: string }> => {
   const resolvedName = fileName || (file instanceof File ? file.name : "avatar.webp");
+
+  // Strategy 1: Direct backend /storage/upload (validated, compressed, and proxied)
   try {
     const formData = new FormData();
     formData.append("file", file, resolvedName);
@@ -2079,65 +2082,71 @@ export const uploadFileToCloudinary = async (
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const res = await apiClient.post<{ url: string; secure_url?: string; file_key: string }>(
-      "/storage/upload",
-      formData,
-      {
-        headers: {
-          ...headers,
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
+    const res = await fetch(`${API_URL}/api/v1/storage/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
 
-    if (res.data?.secure_url || res.data?.url) {
-      return {
-        url: res.data.secure_url || res.data.url,
-        name: resolvedName,
-        size: file.size,
-        type: file.type || "image/webp",
-      };
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.secure_url || data?.url) {
+        return {
+          url: data.secure_url || data.url,
+          name: resolvedName,
+          size: file.size,
+          type: file.type || "image/webp",
+        };
+      }
+    } else {
+      const errorText = await res.text().catch(() => "");
+      console.warn("Direct /storage/upload failed, falling back to signed flow:", res.status, errorText);
     }
   } catch (e) {
     console.warn("Direct /storage/upload error, falling back to signature flow:", e);
-    try {
-      const signatureRes = await getUploadSignature(
-        {
-          file_key: resolvedName.replace(/[^a-zA-Z0-9_\-\.]/g, "_"),
-          content_type: file.type || "image/webp",
-          category,
-        },
-        token
-      );
+  }
 
-      if (signatureRes.upload_url) {
-        const formData = new FormData();
-        formData.append("file", file, resolvedName);
-        const sig = signatureRes as unknown as Record<string, unknown>;
-        if (sig.api_key) formData.append("api_key", String(sig.api_key));
-        if (sig.timestamp) formData.append("timestamp", String(sig.timestamp));
-        if (sig.signature) formData.append("signature", String(sig.signature));
-        if (sig.folder) formData.append("folder", String(sig.folder));
-        if (sig.public_id) formData.append("public_id", String(sig.public_id));
+  // Strategy 2: Pre-signed direct upload to Cloudinary CDN
+  try {
+    const signatureRes = await getUploadSignature(
+      {
+        file_key: resolvedName.replace(/[^a-zA-Z0-9_\-\.]/g, "_"),
+        content_type: file.type || "image/webp",
+        category,
+      },
+      token
+    );
 
-        const uploadRes = await fetch(signatureRes.upload_url, {
-          method: "POST",
-          body: formData,
-        });
+    if (signatureRes.upload_url) {
+      const formData = new FormData();
+      formData.append("file", file, resolvedName);
+      const sig = signatureRes as unknown as Record<string, unknown>;
+      if (sig.api_key) formData.append("api_key", String(sig.api_key));
+      if (sig.timestamp) formData.append("timestamp", String(sig.timestamp));
+      if (sig.signature) formData.append("signature", String(sig.signature));
+      if (sig.folder) formData.append("folder", String(sig.folder));
+      if (sig.public_id) formData.append("public_id", String(sig.public_id));
 
-        if (uploadRes.ok) {
-          const json = await uploadRes.json();
-          return {
-            url: json.secure_url || json.url,
-            name: resolvedName,
-            size: file.size,
-            type: file.type || "image/webp",
-          };
-        }
+      const uploadRes = await fetch(signatureRes.upload_url, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (uploadRes.ok) {
+        const json = await uploadRes.json();
+        return {
+          url: json.secure_url || json.url,
+          name: resolvedName,
+          size: file.size,
+          type: file.type || "image/webp",
+        };
+      } else {
+        const errText = await uploadRes.text().catch(() => "");
+        logHandledError("Cloudinary signed upload failed:", uploadRes.status, errText);
       }
-    } catch (fallbackErr) {
-      console.error("Cloudinary signed upload failed:", fallbackErr);
     }
+  } catch (fallbackErr) {
+    logHandledError("Cloudinary signed upload failed:", fallbackErr);
   }
 
   throw new Error("Could not upload image to Cloudinary.");
@@ -2414,8 +2423,10 @@ export interface LinkPageItem {
   page_id?: string;
   label: string;
   url: string;
+  item_type?: string;
   icon?: string | null;
   description?: string | null;
+  image_url?: string | null;
   sort_order: number;
   active?: boolean;
   clicks_count?: number;
@@ -2432,6 +2443,8 @@ export interface LinkPage {
   avatar_url?: string | null;
   theme: string;
   template: string;
+  background_image_url?: string | null;
+  background_overlay?: number | null;
   published: boolean;
   views_count: number;
   clicks_count?: number;
@@ -2449,6 +2462,8 @@ export interface LinkPageUpsertPayload {
   avatar_url?: string;
   theme: string;
   template: string;
+  background_image_url?: string | null;
+  background_overlay?: number | null;
   published: boolean;
 }
 
@@ -2457,8 +2472,10 @@ export type LinkPageUpdatePayload = Partial<Omit<LinkPageUpsertPayload, "slug">>
 export interface LinkPageItemInput {
   label: string;
   url: string;
+  item_type?: string;
   icon?: string;
   description?: string;
+  image_url?: string | null;
   sort_order?: number;
   active?: boolean;
 }
@@ -2479,7 +2496,9 @@ export interface PublicLinkPage {
   avatar_url?: string | null;
   theme: string;
   template: string;
-  items: { id: string; label: string; url: string; icon?: string | null; description?: string | null; sort_order: number }[];
+  background_image_url?: string | null;
+  background_overlay?: number | null;
+  items: { id: string; label: string; url: string; item_type?: string; icon?: string | null; description?: string | null; image_url?: string | null; sort_order: number }[];
 }
 
 export const getMyLinkPages = async (token?: string): Promise<LinkPage[]> => {
@@ -2540,7 +2559,46 @@ export const getLinkPageStats = async (pageId: string, days: number, token?: str
 };
 
 export const getPublicLinkPage = async (slug: string): Promise<PublicLinkPage> => {
-  const response = await apiClient.get<PublicLinkPage>(`/link-pages/public/${slug}`);
+  const response = await apiClient.get<PublicLinkPage>(`/link-pages/public/${encodeURIComponent(slug)}`);
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Stock Photos (Unsplash proxy — key stays server-side)
+// ------------------------------------------------------------------------------
+export interface StockImage {
+  id: string;
+  url: string;
+  thumb: string;
+  description: string;
+  photographer: string;
+  photographer_url: string;
+}
+
+export const getStockImages = async (
+  query: string,
+  token?: string,
+  page = 1,
+  perPage = 12
+): Promise<{ images: StockImage[]; total: number }> => {
+  const response = await apiClient.get<{ images: StockImage[]; total: number }>('/stock/images', {
+    ...authHeaders(token),
+    params: { q: query, page, per_page: perPage },
+  });
+  return response.data;
+};
+
+// Short-lived token letting this browser tab watch the live draft of one
+// owned page over the preview WebSocket (see use-live-preview.ts).
+export const createLinkPagePreviewToken = async (
+  pageId: string,
+  token?: string
+): Promise<{ token: string; expires_in: number }> => {
+  const response = await apiClient.post<{ token: string; expires_in: number }>(
+    `/link-pages/my/${pageId}/preview-token`,
+    {},
+    authHeaders(token)
+  );
   return response.data;
 };
 

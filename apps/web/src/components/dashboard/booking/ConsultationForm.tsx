@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { BookingConsultationPayload } from "@/lib/api";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DEFAULT_MASK = "1111100";
@@ -214,7 +215,7 @@ export function ConsultationForm({
       guard.markSaved();
       router.push(doneHref);
     } catch (err) {
-      console.error("Failed to save consultation:", err);
+      logHandledError("Failed to save consultation:", err);
       toast.error(err instanceof Error ? err.message : "Could not save service");
     } finally {
       setSaving(false);

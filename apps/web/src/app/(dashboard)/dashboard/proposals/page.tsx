@@ -26,6 +26,7 @@ import {
   type Proposal,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { logHandledError } from "@/lib/log-error";
 
 function ProposalsList() {
   const { getToken } = useAuth();
@@ -52,7 +53,7 @@ function ProposalsList() {
       loadData();
       toast.success("Proposal deleted");
     } catch (err) {
-      console.error("Failed to delete proposal:", err);
+      logHandledError("Failed to delete proposal:", err);
       toast.error("Could not delete proposal");
     }
   };
@@ -63,7 +64,7 @@ function ProposalsList() {
       await updateProposalStatus(id, statusVal, token);
       loadData();
     } catch (err) {
-      console.error("Failed to update proposal status:", err);
+      logHandledError("Failed to update proposal status:", err);
     }
   };
 

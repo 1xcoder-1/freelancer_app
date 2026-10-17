@@ -8,6 +8,7 @@ import { Camera, Trash2, RefreshCw, CloudUpload } from "@/components/animated-ic
 import { Button } from "@/components/ui/button";
 import { compressImage } from "@/lib/image-compressor";
 import { uploadFileToCloudinary } from "@/lib/api";
+import { logHandledError } from "@/lib/log-error";
 
 interface AvatarUploaderProps {
   value: string;
@@ -72,7 +73,7 @@ export function AvatarUploader({
           : "Avatar uploaded to cloud"
       );
     } catch (err) {
-      console.error("Avatar upload failed:", err);
+      logHandledError("Avatar upload failed:", err);
       toast.error(err instanceof Error ? err.message : "Failed to upload avatar");
     } finally {
       setIsProcessing(false);
@@ -174,7 +175,7 @@ export function AvatarUploader({
         </div>
 
         <p className="text-[11px] text-muted leading-relaxed">
-          Compressed client-side and saved to Cloudinary. PNG, JPG, or WebP.
+          Recommended square image (400×400px). PNG, JPG, or WebP.
         </p>
 
         {/* Hidden File Input */}

@@ -22,6 +22,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -217,7 +218,7 @@ export default function EditIntakeFormPage() {
           }))
         );
       } catch (err) {
-        console.error("Error loading intake form:", err);
+        logHandledError("Error loading intake form:", err);
         toast.error("Could not load questionnaire for editing");
       } finally {
         if (mounted) setLoading(false);
@@ -324,7 +325,7 @@ export default function EditIntakeFormPage() {
       toast.success("Intake form updated successfully!");
       router.push(`/dashboard/intake/${formId}`);
     } catch (err: any) {
-      console.error(err);
+      logHandledError(err);
       toast.error(err?.response?.data?.detail || "Failed to update intake form");
     } finally {
       setSaving(false);

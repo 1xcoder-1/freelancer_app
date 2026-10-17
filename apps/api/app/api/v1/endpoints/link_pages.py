@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,7 +52,9 @@ class LinkPageCreate(BaseModel):
     bio: Optional[str] = Field(None, max_length=500)
     avatar_url: Optional[str] = Field(None, max_length=500)
     theme: str = Field("default", max_length=32)
-    template: str = Field("classic", max_length=32)
+    template: str = Field("paper", max_length=32)
+    background_image_url: Optional[str] = Field(None, max_length=500)
+    background_overlay: Optional[float] = Field(None, ge=0.0, le=1.0)
     published: bool = False
 
     @field_validator("slug")
@@ -60,7 +62,7 @@ class LinkPageCreate(BaseModel):
     def _check_slug(cls, v: str) -> str:
         return _validate_slug(v)
 
-    @field_validator("name", "display_name", "headline", "bio", "theme", "template")
+    @field_validator("name", "display_name", "headline", "bio", "theme", "template", "background_image_url")
     @classmethod
     def _strip(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() if isinstance(v, str) else v
@@ -75,6 +77,8 @@ class LinkPageUpdate(BaseModel):
     avatar_url: Optional[str] = Field(None, max_length=500)
     theme: Optional[str] = Field(None, max_length=32)
     template: Optional[str] = Field(None, max_length=32)
+    background_image_url: Optional[str] = Field(None, max_length=500)
+    background_overlay: Optional[float] = Field(None, ge=0.0, le=1.0)
     published: Optional[bool] = None
 
     @field_validator("slug")
@@ -82,37 +86,55 @@ class LinkPageUpdate(BaseModel):
     def _check_slug(cls, v: Optional[str]) -> Optional[str]:
         return _validate_slug(v) if v is not None else None
 
-    @field_validator("name", "display_name", "headline", "bio", "theme", "template")
+    @field_validator("name", "display_name", "headline", "bio", "theme", "template", "background_image_url")
     @classmethod
     def _strip(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() if isinstance(v, str) else v
 
 
+_ITEM_TYPES = ("link", "header", "divider")
+
+
 class LinkItemIn(BaseModel):
-    label: str = Field(..., min_length=1, max_length=200)
-    url: str = Field(..., min_length=4, max_length=500)
+    label: str = Field("", max_length=200)
+    url: str = Field("", max_length=500)
+    item_type: str = Field("link", max_length=16)
     icon: Optional[str] = Field(None, max_length=40)
     description: Optional[str] = Field(None, max_length=300)
+    image_url: Optional[str] = Field(None, max_length=500)
     sort_order: int = 0
     active: bool = True
 
-    @field_validator("url")
+    @field_validator("item_type")
     @classmethod
-    def _check_url(cls, v: str) -> str:
-        # Only http(s) targets: javascript:/data: URLs in a public button are XSS
-        # bait, and a bare "foo" link never resolves.
-        v = v.strip()
-        if not re.match(r"^https?://", v, re.IGNORECASE):
-            raise ValueError("Link URL must start with http:// or https://")
+    def _check_item_type(cls, v: str) -> str:
+        v = (v or "link").strip().lower()
+        if v not in _ITEM_TYPES:
+            raise ValueError("item_type must be 'link', 'header' or 'divider'")
         return v
 
-    @field_validator("label")
+    @field_validator("label", "url", "image_url")
     @classmethod
-    def _check_label(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("Label must not be blank")
-        return v
+    def _strip(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> "LinkItemIn":
+        if self.item_type == "link":
+            # Only http(s) targets: javascript:/data: URLs in a public button
+            # are XSS bait, and a bare "foo" link never resolves.
+            if not re.match(r"^https?://", self.url or "", re.IGNORECASE):
+                raise ValueError("Link URL must start with http:// or https://")
+            if not self.label:
+                raise ValueError("Label must not be blank")
+        else:
+            # Headings/dividers carry no target — blank whatever arrived so a
+            # crafted url can't hide behind a non-link item.
+            self.url = ""
+            if self.item_type == "header" and not self.label:
+                raise ValueError("Heading text must not be blank")
+            self.label = self.label or ""
+        return self
 
 
 class LinkItemsReplace(BaseModel):
@@ -160,6 +182,8 @@ def _page_payload(page: LinkPage, items: List[LinkItem]) -> Dict[str, Any]:
         "avatar_url": page.avatar_url,
         "theme": page.theme,
         "template": page.template,
+        "background_image_url": page.background_image_url,
+        "background_overlay": page.background_overlay,
         "published": bool(page.published),
         "views_count": page.views_count or 0,
         "clicks_count": sum((i.clicks_count or 0) for i in items),
@@ -175,8 +199,10 @@ def _item_payload(item: LinkItem) -> Dict[str, Any]:
         "page_id": item.page_id,
         "label": item.label,
         "url": item.url,
+        "item_type": item.item_type or "link",
         "icon": item.icon,
         "description": item.description,
+        "image_url": item.image_url,
         "sort_order": item.sort_order,
         "active": bool(item.active),
         "clicks_count": item.clicks_count or 0,
@@ -261,13 +287,20 @@ async def _stats_payload(db: AsyncSession, pages: List[LinkPage], days: int) -> 
     breakdown and top referrers."""
     start = datetime.utcnow() - timedelta(days=days - 1)
     start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Column tuples, not ORM entities — a 90-day window can carry thousands of
+    # events and only these four fields are ever read below.
     res = await db.execute(
-        select(LinkEvent).where(
+        select(
+            LinkEvent.event_type,
+            LinkEvent.created_at,
+            LinkEvent.item_id,
+            LinkEvent.referrer,
+        ).where(
             LinkEvent.page_id.in_([p.id for p in pages]),
             LinkEvent.created_at >= start,
         )
     )
-    events = list(res.scalars().all())
+    events = res.all()
 
     views = sum(1 for e in events if e.event_type == "view")
     clicks = sum(1 for e in events if e.event_type == "click")
@@ -370,7 +403,9 @@ async def create_my_page(
         bio=payload.bio or None,
         avatar_url=payload.avatar_url or None,
         theme=payload.theme or "default",
-        template=payload.template or "classic",
+        template=payload.template or "paper",
+        background_image_url=payload.background_image_url or None,
+        background_overlay=payload.background_overlay,
         published=payload.published,
     )
     db.add(page)
@@ -412,6 +447,10 @@ async def update_my_page(
         page.theme = payload.theme
     if payload.template is not None:
         page.template = payload.template
+    if "background_image_url" in payload.model_fields_set:
+        page.background_image_url = payload.background_image_url or None
+    if "background_overlay" in payload.model_fields_set:
+        page.background_overlay = payload.background_overlay
     if payload.published is not None:
         page.published = payload.published
     await db.commit()
@@ -450,11 +489,13 @@ async def replace_my_items(
 
     # Fetch existing items for this page to preserve click counts and IDs where possible
     existing_items = await _items_of(db, page.id)
-    existing_by_label_url = {(i.label.strip().lower(), i.url.strip()): i for i in existing_items}
+    existing_by_key = {
+        (i.label.strip().lower(), i.url.strip(), i.item_type or "link"): i for i in existing_items
+    }
 
     await db.execute(delete(LinkItem).where(LinkItem.page_id == page.id))
     for idx, item_in in enumerate(payload.items):
-        old = existing_by_label_url.get((item_in.label.strip().lower(), item_in.url.strip()))
+        old = existing_by_key.get((item_in.label.strip().lower(), item_in.url.strip(), item_in.item_type))
         preserved_id = old.id if old else None
         preserved_clicks = (old.clicks_count or 0) if old else 0
 
@@ -462,8 +503,10 @@ async def replace_my_items(
             "page_id": page.id,
             "label": item_in.label,
             "url": item_in.url,
+            "item_type": item_in.item_type,
             "icon": item_in.icon or None,
             "description": item_in.description or None,
+            "image_url": item_in.image_url or None,
             "sort_order": idx,
             "active": item_in.active,
             "clicks_count": preserved_clicks,
@@ -535,13 +578,17 @@ async def get_public_page(slug: str, db: AsyncSession = Depends(get_db)):
         "avatar_url": page.avatar_url,
         "theme": page.theme,
         "template": page.template,
+        "background_image_url": page.background_image_url,
+        "background_overlay": page.background_overlay,
         "items": [
             {
                 "id": i.id,
                 "label": i.label,
                 "url": i.url,
+                "item_type": i.item_type or "link",
                 "icon": i.icon,
                 "description": i.description,
+                "image_url": i.image_url,
                 "sort_order": i.sort_order,
             }
             for i in items

@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { StatCard } from "@/components/dashboard/patterns";
 import {
+  createLinkPagePreviewToken,
   deleteLinkPage,
   getMyLinkPages,
   getMyLinkPageStats,
@@ -31,6 +32,7 @@ import {
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { LINK_TEMPLATES } from "@/components/link-page/template-constants";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
+import { logHandledError } from "@/lib/log-error";
 
 const MAX_PAGES = 3;
 
@@ -40,18 +42,19 @@ export default function LinkPageOverview() {
   const { getToken } = useAuth();
   const router = useRouter();
 
-  // Real-time polling every 3s with 0 TTL for live link page data
+  // 30s polling keeps aggregate analytics fresh; switching back to the tab
+  // triggers an instant refresh via the focus listener below.
   const { data: pages, loading, refresh } = useApiData<LinkPage[]>(
     "linkpage:my",
     async (token) => getMyLinkPages(token),
-    { reportContext: "link-page-overview", pollMs: 3_000, ttlMs: 0 }
+    { reportContext: "link-page-overview", pollMs: 30_000 }
   );
 
   // Real-time aggregate analytics for recent 30 days
   const { data: statsData, refresh: refreshStats } = useApiData<LinkPageStats | null>(
     "linkpage:my:stats:30",
     async (token) => getMyLinkPageStats(30, token).catch(() => null),
-    { reportContext: "link-page-overview-stats", pollMs: 3_000, ttlMs: 0 }
+    { reportContext: "link-page-overview-stats", pollMs: 30_000 }
   );
 
   const list = pages ?? [];
@@ -99,14 +102,6 @@ export default function LinkPageOverview() {
   const rawCtr = totalViews > 0 ? (totalClicks / totalViews) * 100 : (Number(statsData?.totals?.ctr) || 0);
   const ctrInt = Math.round(rawCtr);
   const livePages = list.filter((p) => p.published).length;
-  const draftPages = list.length - livePages;
-
-  const allItems = list.flatMap((p) => p.items);
-  const totalLinks = allItems.length;
-  const activeLinks = allItems.filter((i) => i.active !== false).length;
-  const topItem = allItems
-    .filter((i) => (Number(i.clicks_count) || 0) > 0)
-    .sort((a, b) => (Number(b.clicks_count) || 0) - (Number(a.clicks_count) || 0))[0];
 
   const refreshAll = async (notify = false) => {
     invalidateCache("linkpage:my");
@@ -114,6 +109,24 @@ export default function LinkPageOverview() {
     invalidateCache("linkpage:stats:30");
     await Promise.all([refresh(true), refreshStats(true)]);
     if (notify) toast.success("Real-time data refreshed");
+  };
+
+  // Live preview opens at the same public URL as the published page
+  // (/p/{slug}?preview={token}) in a new tab, fed by the editor's WS stream.
+  const openPreview = async (page: LinkPage) => {
+    const previewTab = window.open("", "_blank");
+    try {
+      const { token } = await createLinkPagePreviewToken(page.id, (await getToken()) || undefined);
+      if (previewTab) {
+        previewTab.location.href = `/p/${page.slug}?preview=${encodeURIComponent(token)}`;
+      } else {
+        toast.error("Please allow pop-ups for this site to open the preview.");
+      }
+    } catch (e) {
+      logHandledError("Preview launch failed:", e);
+      previewTab?.close();
+      toast.error("Could not open the preview. Please try again.");
+    }
   };
 
   // Instant real-time refresh whenever user switches back from viewing public page in another tab
@@ -306,13 +319,14 @@ export default function LinkPageOverview() {
                           >
                             {page.published ? "Live" : "Draft"}
                           </span>
-                          <Link
-                            href={`/dashboard/link-page/preview/${page.id}`}
+                          <button
+                            type="button"
+                            onClick={() => void openPreview(page)}
                             className="w-7 h-7 rounded-lg border border-line bg-surface/60 dark:bg-white/5 flex items-center justify-center text-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
-                            title="Preview link page"
+                            title="Preview link page in new tab"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                          </Link>
+                          </button>
                           {page.published && (
                             <a
                               href={`/p/${page.slug}`}

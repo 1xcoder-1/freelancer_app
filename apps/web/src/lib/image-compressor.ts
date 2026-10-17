@@ -89,3 +89,18 @@ export async function compressImage(
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Compress a page-background photo: WebP, capped at 1600px, quality 0.8,
+ * degrading quality until the blob fits under 400KB (full-bleed images
+ * otherwise dwarf the rest of the page payload).
+ */
+export async function compressBackground(file: File): Promise<CompressionResult> {
+  const MAX_BYTES = 400 * 1024;
+  let result = await compressImage(file, 1600, 0.8);
+  for (const q of [0.65, 0.5, 0.38]) {
+    if (result.compressedSize <= MAX_BYTES) return result;
+    result = await compressImage(file, 1600, q);
+  }
+  return result;
+}

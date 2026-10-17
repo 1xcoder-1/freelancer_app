@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.workspace import get_or_create_user_workspace
 from app.models.project import Project
 from app.models.finance import TimeEntry
-from app.models.workspace import User
+from app.models.workspace import User, Membership
 from app.models.report_card import ReportCard
 
 router = APIRouter()
@@ -166,9 +166,12 @@ def _share_response(card: ReportCard) -> ShareStatusResponse:
         status=status_str,
     )
 
-async def _get_or_create_card(db: AsyncSession, current_user: Dict[str, Any]) -> tuple[ReportCard, User]:
-    """Resolve (or lazily provision) the authenticated user's report card row."""
-    user, _workspace = await get_or_create_user_workspace(db, current_user)
+async def _get_or_create_card(db: AsyncSession, current_user: Dict[str, Any]) -> tuple[ReportCard, User, str]:
+    """Resolve (or lazily provision) the authenticated user's report card row.
+
+    Returns the workspace id too so stats stay scoped to the owner's own data.
+    """
+    user, workspace = await get_or_create_user_workspace(db, current_user)
     res = await db.execute(select(ReportCard).where(ReportCard.user_id == user.id))
     card = res.scalar_one_or_none()
     if card is None:
@@ -185,12 +188,12 @@ async def _get_or_create_card(db: AsyncSession, current_user: Dict[str, Any]) ->
             card = res.scalars().first()
             if card is None:
                 raise
-    return card, user
+    return card, user, workspace.id
 
 # ------------------------------------------------------------------------------
 # Live stats aggregated from the owner's real Neon data
 # ------------------------------------------------------------------------------
-async def _compute_live_stats(db: AsyncSession) -> Dict[str, Any]:
+async def _compute_live_stats(db: AsyncSession, workspace_id: Optional[str]) -> Dict[str, Any]:
     empty = {
         "current_streak": 0, "max_streak": 0, "active_days_count": 0,
         "delivery_stats": DeliveryStats(
@@ -201,12 +204,21 @@ async def _compute_live_stats(db: AsyncSession) -> Dict[str, Any]:
         ),
         "heatmap": [],
     }
+    if not workspace_id:
+        return empty
     try:
         res_projects = await db.execute(
-            select(Project).options(selectinload(Project.milestones)).order_by(Project.created_at.desc())
+            select(Project)
+            .where(Project.workspace_id == workspace_id)
+            .options(selectinload(Project.milestones))
+            .order_by(Project.created_at.desc())
         )
         all_projects = res_projects.scalars().all()
-        res_time = await db.execute(select(TimeEntry).order_by(TimeEntry.start_time.asc()))
+        res_time = await db.execute(
+            select(TimeEntry)
+            .where(TimeEntry.workspace_id == workspace_id)
+            .order_by(TimeEntry.start_time.asc())
+        )
         all_time = res_time.scalars().all()
     except Exception as e:
         print(f"Notice aggregating live report card stats: {e}")
@@ -304,9 +316,10 @@ async def get_my_report_card(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, user = await _get_or_create_card(db, current_user)
-    stats = await _compute_live_stats(db)
+    card, user, workspace_id = await _get_or_create_card(db, current_user)
+    stats = await _compute_live_stats(db, workspace_id)
     return _card_payload(card, user, stats)
+
 
 @router.put("/me/content", response_model=ReportCardResponse)
 async def save_my_content(
@@ -314,10 +327,10 @@ async def save_my_content(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, user = await _get_or_create_card(db, current_user)
+    card, user, workspace_id = await _get_or_create_card(db, current_user)
     card.content = req.content.model_dump()
     await db.commit()
-    stats = await _compute_live_stats(db)
+    stats = await _compute_live_stats(db, workspace_id)
     return _card_payload(card, user, stats)
 
 @router.put("/me/settings", response_model=ReportCardResponse)
@@ -326,10 +339,10 @@ async def save_my_settings(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, user = await _get_or_create_card(db, current_user)
+    card, user, workspace_id = await _get_or_create_card(db, current_user)
     card.settings = req.settings.model_dump()
     await db.commit()
-    stats = await _compute_live_stats(db)
+    stats = await _compute_live_stats(db, workspace_id)
     return _card_payload(card, user, stats)
 
 # ------------------------------------------------------------------------------
@@ -340,7 +353,7 @@ async def get_share_status(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, _user = await _get_or_create_card(db, current_user)
+    card, _user, _ws = await _get_or_create_card(db, current_user)
     return _share_response(card)
 
 @router.post("/share", response_model=ShareStatusResponse)
@@ -349,7 +362,7 @@ async def create_share_link(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, _user = await _get_or_create_card(db, current_user)
+    card, _user, _ws = await _get_or_create_card(db, current_user)
     now_ms = _now_ms()
     expires_at = None
     if req.expiration == "1m":
@@ -376,7 +389,7 @@ async def revoke_share_link(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, _user = await _get_or_create_card(db, current_user)
+    card, _user, _ws = await _get_or_create_card(db, current_user)
     card.is_shared = 0
     card.expires_at_ms = None
     # Destroy the token itself, not just the flag: an old link must never become
@@ -419,5 +432,11 @@ async def get_public_report_card(username: str, token: Optional[str] = Query(Non
     card.views_count = (card.views_count or 0) + 1
     await db.commit()
 
-    stats = await _compute_live_stats(db)
+    # Stats must reflect the card owner's workspace only (public endpoint has
+    # no authenticated user to resolve it from).
+    ws_res = await db.execute(
+        select(Membership.workspace_id).where(Membership.user_id == user.id).limit(1)
+    )
+    owner_workspace_id = ws_res.scalar_one_or_none()
+    stats = await _compute_live_stats(db, owner_workspace_id)
     return _card_payload(card, user, stats)

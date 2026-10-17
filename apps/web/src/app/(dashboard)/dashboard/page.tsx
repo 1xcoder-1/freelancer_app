@@ -14,7 +14,6 @@ import {
   LayoutGrid,
   CalendarDays,
   ChevronRight,
-  TrendingUp,
   TrendingDown,
   Users,
   AlertTriangle,
@@ -590,43 +589,6 @@ function SimpleEmpty({
   );
 }
 
-/* Filled-tone context card used under the four headline numbers */
-const smallTones: Record<string, { bg: string; text: string }> = {
-  ok: { bg: "bg-ok/10 border-ok/20", text: "text-ok" },
-  warn: { bg: "bg-warn/10 border-warn/20", text: "text-warn" },
-  danger: { bg: "bg-danger/10 border-danger/20", text: "text-danger" },
-  info: { bg: "bg-info/10 border-info/20", text: "text-info" },
-  violet: { bg: "bg-violet/10 border-violet/20", text: "text-violet" },
-  accent: { bg: "bg-accent/10 border-accent/20", text: "text-accent" },
-};
-
-function SmallStatCard({
-  tone = "info",
-  label,
-  value,
-  sub,
-}: {
-  tone?: keyof typeof smallTones | string;
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  const t = smallTones[tone] ?? smallTones.info;
-  return (
-    <div className={`rounded-2xl border ${t.bg} p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all duration-200 flex flex-col justify-between min-h-[110px]`}>
-      <p className={`text-[11px] sm:text-[12px] font-mono font-semibold uppercase tracking-wider ${t.text} truncate`}>
-        {label}
-      </p>
-      <div className="my-1">
-        <p className="font-display text-[22px] sm:text-[24px] font-medium tracking-wide text-fg leading-none truncate">
-          {value}
-        </p>
-      </div>
-      {sub && <p className="text-xs text-muted truncate">{sub}</p>}
-    </div>
-  );
-}
-
 function LiveFocusWidget() {
   const { getToken } = useAuth();
   const [session, setSession] = useState<TimerSession | null>(null);
@@ -658,7 +620,9 @@ function LiveFocusWidget() {
         // ignore; the interval will retry
       }
     })();
-    const id = setInterval(() => void pull(), 15000);
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void pull();
+    }, 15000);
     return () => {
       mounted = false;
       clearInterval(id);

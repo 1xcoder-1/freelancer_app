@@ -31,11 +31,11 @@ import {
   type CalendarFeedItem,
   type GoogleConnectionStatus,
 } from "@/lib/api";
+import { logHandledError } from "@/lib/log-error";
 
 type ViewKey = "day" | "week" | "month";
 
 // ---------------------------------------------------------------- helpers ----
-const DAY_MS = 86_400_000;
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -122,16 +122,21 @@ export function DashboardCalendar() {
     } finally {
       setLoading(false);
     }
-  }, [rangeStart.toISOString(), rangeEnd.toISOString]);
+  }, [rangeStart.toISOString(), rangeEnd.toISOString()]);
 
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
 
-  // Real-time: live poll while the calendar is open + keep the "now" line fresh
+  // Real-time: live poll while the calendar is open + keep the "now" line fresh.
+  // Both pause while the tab is hidden — background tabs don't need either.
   useEffect(() => {
-    const poll = setInterval(() => void loadEvents(true), 45_000);
-    const clock = setInterval(() => setNowTick(Date.now()), 60_000);
+    const poll = setInterval(() => {
+      if (document.visibilityState === "visible") void loadEvents(true);
+    }, 45_000);
+    const clock = setInterval(() => {
+      if (document.visibilityState === "visible") setNowTick(Date.now());
+    }, 60_000);
     return () => {
       clearInterval(poll);
       clearInterval(clock);
@@ -162,13 +167,27 @@ export function DashboardCalendar() {
     setSelectedDay(now);
   };
 
+  // Index events by local calendar day once per fetch: the month grid asks
+  // eventsForDay for all 42 cells on every render, so per-cell full-list
+  // filters (O(cells x events)) would compound with the 60s clock tick.
+  const eventsByDay = useMemo(() => {
+    const byDay = new Map<string, typeof events>();
+    for (const e of events) {
+      const d = parseDT(e.start_time);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const list = byDay.get(key);
+      if (list) list.push(e);
+      else byDay.set(key, [e]);
+    }
+    return byDay;
+  }, [events]);
+
   const eventsForDay = useCallback(
-    (day: Date) =>
-      events.filter((e) => {
-        const s = parseDT(e.start_time);
-        return sameDay(s, day);
-      }),
-    [events]
+    (day: Date) => {
+      const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+      return eventsByDay.get(key) ?? [];
+    },
+    [eventsByDay]
   );
 
   const refreshAfterMutation = () => {
@@ -272,7 +291,7 @@ export function DashboardCalendar() {
                   refreshAfterMutation();
                   toast.success("Google Calendar disconnected");
                 } catch (err) {
-                  console.error("Failed to disconnect Google Calendar:", err);
+                  logHandledError("Failed to disconnect Google Calendar:", err);
                   toast.error("Could not disconnect Google Calendar");
                 } finally {
                   setGoogleBusy(false);
@@ -573,6 +592,20 @@ function TimeGrid({
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
+  // Index events by local calendar day once per fetch (see eventsByDay in the
+  // parent) — the grid used to filter the full event list for every column.
+  const eventsByDay = useMemo(() => {
+    const byDay = new Map<string, CalendarFeedItem[]>();
+    for (const e of events) {
+      const d = parseDT(e.start_time);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const list = byDay.get(key);
+      if (list) list.push(e);
+      else byDay.set(key, [e]);
+    }
+    return byDay;
+  }, [events]);
+
   useEffect(() => {
     // Open around 8am-ish instead of midnight
     if (scrollRef.current) scrollRef.current.scrollTop = 8 * HOUR_H;
@@ -610,7 +643,8 @@ function TimeGrid({
           </div>
 
           {days.map((day, di) => {
-            const dayEvents = events.filter((e) => sameDay(parseDT(e.start_time), day));
+            const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+            const dayEvents = eventsByDay.get(dayKey) ?? [];
             return (
               <div
                 key={di}

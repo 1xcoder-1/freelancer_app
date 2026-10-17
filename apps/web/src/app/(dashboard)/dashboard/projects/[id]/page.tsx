@@ -65,6 +65,7 @@ import {
 import { invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 export default function ProjectDetailPage() {
   const router = useRouter();
@@ -133,7 +134,7 @@ export default function ProjectDetailPage() {
       setChangeRequests(crData || []);
       setProjectFiles(filesData || []);
     } catch (err) {
-      console.error("Error loading project detail:", err);
+      logHandledError("Error loading project detail:", err);
       toast.error("Could not load project profile");
     } finally {
       setLoading(false);
@@ -163,7 +164,7 @@ export default function ProjectDetailPage() {
       const updatedFiles = await listProjectFiles(projectId, token);
       setProjectFiles(updatedFiles);
     } catch (err) {
-      console.error("Upload error:", err);
+      logHandledError("Upload error:", err);
       toast.error("Failed to upload file(s)");
     } finally {
       setUploadingFile(false);

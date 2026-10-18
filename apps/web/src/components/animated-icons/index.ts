@@ -4,7 +4,7 @@ import type { ComponentType } from "react";
 
 export { CircleAlert as AlertCircle } from "./icons/circle-alert";
 export { AlertTriangle } from "./icons/alert-triangle";
-export { Monitor as AppWindow } from "./icons/monitor";
+export { Monitor, Monitor as AppWindow } from "./icons/monitor";
 export { Archive } from "./icons/archive";
 export { ArrowLeft } from "./icons/arrow-left";
 export { ArrowRight } from "./icons/arrow-right";

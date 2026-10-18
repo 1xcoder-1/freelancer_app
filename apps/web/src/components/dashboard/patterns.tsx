@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { ArrowLeft } from "@/components/animated-icons";
 import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/common/CountUp";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
@@ -15,22 +17,39 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  backHref,
+  backLabel,
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  backHref?: string;
+  backLabel?: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 mb-8">
-      <div>
-        <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-          {title}
-        </h1>
-        {subtitle && (
-          <p className="text-sm text-muted mt-1.5">{subtitle}</p>
-        )}
+    <div className="space-y-3 mb-8">
+      {backHref && (
+        <div>
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors mb-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{backLabel ?? "Back"}</span>
+          </Link>
+        </div>
+      )}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-sm text-muted mt-1.5">{subtitle}</p>
+          )}
+        </div>
+        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -42,6 +61,7 @@ export function StatCard({
   badge,
   subtext,
   rows,
+  tone,
   className,
 }: {
   label: string;
@@ -56,25 +76,26 @@ export function StatCard({
   return (
     <SpotlightCard
       radius={260}
+      glow="rgba(234,88,12,0.08)"
       className={cn(
-        "bg-[#141518] dark:bg-[#141518] border border-[#26272d] hover:border-[#383942] rounded-2xl p-6 flex flex-col justify-between min-h-[180px] shadow-sm transition-[border-color,box-shadow] duration-150 ease-out",
+        "bg-card dark:bg-[#141518] border border-line dark:border-[#26272d] hover:border-line-strong dark:hover:border-[#383942] rounded-2xl p-6 flex flex-col justify-between min-h-[180px] shadow-sm transition-[border-color,box-shadow] duration-150 ease-out",
         className
       )}
     >
       {/* Top Header Row */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-sm sm:text-[15px] font-medium text-[#f4f4f5] leading-snug whitespace-pre-line tracking-wide">
+        <h3 className="font-display text-sm sm:text-[15px] font-medium text-fg dark:text-[#f4f4f5] leading-snug whitespace-pre-line tracking-wide">
           {label}
         </h3>
         {Icon && (
-          <Icon className="w-4 h-4 text-[#d4d4d8] opacity-90 shrink-0 mt-0.5" />
+          <Icon className="w-4 h-4 text-muted dark:text-[#d4d4d8] opacity-90 shrink-0 mt-0.5" />
         )}
       </div>
 
       {/* Primary Value — plain numbers count up on arrival; strings (money
           chips, labels) render as-is. */}
       <div className="my-auto py-1">
-        <div className="font-display text-2xl sm:text-3xl font-medium text-white tracking-tight leading-none">
+        <div className="font-display text-2xl sm:text-3xl font-medium text-fg dark:text-white tracking-tight leading-none">
           {typeof value === "number" ? <CountUp value={value} /> : value}
         </div>
       </div>
@@ -83,7 +104,7 @@ export function StatCard({
       {rows && rows.length > 0 ? (
         <div className="space-y-1 pt-1">
           {rows.map((r, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-xs text-[#a1a1aa]">
+            <div key={idx} className="flex items-center gap-2 text-xs text-muted dark:text-[#a1a1aa]">
               <span>{r.text}</span>
               {r.check ? (
                 <span className="text-[#22c55e] font-bold text-xs">✓</span>
@@ -100,7 +121,7 @@ export function StatCard({
           ))}
         </div>
       ) : (subtext || badge) ? (
-        <div className="flex items-center justify-between gap-2 text-xs text-[#a1a1aa] pt-1">
+        <div className="flex items-center justify-between gap-2 text-xs text-muted dark:text-[#a1a1aa] pt-1">
           <span className="truncate">{subtext}</span>
           {badge && <div className="shrink-0">{badge}</div>}
         </div>
@@ -110,17 +131,17 @@ export function StatCard({
 }
 
 const chipTones: Record<string, string> = {
-  green: "bg-[#062414] text-[#22c55e] border-[#0d542c]",
-  ok: "bg-[#062414] text-[#22c55e] border-[#0d542c]",
-  blue: "bg-[#082238] text-[#38bdf8] border-[#0e4b7a]",
-  info: "bg-[#082238] text-[#38bdf8] border-[#0e4b7a]",
-  red: "bg-[#2f0814] text-[#fb7185] border-[#6b162f]",
-  danger: "bg-[#2f0814] text-[#fb7185] border-[#6b162f]",
-  amber: "bg-[#2e1905] text-[#fbbf24] border-[#6d3c0a]",
-  warn: "bg-[#2e1905] text-[#fbbf24] border-[#6d3c0a]",
-  purple: "bg-[#240a38] text-[#c084fc] border-[#581c87]",
-  violet: "bg-[#240a38] text-[#c084fc] border-[#581c87]",
-  neutral: "bg-[#18191d] text-[#d4d4d8] border-[#2d2f36]",
+  green: "bg-emerald-500/10 text-emerald-700 dark:text-[#22c55e] border-emerald-500/20 dark:bg-[#062414] dark:border-[#0d542c]",
+  ok: "bg-emerald-500/10 text-emerald-700 dark:text-[#22c55e] border-emerald-500/20 dark:bg-[#062414] dark:border-[#0d542c]",
+  blue: "bg-sky-500/10 text-sky-700 dark:text-[#38bdf8] border-sky-500/20 dark:bg-[#082238] dark:border-[#0e4b7a]",
+  info: "bg-sky-500/10 text-sky-700 dark:text-[#38bdf8] border-sky-500/20 dark:bg-[#082238] dark:border-[#0e4b7a]",
+  red: "bg-rose-500/10 text-rose-700 dark:text-[#fb7185] border-rose-500/20 dark:bg-[#2f0814] dark:border-[#6b162f]",
+  danger: "bg-rose-500/10 text-rose-700 dark:text-[#fb7185] border-rose-500/20 dark:bg-[#2f0814] dark:border-[#6b162f]",
+  amber: "bg-amber-500/10 text-amber-700 dark:text-[#fbbf24] border-amber-500/20 dark:bg-[#2e1905] dark:border-[#6d3c0a]",
+  warn: "bg-amber-500/10 text-amber-700 dark:text-[#fbbf24] border-amber-500/20 dark:bg-[#2e1905] dark:border-[#6d3c0a]",
+  purple: "bg-purple-500/10 text-purple-700 dark:text-[#c084fc] border-purple-500/20 dark:bg-[#240a38] dark:border-[#581c87]",
+  violet: "bg-purple-500/10 text-purple-700 dark:text-[#c084fc] border-purple-500/20 dark:bg-[#240a38] dark:border-[#581c87]",
+  neutral: "bg-surface text-muted dark:text-[#d4d4d8] border-line dark:bg-[#18191d] dark:border-[#2d2f36]",
 };
 
 export function StatChip({

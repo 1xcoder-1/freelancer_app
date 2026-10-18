@@ -36,12 +36,22 @@ class Settings(BaseSettings):
     # Explicit opt-in for mock/dev auth bypass. Only takes effect when
     # APP_ENV is a development value; rejected at startup otherwise.
     ALLOW_DEV_AUTH: bool = False
-    
+
+    # Signing secret for short-lived link-page preview tokens (live preview
+    # WebSocket). Empty = derived from CLERK_SECRET_KEY/DATABASE_URL so tokens
+    # survive a dev --reload restart; set this explicitly in production.
+    LINKPAGE_PREVIEW_SECRET: str = ""
+
     # Object & Media Storage (Cloudinary - primary media/receipt/invoice store)
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
     CLOUDINARY_URL: Optional[str] = None
+
+    # Stock photo search (Unsplash). Server-side only — the browser talks to
+    # /stock/images, never to Unsplash directly. Empty = picker returns 501
+    # and the UI falls back to uploads only.
+    UNSPLASH_ACCESS_KEY: str = ""
     
     # Error Monitoring
     SENTRY_DSN: str = ""

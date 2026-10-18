@@ -286,6 +286,11 @@ async def sync_connection(session: AsyncSession, conn: GoogleCalendarConnection)
 
     seen_ids: List[str] = []
     created = updated = 0
+
+    # Map every Google event first, then fetch the existing mirror rows in one
+    # query — a per-event SELECT made syncing a 200-event calendar cost ~200
+    # sequential Neon round-trips (~1 min of blocking "Sync now").
+    candidates: List[tuple[str, Dict[str, Any]]] = []
     for ge in google_events:
         gid = ge.get("id")
         if not gid:
@@ -298,11 +303,17 @@ async def sync_connection(session: AsyncSession, conn: GoogleCalendarConnection)
         if not mapped:
             continue
         seen_ids.append(gid)
+        candidates.append((gid, mapped))
 
+    existing_by_gid: Dict[str, CalendarEvent] = {}
+    if candidates:
         res = await session.execute(
-            select(CalendarEvent).where(CalendarEvent.google_event_id == gid)
+            select(CalendarEvent).where(CalendarEvent.google_event_id.in_([gid for gid, _ in candidates]))
         )
-        event = res.scalar_one_or_none()
+        existing_by_gid = {e.google_event_id: e for e in res.scalars().all()}
+
+    for gid, mapped in candidates:
+        event = existing_by_gid.get(gid)
         if event is None:
             session.add(CalendarEvent(
                 workspace_id=conn.workspace_id,

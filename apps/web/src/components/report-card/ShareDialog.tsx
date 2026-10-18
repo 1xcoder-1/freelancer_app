@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
 import {
   Globe,
   Link2,
@@ -127,6 +128,7 @@ function ShareDialogBody({
       onShareChanged();
     } catch (err) {
       console.warn("Failed to create share link:", err);
+      toast.error(err instanceof Error ? err.message : "Could not create share link. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

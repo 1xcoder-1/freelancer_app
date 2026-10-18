@@ -20,6 +20,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -139,7 +140,7 @@ export default function NewProjectPage() {
           setClientId(list[0].id);
         }
       } catch (err) {
-        console.error("Failed to load clients:", err);
+        logHandledError("Failed to load clients:", err);
       } finally {
         setLoadingClients(false);
       }
@@ -254,7 +255,7 @@ export default function NewProjectPage() {
       toast.success("Project created successfully!");
       router.push(`/dashboard/projects/${created.id}`);
     } catch (err: any) {
-      console.error(err);
+      logHandledError(err);
       toast.error(err?.response?.data?.detail || "Failed to create project");
     } finally {
       setSaving(false);

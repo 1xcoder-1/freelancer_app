@@ -20,6 +20,7 @@ import { getInvoice, updateInvoiceStatus, type Invoice } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 export default function EditInvoicePage() {
   const params = useParams();
@@ -81,7 +82,7 @@ export default function EditInvoicePage() {
       toast.success("Invoice updated successfully");
       router.push(`/dashboard/invoices/${invoiceId}`);
     } catch (err) {
-      console.error("Error updating invoice:", err);
+      logHandledError("Error updating invoice:", err);
       toast.error("Could not update invoice");
     } finally {
       setSubmitting(false);

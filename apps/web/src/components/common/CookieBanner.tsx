@@ -1,19 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Cookie } from "@/components/animated-icons";
 
 export function CookieBanner() {
   const [show, setShow] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
+    // Public link pages are visitor-facing; the consent prompt is app chrome.
+    if (pathname?.startsWith("/p/")) return;
     const consent = localStorage.getItem("freelance_book_cookie_consent");
     if (!consent) {
       const timer = setTimeout(() => setShow(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [pathname]);
 
   const handleAccept = () => {
     localStorage.setItem("freelance_book_cookie_consent", "accepted");

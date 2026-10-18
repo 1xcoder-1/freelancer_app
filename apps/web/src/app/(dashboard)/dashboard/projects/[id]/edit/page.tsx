@@ -18,6 +18,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -164,7 +165,7 @@ export default function EditProjectPage() {
           setCustomCategory(parsedCat);
         }
       } catch (err) {
-        console.error("Error loading project for edit:", err);
+        logHandledError("Error loading project for edit:", err);
         toast.error("Could not load project details");
       } finally {
         if (mounted) setLoading(false);
@@ -276,7 +277,7 @@ export default function EditProjectPage() {
       toast.success("Project updated successfully!");
       router.push(`/dashboard/projects/${projectId}`);
     } catch (err: any) {
-      console.error(err);
+      logHandledError(err);
       toast.error(err?.response?.data?.detail || "Failed to update project");
     } finally {
       setSaving(false);

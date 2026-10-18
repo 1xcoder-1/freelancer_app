@@ -1,5 +1,6 @@
 import re
-from fastapi import APIRouter, Query, HTTPException, status, Depends
+import time
+from fastapi import APIRouter, Query, HTTPException, status, Depends, UploadFile, File, Form
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal, Optional, Dict, Any
 from app.core.auth import require_authenticated_user
@@ -26,7 +27,7 @@ ALLOWED_CONTENT_TYPES = {
 # "../../<other-user>/contracts" would escape the per-user sandbox.
 UploadCategory = Literal[
     "receipts", "invoices", "contracts", "proposals", "deliverables",
-    "clients", "documents", "uploads",
+    "clients", "documents", "uploads", "avatars", "linkpages",
 ]
 
 class UploadUrlRequest(BaseModel):
@@ -93,4 +94,58 @@ async def get_file_url(
             detail="File or storage provider not found"
         )
     return {"file_key": clean_key, "url": url}
+
+
+@router.post("/upload", summary="Direct Cloudinary File Upload (Protected)")
+async def upload_direct_file(
+    file: UploadFile = File(...),
+    category: UploadCategory = Form("avatars"),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+) -> Dict[str, Any]:
+    """
+    [SECURE] Directly receives an uploaded media file (e.g. compressed avatar/logo),
+    validates content type and size, and uploads it directly to Cloudinary.
+    Returns secure CDN URL and metadata.
+    """
+    content_type = (file.content_type or "image/webp").lower()
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type '{content_type}'. Must be valid JPEG, PNG, or WebP image."
+        )
+
+    user_id = current_user.get("user_id", "anonymous_user")
+    sandboxed_folder = f"freelance-book/{user_id}/{category}"
+    clean_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', file.filename or "avatar.webp")
+    sandboxed_key = f"{user_id}_{int(time.time())}_{clean_filename}"
+
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds maximum permitted limit (10MB)."
+        )
+
+    url = storage_service.upload_bytes(
+        file_bytes=contents,
+        file_key=sandboxed_key,
+        content_type=content_type,
+        folder=sandboxed_folder
+    )
+
+    if not url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to store media asset on Cloudinary."
+        )
+
+    return {
+        "url": url,
+        "secure_url": url,
+        "file_key": sandboxed_key,
+        "category": category,
+        "size": len(contents),
+        "content_type": content_type
+    }
+
 

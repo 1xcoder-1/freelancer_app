@@ -43,6 +43,7 @@ import {
   blankSectionItem,
   blankWritingItem,
 } from "./Sections";
+import { logHandledError } from "@/lib/log-error";
 
 interface ReportCardProps {
   data: ReportCardData;
@@ -144,7 +145,7 @@ export function ReportCard({
         }
         setTimeout(() => setSaveStatus("idle"), 2500);
       } catch (err) {
-        console.error("Save error:", err);
+        logHandledError("Save error:", err);
         setSaveStatus("idle");
       } finally {
         setSaving(false);
@@ -169,7 +170,7 @@ export function ReportCard({
       try {
         await saveToServer(draftRef.current, false);
       } catch (err) {
-        console.error("Auto-save error:", err);
+        logHandledError("Auto-save error:", err);
       }
     }, 1800);
 

@@ -22,6 +22,7 @@ import { getContract, type Contract } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
 
 export default function EditContractPage() {
   const params = useParams();
@@ -103,7 +104,7 @@ export default function EditContractPage() {
       toast.success("Contract details updated");
       router.push(`/dashboard/contracts/${contractId}`);
     } catch (err) {
-      console.error("Error updating contract:", err);
+      logHandledError("Error updating contract:", err);
       toast.error("Could not update contract");
     } finally {
       setSubmitting(false);

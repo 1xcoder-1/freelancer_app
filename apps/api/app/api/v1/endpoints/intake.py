@@ -35,15 +35,20 @@ async def list_intake_forms(
     forms = result.scalars().all()
 
     out = []
+    sub_counts_res = await db.execute(
+        select(IntakeSubmission.form_id, func.count(IntakeSubmission.id))
+        .where(IntakeSubmission.form_id.in_([f.id for f in forms]))
+        .group_by(IntakeSubmission.form_id)
+    )
+    submission_counts = {form_id: cnt for form_id, cnt in sub_counts_res.all()}
+
     for f in forms:
         try:
             raw_questions = json.loads(f.questions_json)
         except Exception:
             raw_questions = []
 
-        sub_stmt = select(func.count(IntakeSubmission.id)).where(IntakeSubmission.form_id == f.id)
-        sub_res = await db.execute(sub_stmt)
-        count = sub_res.scalar_one() or 0
+        count = submission_counts.get(f.id, 0)
 
         out.append({
             "id": f.id,

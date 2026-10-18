@@ -43,6 +43,7 @@ import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { ClientProductivityTabs } from "@/components/dashboard/panels/ClientProductivityTabs";
+import { logHandledError } from "@/lib/log-error";
 
 function getInitials(name: string) {
   if (!name) return "CL";
@@ -83,7 +84,7 @@ export default function ClientDetailPage() {
           setCurrency(wsData.currency);
         }
       } catch (err) {
-        console.error("Error loading client details:", err);
+        logHandledError("Error loading client details:", err);
         toast.error("Could not load client profile");
       } finally {
         if (mounted) setLoading(false);
@@ -116,7 +117,7 @@ export default function ClientDetailPage() {
       toast.success("Client deleted successfully");
       router.push("/dashboard/clients");
     } catch (err) {
-      console.error(err);
+      logHandledError(err);
       toast.error("Failed to delete client");
     } finally {
       setDeleting(false);

@@ -30,6 +30,7 @@ import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { ServiceDaysOffEditor } from "@/components/dashboard/booking/ServiceDaysOffEditor";
 import { DAY_LABELS } from "@/components/dashboard/booking/ConsultationForm";
 import { invalidateBookingCaches } from "@/components/dashboard/booking/utils";
+import { logHandledError } from "@/lib/log-error";
 
 /* Services grid — what clients can book. Days off live inside each card, so a
    service and its exceptions stay on one screen. */
@@ -66,7 +67,7 @@ export function BookingServicesPanel({
       invalidateBookingCaches();
       toast.success("Service deleted");
     } catch (err) {
-      console.error("Failed to delete booking:", err);
+      logHandledError("Failed to delete booking:", err);
       toast.error("Could not delete service");
     }
   };

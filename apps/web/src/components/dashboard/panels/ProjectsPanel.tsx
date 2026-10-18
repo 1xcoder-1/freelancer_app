@@ -27,6 +27,7 @@ import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -100,7 +101,7 @@ export function ProjectsPanel() {
       loadData();
       toast.success("Project is active again");
     } catch (err) {
-      console.error("Error restoring project:", err);
+      logHandledError("Error restoring project:", err);
       toast.error("Could not restore project");
     } finally {
       setBusyId(null);

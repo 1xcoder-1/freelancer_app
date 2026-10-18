@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
@@ -342,14 +342,12 @@ async def google_disconnect(
     if not conn:
         return None
 
-    res = await db.execute(
-        select(CalendarEvent).where(
+    await db.execute(
+        delete(CalendarEvent).where(
             CalendarEvent.workspace_id == workspace.id,
             CalendarEvent.source == "google",
         )
     )
-    for event in res.scalars().all():
-        await db.delete(event)
     await db.delete(conn)
     await db.commit()
     return None

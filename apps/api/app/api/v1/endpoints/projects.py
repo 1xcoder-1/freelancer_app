@@ -314,15 +314,17 @@ async def create_project(
         due_date=payload.due_date
     )
     db.add(project)
-    await db.commit()
-    await db.refresh(project)
+    await db.flush()
 
-    # Auto-seed standard 3-phase milestones if none provided
+    # Auto-seed standard 3-phase milestones if none provided (flush above has
+    # assigned the project id; one commit covers both inserts so a failure
+    # can't leave a project without its milestones).
     m1 = Milestone(project_id=project.id, title="Phase 1: Discovery & Architecture", amount=project.budget * 0.3, is_completed=False, deliverable_note="Wireframes & Tech Architecture Approved")
     m2 = Milestone(project_id=project.id, title="Phase 2: Core Feature Implementation", amount=project.budget * 0.4, is_completed=False, deliverable_note="MVP Features & Staging Deployment")
     m3 = Milestone(project_id=project.id, title="Phase 3: QA, Final Delivery & Launch", amount=project.budget * 0.3, is_completed=False, deliverable_note="Production Deploy & Source Handover")
     db.add_all([m1, m2, m3])
     await db.commit()
+    await db.refresh(project)
 
     # Re-fetch with relationships
     stmt = select(Project).options(selectinload(Project.tasks), selectinload(Project.milestones)).where(Project.id == project.id)

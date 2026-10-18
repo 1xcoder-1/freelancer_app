@@ -16,6 +16,7 @@ export const publicRoutes = [
   "/sign-contract(.*)",
   "/intake(.*)",
   "/booking(.*)",
+  "/p(.*)",
   "/u(.*)",
   "/api(.*)",
 ];

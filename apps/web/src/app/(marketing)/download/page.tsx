@@ -10,15 +10,14 @@ import {
   PageHero,
 } from "@/components/landing/layout";
 import { DownloadHeroVisual } from "@/components/landing/sections/download-hero";
-import { PhoneShowcase } from "@/components/landing/sections/phone-showcase";
 import { LaptopShowcase } from "@/components/landing/sections/laptop-showcase";
 import { DownloadSection } from "@/components/landing/sections/download-section";
 import { CtaSection } from "@/components/landing/sections/cta-section";
 
 /* ------------------------------------------------------------------
-   Download page — the book on every screen: leaning phone hero, the
-   three-app fan, the full MacBook showcase, and the honest pre-launch
-   native-app tiles with the web app as the instant path.
+   Download page — hero visual, the MacBook showcase, then the
+   platform download grid (web live today, Android/Windows in final
+   testing).
 ------------------------------------------------------------------- */
 
 export default function DownloadPage() {
@@ -47,14 +46,13 @@ export default function DownloadPage() {
             <Link href="#download">
               <MkButton variant="outline">
                 <Globe className="size-4" />
-                See what&apos;s shipping
+                See download options
               </MkButton>
             </Link>
           </div>
         </PageHero>
 
         <DownloadHeroVisual />
-        <PhoneShowcase />
         <LaptopShowcase />
         <DownloadSection />
         <CtaSection />

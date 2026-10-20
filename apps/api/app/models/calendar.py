@@ -57,4 +57,7 @@ class GoogleCalendarConnection(Base, TimestampMixin):
     oauth_state: Mapped[str] = mapped_column(String(128), nullable=True)
 
     sync_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # When False, synced events carry no Meet conference and new bookings get
+    # no meeting link (the calendar event itself still syncs).
+    meet_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)

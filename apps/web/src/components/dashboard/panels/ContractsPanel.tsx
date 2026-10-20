@@ -2,31 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
 import {
   FileSignature,
   Plus,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  Copy,
-  CheckCircle2,
-  Trash2,
-  Send,
-  Eye,
+  Clock,
   CheckCheck,
+  FileText,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getContracts, deleteContract, type Contract } from "@/lib/api";
-import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
-import { toast } from "sonner";
+import { StatCard } from "@/components/dashboard/patterns";
+import { getContracts, type Contract } from "@/lib/api";
+import { useApiData } from "@/hooks/use-api-data";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
-import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -40,9 +33,7 @@ const CARDS_PER_PAGE = 20;
 
 export function ContractsPanel() {
   const router = useRouter();
-  const { getToken } = useAuth();
   const [catPages, setCatPages] = useState<Record<string, number>>({});
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const { data: contractsData, loading, refresh: loadData } = useApiData<Contract[]>(
     "contracts:data",
@@ -73,38 +64,6 @@ export function ContractsPanel() {
     router.push(`/dashboard/contracts/${contract.id}`);
   };
 
-  const copySigningLink = (tokenOrId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/sign-contract/${tokenOrId}`;
-    navigator.clipboard.writeText(url);
-    setCopiedToken(tokenOrId);
-    toast.success("Public signing link copied to clipboard");
-    setTimeout(() => setCopiedToken(null), 2500);
-  };
-
-  const handleDeleteContract = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const confirmed = await confirmDialog({
-      title: "Delete Contract",
-      message: "Are you sure you want to delete this agreement? This cannot be undone.",
-      confirmLabel: "Delete",
-      danger: true,
-    });
-    if (!confirmed) return;
-
-    try {
-      const token = (await getToken()) || undefined;
-      await deleteContract(id, token);
-      invalidateCache("contracts:data");
-      loadData(true);
-      toast.success("Contract deleted");
-    } catch (err) {
-      logHandledError("Error deleting contract:", err);
-      toast.error("Could not delete contract");
-    }
-  };
-
   const categoriesPresent = DEFAULT_CATEGORIES.filter((cat) =>
     contracts.some((c) => getContractCategory(c) === cat)
   );
@@ -112,31 +71,82 @@ export function ContractsPanel() {
     categoriesPresent.push("Featured");
   }
 
+  const awaitingCount = contracts.filter(
+    (c) => c.status === "sent" || c.status === "viewed"
+  ).length;
+  const signedCount = contracts.filter(
+    (c) => c.status === "signed" || c.status === "fully_executed"
+  ).length;
+  const draftCount = contracts.filter(
+    (c) => !["signed", "fully_executed", "sent", "viewed"].includes(c.status)
+  ).length;
+
   return (
-    <div className="space-y-8">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-              Contracts
-            </h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
-              {loading ? "Loading..." : `${contracts.length} Total Contracts`}
-            </Badge>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Send legally binding proposals, agreements, and contracts with real-time signature audit logs.
-          </p>
+    <div className="space-y-6">
+      {/* 4 Headline Cards at the top (same as Clients) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+        {loading && contracts.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Contracts"
+              value={contracts.length}
+              icon={FileSignature}
+              rows={[{ text: `${categoriesPresent.length} agreement groups`, dot: "info" }]}
+            />
+            <StatCard
+              label="Awaiting Signature"
+              value={awaitingCount}
+              icon={Clock}
+              rows={[
+                {
+                  text: awaitingCount > 0 ? "out with clients now" : "nothing waiting",
+                  dot: awaitingCount > 0 ? "warn" : "ok",
+                },
+              ]}
+            />
+            <StatCard
+              label="Signed"
+              value={signedCount}
+              icon={CheckCheck}
+              rows={[
+                {
+                  text: signedCount > 0 ? "fully executed" : "no signatures yet",
+                  dot: signedCount > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Drafts & Other"
+              value={draftCount}
+              icon={FileText}
+              rows={[{ text: "not sent out yet", dot: "info" }]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row (same as Clients) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {contracts.length} Total Contract{contracts.length === 1 ? "" : "s"}
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -144,7 +154,7 @@ export function ContractsPanel() {
 
           <button
             onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Draft Contract</span>
@@ -258,8 +268,7 @@ export function ContractsPanel() {
                     const isSent = contract.status === "sent";
                     const isExpired = contract.status === "expired";
                     const isSuperseded = contract.status === "superseded";
-                    // N2: only still-open sign links carry an awaiting/expiry chip.
-                    const awaiting = (isSent || isViewed) ? contract.days_awaiting : undefined;
+                    // N2: only still-open sign links carry an expiry countdown.
                     const expiringSoon = (isSent || isViewed) && typeof contract.days_left === "number" && contract.days_left <= 5;
                     const dead = isExpired || isSuperseded || contract.status === "declined";
 
@@ -267,8 +276,6 @@ export function ContractsPanel() {
                       <CategoryVisualCard
                         key={contract.id}
                         title={contract.title}
-                        currentCount={isExecuted ? "★" : isViewed ? "1" : "0"}
-                        totalCount={isExecuted ? "Signed" : isViewed ? "Viewed" : isSent ? "Sent" : isExpired ? "Expired" : isSuperseded ? "Superseded" : "Draft"}
                         subtitle={
                           contract.client_name
                             ? `Client: ${contract.client_name}`
@@ -277,55 +284,40 @@ export function ContractsPanel() {
                             : "Standard Agreement"
                         }
                         onClick={() => handleOpenDetail(contract)}
+                        topRightContent={
+                          <span
+                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                              isExecuted
+                                ? "bg-ok/15 text-ok border-ok/25"
+                                : isViewed
+                                ? "bg-warn/15 text-warn border-warn/25"
+                                : isSent
+                                ? "bg-info/15 text-info border-info/25"
+                                : dead
+                                ? "bg-danger/15 text-danger border-danger/25"
+                                : "bg-surface text-muted border-line"
+                            }`}
+                          >
+                            {isExecuted
+                              ? "Signed"
+                              : isViewed
+                              ? "Viewed"
+                              : isSent
+                              ? "Sent"
+                              : isExpired
+                              ? "Expired"
+                              : isSuperseded
+                              ? "Superseded"
+                              : contract.status === "declined"
+                              ? "Declined"
+                              : "Draft"}
+                          </span>
+                        }
                         tags={
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border capitalize ${
-                                isExecuted
-                                  ? "bg-ok/15 text-ok border-ok/25 font-semibold"
-                                  : isViewed
-                                  ? "bg-warn/15 text-warn border-warn/25"
-                                  : isSent
-                                  ? "bg-info/15 text-info border-info/25"
-                                  : dead
-                                  ? "bg-danger/15 text-danger border-danger/25"
-                                  : "bg-surface text-muted border-line"
-                              }`}
-                            >
-                              {isExecuted
-                                ? "★ Executed"
-                                : isViewed
-                                ? "Viewed by Client"
-                                : isSent
-                                ? "Sent"
-                                : isExpired
-                                ? "Expired"
-                                : isSuperseded
-                                ? "Superseded"
-                                : contract.status === "declined"
-                                ? "Declined"
-                                : "Draft"}
-                            </span>
-                            {/* N2: waiting age + expiry countdown on live links */}
-                            {typeof awaiting === "number" && (
-                              <span className="text-[11px] font-mono text-muted bg-surface px-2 py-0.5 rounded-full border border-line">
-                                awaiting {awaiting}d
-                              </span>
-                            )}
                             {expiringSoon && (
-                              <span className="text-[11px] font-mono font-semibold text-warn bg-warn/15 px-2 py-0.5 rounded-full border border-warn/25">
+                              <span className="text-[11px] font-mono font-semibold text-warn bg-warn/15 px-2.5 py-0.5 rounded-full border border-warn/25">
                                 {contract.days_left! <= 0 ? "expires today" : `expires in ${contract.days_left}d`}
-                              </span>
-                            )}
-                            {/* N5: version badge only once a contract has been re-sent */}
-                            {contract.version && contract.version > 1 && (
-                              <span className="text-[11px] font-mono text-accent bg-accent-soft px-2 py-0.5 rounded-full border border-accent/20">
-                                v{contract.version}
-                              </span>
-                            )}
-                            {contract.project_title && (
-                              <span className="text-[11px] font-mono font-medium text-orange-400 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/25">
-                                {contract.project_title}
                               </span>
                             )}
                           </div>

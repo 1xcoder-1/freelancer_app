@@ -18,10 +18,23 @@ export default function DocsRouteLayout({
 }) {
   return (
     <LandingShell>
-      <Navbar />
+      {/* pinned: the bar stays full-width on this page — no glass-pill
+          shrink on scroll */}
+      <Navbar pinned />
       <div className="mk-docs dark flex-1">
         <NextProvider>
-          <DocsLayout tree={source.getPageTree()}>{children}</DocsLayout>
+          {/* search/theme slots off: their empty boxes rendered at the
+              bottom of the sidebar */}
+          <DocsLayout
+            tree={source.getPageTree()}
+            searchToggle={{ enabled: false }}
+            themeSwitch={{ enabled: false }}
+            slots={{
+              navTitle: () => null,
+            }}
+          >
+            {children}
+          </DocsLayout>
         </NextProvider>
       </div>
     </LandingShell>

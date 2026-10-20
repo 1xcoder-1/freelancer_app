@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/dashboard/patterns";
 import { getClients, getProjects, type Client, type Project } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
 const DEFAULT_CATEGORIES = ["Featured", "VIP & Enterprise", "Repeat Clients", "Active Retainers", "General Clients"];
@@ -28,6 +29,7 @@ const CARDS_PER_PAGE = 20;
 export function ClientsPanel() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const wsCurrency = useWorkspaceCurrency().currency;
   const [catPages, setCatPages] = useState<Record<string, number>>({});
 
   const { data: clientsData, loading, refresh: loadData } = useApiData<Client[]>(
@@ -112,7 +114,7 @@ export function ClientsPanel() {
   // Helper to parse client card metadata
   const parseClientCardInfo = (client: Client) => {
     let rateDisplay = "";
-    let clientCurrency = "USD";
+    let clientCurrency = wsCurrency;
     const rawNotes = client.notes || "";
     const isVip = client.status === "vip";
 

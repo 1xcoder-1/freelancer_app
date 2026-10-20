@@ -1,56 +1,31 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Search,
-  X,
-  Home,
-  Users,
-  Clock,
-  Wallet,
-  LayoutGrid,
-  Sparkles,
-  Calendar,
-  IdCard,
-  Settings,
-  ArrowRight,
-  MessageSquare,
-  TrendingUp,
-  Star,
-  Link2,
-  Phone,
-  CalendarDays,
-} from "@/components/animated-icons";
+import { Search, X, ArrowRight } from "@/components/animated-icons";
+import { COMMAND_ITEMS } from "@/lib/features";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const router = useRouter();
+  const { isVisible, labelFor } = useFeatureFlags();
 
-  // Quick jumps to the app's own sections (matches the sidebar one-word names)
-  const searchableItems = [
-    { title: "Home", href: "/dashboard", category: "Go to", icon: Home },
-    { title: "Inbox", href: "/dashboard/inbox", category: "Go to", icon: MessageSquare },
-    { title: "Clients", href: "/dashboard/clients", category: "Go to", icon: Users },
-    { title: "Leads", href: "/dashboard/clients?tab=leads", category: "Go to", icon: Users },
-    { title: "Forms", href: "/dashboard/clients?tab=forms", category: "Go to", icon: Users },
-    { title: "Time", href: "/dashboard/time-tracker", category: "Go to", icon: Clock },
-    { title: "Projects", href: "/dashboard/projects", category: "Go to", icon: LayoutGrid },
-    { title: "Invoices", href: "/dashboard/projects?tab=invoices", category: "Go to", icon: LayoutGrid },
-    { title: "Money", href: "/dashboard/cashflow", category: "Go to", icon: Wallet },
-    { title: "Expenses", href: "/dashboard/cashflow?tab=expenses", category: "Go to", icon: Wallet },
-    { title: "Proposals", href: "/dashboard/proposals", category: "Go to", icon: Sparkles },
-    { title: "Calls", href: "/dashboard/booking", category: "Go to", icon: Phone },
-    { title: "Services", href: "/dashboard/booking/services", category: "Go to", icon: CalendarDays },
-    { title: "Reports", href: "/dashboard/reports", category: "Go to", icon: TrendingUp },
-    { title: "Testimonials", href: "/dashboard/testimonials", category: "Go to", icon: Star },
-    { title: "Shared Links", href: "/dashboard/links", category: "Go to", icon: Link2 },
-    { title: "Calendar", href: "/dashboard/calendar", category: "Go to", icon: Calendar },
-    { title: "Profile", href: "/dashboard/report-card", category: "Go to", icon: IdCard },
-    { title: "Settings", href: "/dashboard/settings", category: "Go to", icon: Settings },
-  ];
+  // Quick jumps to the app's own sections, derived from the shared feature
+  // registry: hidden features drop out and owner renames flow through, so the
+  // palette can never route someone into a feature their sidebar doesn't show.
+  const searchableItems = useMemo(
+    () =>
+      COMMAND_ITEMS.filter((item) => isVisible(item.feature)).map((item) => ({
+        title: item.sub ? labelFor(item.sub, item.title) : labelFor(item.feature, item.title),
+        href: item.href,
+        category: "Go to",
+        icon: item.icon,
+      })),
+    [isVisible, labelFor]
+  );
 
   // Toggle on Ctrl+K / Cmd+K
   useEffect(() => {

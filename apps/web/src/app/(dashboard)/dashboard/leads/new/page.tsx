@@ -18,6 +18,7 @@ import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
 import { celebrate } from "@/components/common/Celebration";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -118,6 +119,7 @@ const formatAmountWithCommas = (val: string): string => {
 export default function NewLeadPage() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -129,7 +131,8 @@ export default function NewLeadPage() {
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("Referral");
   const [estimatedValue, setEstimatedValue] = useState("2,500");
-  const [currency, setCurrency] = useState("USD");
+  const [pickedCurrency, setCurrency] = useState("");
+  const currency = pickedCurrency || wsCurrency || "USD";
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
   const [stage, setStage] = useState<LeadStage>("new");
   const [followUpDays, setFollowUpDays] = useState("3");
@@ -158,7 +161,7 @@ export default function NewLeadPage() {
     setPhone(str("phone"));
     setSource(str("source", "Referral"));
     setEstimatedValue(str("estimatedValue", "2,500"));
-    setCurrency(str("currency", "USD"));
+    setCurrency(str("currency", ""));
     const pr = str("priority", "medium");
     setPriority(["low", "medium", "high", "urgent"].includes(pr) ? (pr as "low" | "medium" | "high" | "urgent") : "medium");
     const st = str("stage", "new");

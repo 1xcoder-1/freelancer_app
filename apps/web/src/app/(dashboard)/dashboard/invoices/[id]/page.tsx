@@ -24,6 +24,8 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInvoice, updateInvoiceStatus, deleteInvoice, type Invoice } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { logHandledError } from "@/lib/log-error";
@@ -33,6 +35,7 @@ export default function InvoiceDetailPage() {
   const invoiceId = params?.id as string;
   const router = useRouter();
   const { getToken } = useAuth();
+  const { currency } = useWorkspaceCurrency();
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -240,9 +243,9 @@ export default function InvoiceDetailPage() {
                     <tr key={idx} className="hover:bg-surface/30">
                       <td className="py-3.5 font-medium text-fg">{item.description}</td>
                       <td className="py-3.5 text-center font-mono text-muted">{item.quantity}</td>
-                      <td className="py-3.5 text-right font-mono text-muted">${item.unit_price.toLocaleString()}</td>
+                      <td className="py-3.5 text-right font-mono text-muted">{formatMoney(item.unit_price, currency, 0)}</td>
                       <td className="py-3.5 text-right font-mono font-bold text-fg">
-                        ${((item.amount !== undefined ? item.amount : item.quantity * item.unit_price) || 0).toLocaleString()}
+                        {formatMoney((item.amount !== undefined ? item.amount : item.quantity * item.unit_price) || 0, currency, 0)}
                       </td>
                     </tr>
                   ))}
@@ -254,12 +257,12 @@ export default function InvoiceDetailPage() {
             <div className="pt-4 border-t border-line flex flex-col items-end space-y-1.5">
               <div className="flex items-center justify-between w-48 text-xs text-muted">
                 <span>Subtotal</span>
-                <span className="font-mono font-semibold">${invoice.total_amount.toLocaleString()}</span>
+                <span className="font-mono font-semibold">{formatMoney(invoice.total_amount, currency, 0)}</span>
               </div>
               <div className="flex items-center justify-between w-48 text-sm font-bold text-fg pt-2 border-t border-line">
                 <span>Total Due</span>
                 <span className="font-mono text-accent text-base font-bold">
-                  ${invoice.total_amount.toLocaleString()}
+                  {formatMoney(invoice.total_amount, currency, 0)}
                 </span>
               </div>
             </div>

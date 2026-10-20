@@ -19,6 +19,7 @@ import {
   recordPublicInvoicePayment,
   type PublicInvoice,
 } from "@/lib/api";
+import { formatMoney } from "@/lib/currency";
 
 const METHODS: { value: string; label: string }[] = [
   { value: "bank_transfer", label: "Bank transfer" },
@@ -29,8 +30,8 @@ const METHODS: { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-function money(n?: number): string {
-  return `$${(n ?? 0).toFixed(2)}`;
+function money(n: number | undefined, currency: string): string {
+  return formatMoney(n ?? 0, currency);
 }
 
 export default function PublicPaymentPage() {
@@ -157,7 +158,7 @@ export default function PublicPaymentPage() {
             {invoice.items.map((it) => (
               <div key={it.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <span className="text-fg">{it.description}</span>
-                <span className="font-mono text-muted">{money(it.amount)}</span>
+                <span className="font-mono text-muted">{money(it.amount, invoice.currency)}</span>
               </div>
             ))}
           </div>
@@ -166,15 +167,15 @@ export default function PublicPaymentPage() {
           <div className="mt-4 p-4 rounded-xl bg-bg border border-line space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-faint">Total</span>
-              <span className="font-mono text-fg">{money(invoice.total_amount)}</span>
+              <span className="font-mono text-fg">{money(invoice.total_amount, invoice.currency)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-faint">Paid</span>
-              <span className="font-mono text-ok">{money(invoice.amount_paid)}</span>
+              <span className="font-mono text-ok">{money(invoice.amount_paid, invoice.currency)}</span>
             </div>
             <div className="flex justify-between pt-2 border-t border-line">
               <span className="text-muted font-semibold">Amount due</span>
-              <span className="font-mono text-lg font-bold text-accent">{money(invoice.amount_due)}</span>
+              <span className="font-mono text-lg font-bold text-accent">{money(invoice.amount_due, invoice.currency)}</span>
             </div>
           </div>
         </Card>
@@ -231,7 +232,7 @@ export default function PublicPaymentPage() {
                 {paying ? (
                   <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Recording…</span>
                 ) : (
-                  `Record payment of ${money(parseFloat(amount) || 0)}`
+                  `Record payment of ${money(parseFloat(amount) || 0, invoice.currency)}`
                 )}
               </Button>
               {error && <p className="text-xs text-danger text-center">{error}</p>}

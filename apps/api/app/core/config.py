@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     CLERK_PUBLISHABLE_KEY: str = ""
     CLERK_ISSUER: Optional[str] = None
 
+    # Feature-gate owner accounts (comma-separated). These emails always see
+    # every dashboard feature and are the only ones allowed to toggle what
+    # everyone else can see (Settings → Features).
+    OWNER_EMAILS: str = "tsjoker14311211@gmail.com"
+
     # Explicit opt-in for mock/dev auth bypass. Only takes effect when
     # APP_ENV is a development value; rejected at startup otherwise.
     ALLOW_DEV_AUTH: bool = False

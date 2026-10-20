@@ -13,30 +13,28 @@ import {
   Building2,
   Megaphone,
   Repeat,
-  Check,
   Tag,
-  DollarSign,
-  Calendar,
   ShieldCheck,
   TrendingDown,
   Layers,
-  Sparkles,
 } from "@/components/animated-icons";
 import type { LucideIcon } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/dashboard/patterns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   getExpenses,
   createExpense,
   deleteExpense,
   updateExpense,
-  getWorkspaceSettings,
   type Expense,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -81,8 +79,8 @@ export function ExpensesPanel() {
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
 
-  // Filter view: "all" | "recurring" | "tax_deductible"
-  const [activeFilter, setActiveFilter] = useState<"all" | "recurring" | "tax">("all");
+  // Filter view: "all" | "recurring"
+  const [activeFilter, setActiveFilter] = useState<"all" | "recurring">("all");
 
   const { data: expensesData, loading, refresh: loadData } = useApiData<Expense[]>(
     "taxes:expenses",
@@ -90,14 +88,8 @@ export function ExpensesPanel() {
     { reportContext: "taxes", pollMs: 15_000 }
   );
 
-  const { data: ws } = useApiData(
-    "workspace:settings",
-    async (token) => await getWorkspaceSettings(token),
-    { ttlMs: 10 * 60_000 }
-  );
-  const currency = ws?.currency ?? "USD";
-  const money = (n: number) =>
-    `${currency === "USD" ? "$" : `${currency} `}${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const { currency } = useWorkspaceCurrency();
+  const money = (n: number) => formatMoney(n, currency, 0);
 
   const expenses = useMemo(() => expensesData ?? [], [expensesData]);
 
@@ -243,77 +235,79 @@ export function ExpensesPanel() {
   }, [filteredExpenses]);
 
   return (
-    <div className="space-y-8">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Expense Tracker</h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
-              {loading ? "Loading..." : `${expenses.length} Records`}
-            </Badge>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Categorized business expenses, recurring subscriptions, and tax write-offs.
-          </p>
+    <div className="space-y-6">
+      {/* 4 Headline Cards at the top (same as Clients) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+        {loading && expenses.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Expenses"
+              value={money(totalAmount)}
+              icon={TrendingDown}
+              rows={[{ text: `${expenses.length} tracked items`, dot: "info" }]}
+            />
+            <StatCard
+              label="Monthly Run Rate"
+              value={`${money(recurringTotal)}/mo`}
+              icon={Repeat}
+              rows={[
+                {
+                  text: `${recurringCount} recurring subscription${recurringCount === 1 ? "" : "s"}`,
+                  dot: recurringCount > 0 ? "warn" : "ok",
+                },
+              ]}
+            />
+            <StatCard
+              label="One-time Spend"
+              value={money(totalAmount - recurringTotal)}
+              icon={Receipt}
+              rows={[{ text: "paid once, not repeating", dot: "info" }]}
+            />
+            <StatCard
+              label="Categories"
+              value={categoriesPresent.length}
+              icon={Layers}
+              rows={[{ text: `${categoriesPresent.length} organized groups`, dot: "info" }]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row (same as Clients) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {expenses.length} Expense Record{expenses.length === 1 ? "" : "s"}
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
-          <Button
-            size="sm"
+          <button
             onClick={() => handleOpenCreate()}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
+            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Expense
-          </Button>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Expense</span>
+          </button>
         </div>
-      </div>
-
-      {/* Financial Metrics Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="bg-card border-line p-4 rounded-2xl">
-          <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-            <TrendingDown className="w-3.5 h-3.5 text-accent" /> Total Expenses
-          </div>
-          <p className="text-xl font-bold font-mono text-fg mt-1.5">{money(totalAmount)}</p>
-          <p className="text-[11px] text-muted mt-0.5">{expenses.length} tracked items</p>
-        </Card>
-
-        <Card className="bg-card border-line p-4 rounded-2xl">
-          <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-            <Repeat className="w-3.5 h-3.5 text-info" /> Monthly Subscriptions
-          </div>
-          <p className="text-xl font-bold font-mono text-fg mt-1.5">{money(recurringTotal)}/mo</p>
-          <p className="text-[11px] text-muted mt-0.5">{recurringCount} active subscriptions</p>
-        </Card>
-
-        <Card className="bg-card border-line p-4 rounded-2xl">
-          <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 text-ok" /> Tax Deductible
-          </div>
-          <p className="text-xl font-bold font-mono text-fg mt-1.5">{money(totalAmount)}</p>
-          <p className="text-[11px] text-muted mt-0.5">100% write-off eligible</p>
-        </Card>
-
-        <Card className="bg-card border-line p-4 rounded-2xl">
-          <div className="flex items-center gap-2 text-muted text-xs font-semibold">
-            <Layers className="w-3.5 h-3.5 text-warn" /> Categories Active
-          </div>
-          <p className="text-xl font-bold font-mono text-fg mt-1.5">{categoriesPresent.length}</p>
-          <p className="text-[11px] text-muted mt-0.5">Organized & structured</p>
-        </Card>
       </div>
 
       {/* Filter Tabs */}
@@ -385,32 +379,27 @@ export function ExpensesPanel() {
 
                 {/* Cards Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-                  {catExpenses.map((exp, idx) => {
+                  {catExpenses.map((exp) => {
                     const expAmount = Number(exp.amount) || 0;
-                    const numVal = Math.round(expAmount);
-                    const maxVal = Math.max(numVal, 100 * Math.ceil(numVal / 100 || 1));
 
                     return (
                       <CategoryVisualCard
                         key={exp.id}
                         title={exp.description || exp.category || "Expense"}
-                        currentCount={numVal}
-                        totalCount={maxVal}
-                        subtitle={`By ${exp.category || "Tools"}`}
+                        subtitle={exp.category || "Tools"}
                         onClick={() => setSelectedExpense(exp)}
+                        topRightContent={
+                          <span className="text-xs font-mono font-bold text-zinc-900 dark:text-white bg-orange-500/10 dark:bg-orange-500/15 border border-orange-500/20 dark:border-orange-500/25 px-2.5 py-1 rounded-full">
+                            {money(expAmount)}
+                          </span>
+                        }
                         tags={
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-mono font-bold text-zinc-900 dark:text-white">
-                              {money(expAmount)}
-                            </span>
                             {exp.is_recurring && (
                               <Badge className="bg-info/10 text-info border-transparent text-[10px] font-mono">
                                 MONTHLY
                               </Badge>
                             )}
-                            <Badge variant="outline" className="text-[10px] text-muted border-line">
-                              {new Date(exp.created_at || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                            </Badge>
                           </div>
                         }
                       />
@@ -600,9 +589,9 @@ export function ExpensesPanel() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted font-medium block">Tax Status</span>
-                  <span className="text-ok font-semibold mt-0.5 block flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> 100% Tax Deductible
+                  <span className="text-muted font-medium block">Category</span>
+                  <span className="text-fg font-semibold mt-0.5 block">
+                    {selectedExpense.category || "General"}
                   </span>
                 </div>
               </div>

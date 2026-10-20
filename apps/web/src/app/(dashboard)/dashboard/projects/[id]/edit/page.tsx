@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getProject, updateProject, getClients, type Project, type Client } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -45,6 +46,7 @@ export default function EditProjectPage() {
   const params = useParams();
   const projectId = String(params?.id || "");
   const { getToken } = useAuth();
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   const [project, setProject] = useState<Project | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
@@ -58,7 +60,8 @@ export default function EditProjectPage() {
   const [customCategory, setCustomCategory] = useState("");
   const [budgetStr, setBudgetStr] = useState("5,000");
   const [hourlyRateStr, setHourlyRateStr] = useState("100");
-  const [currency, setCurrency] = useState("USD");
+  const [pickedCurrency, setCurrency] = useState("");
+  const currency = pickedCurrency || wsCurrency || "USD";
   const [status, setStatus] = useState("in_progress");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [deadline, setDeadline] = useState("");

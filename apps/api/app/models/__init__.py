@@ -15,6 +15,8 @@ from app.models.interaction import Interaction
 from app.models.notification import Notification
 from app.models.testimonial import Testimonial
 from app.models.link_page import LinkPage, LinkItem, LinkEvent
+from app.models.feature_flag import FeatureFlag
+from app.models.user_profile import UserProfile
 
 __all__ = [
     "Base",
@@ -58,5 +60,7 @@ __all__ = [
     "LinkPage",
     "LinkItem",
     "LinkEvent",
+    "FeatureFlag",
+    "UserProfile",
 ]
 

@@ -53,49 +53,43 @@ export function ServiceDaysOffEditor({ consultationId }: { consultationId: strin
   };
 
   return (
-    <div className="space-y-3 rounded-xl border border-line bg-bg/60 p-4">
-      <div className="flex items-center gap-2 text-xs">
-        <Ban className="w-3.5 h-3.5 text-warn" />
-        <span className="font-medium text-fg">Days off</span>
-        <span className="text-muted">— these dates disappear from the booking page</span>
-      </div>
-
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="date"
           value={newDay}
           min={new Date().toISOString().slice(0, 10)}
           onChange={(e) => setNewDay(e.target.value)}
-          className="h-9 px-3 rounded-xl bg-bg border border-line text-fg text-sm focus:border-accent focus:outline-none transition-all"
+          className="h-9 px-3 rounded-xl bg-surface/50 border border-line text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
         />
         <Button
           type="button"
           size="sm"
           onClick={addDay}
           disabled={!newDay}
-          className="h-9 bg-accent hover:bg-accent-hi text-accent-fg text-xs"
+          className="h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg text-xs font-medium cursor-pointer shadow-xs active:scale-95 transition-all"
         >
-          <Plus className="w-3.5 h-3.5 mr-1" /> Add day off
+          <Plus className="w-3.5 h-3.5 mr-1" /> Add Day Off
         </Button>
       </div>
 
       {loading ? (
         <Skeleton className="h-8 w-full rounded-xl" />
       ) : daysOff.length === 0 ? (
-        <p className="text-xs text-faint">No days off — every working day is bookable.</p>
+        <p className="text-xs text-muted">No days off added yet.</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 pt-1">
           {daysOff.map((d) => (
             <span
               key={d}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface border border-line text-xs text-fg font-mono"
+              className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface/70 border border-line text-xs text-fg font-mono shadow-2xs hover:border-line-strong transition-all"
             >
               {d}
               <button
                 type="button"
                 onClick={() => removeDay(d)}
-                className="text-faint hover:text-danger transition-colors cursor-pointer"
-                title="Make this day bookable"
+                className="text-muted hover:text-danger hover:scale-110 transition-all cursor-pointer p-0.5 rounded"
+                title="Remove day off"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

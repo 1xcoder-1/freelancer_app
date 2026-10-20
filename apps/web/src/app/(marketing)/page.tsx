@@ -18,11 +18,11 @@ export default function Home() {
       <Navbar />
       <main className="flex-1">
         <Hero />
-        <PhoneShowcase />
-        <LaptopShowcase />
-        <AiSpotlight />
         <WhyBand />
         <FeatureRows />
+        <LaptopShowcase />
+        <PhoneShowcase />
+        <AiSpotlight />
         <Testimonials />
         <SecuritySection />
         <FaqSection />

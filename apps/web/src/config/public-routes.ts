@@ -6,6 +6,7 @@ export const publicRoutes = [
   "/",
   "/features(.*)",
   "/download",
+  "/contact",
   "/privacy",
   "/terms",
   "/docs(.*)",

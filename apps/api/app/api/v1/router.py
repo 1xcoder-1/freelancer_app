@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     intake,
     booking,
     calendar,
+    feature_flags,
     report_card,
     planner,
     notifications,
@@ -28,7 +29,8 @@ from app.api.v1.endpoints import (
     link_pages,
     link_page_preview,
     stock,
-    book_ai
+    book_ai,
+    profile
 )
 
 api_router = APIRouter()
@@ -51,6 +53,7 @@ api_router.include_router(proposals.router)
 api_router.include_router(intake.router)
 api_router.include_router(booking.router)
 api_router.include_router(calendar.router)
+api_router.include_router(feature_flags.router)
 api_router.include_router(report_card.router, prefix="/report-card", tags=["Report Card"])
 api_router.include_router(planner.router)
 api_router.include_router(notifications.router)
@@ -61,6 +64,8 @@ api_router.include_router(link_pages.router)
 api_router.include_router(link_page_preview.router)
 api_router.include_router(stock.router)
 api_router.include_router(book_ai.router)
+api_router.include_router(profile.router, prefix="/profile", tags=["Profile"])
+
 
 
 

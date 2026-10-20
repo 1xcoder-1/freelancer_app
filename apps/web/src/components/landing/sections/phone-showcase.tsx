@@ -76,7 +76,7 @@ export function PhoneShowcase() {
       ref={sectionRef}
       id="mobile"
       aria-labelledby="mobile-heading"
-      className="scroll-mt-24 overflow-hidden pb-16 sm:pb-24"
+      className="scroll-mt-24 overflow-hidden py-16 sm:py-24"
     >
       <div className="mx-auto max-w-6xl px-6 text-center sm:px-8">
         <Stagger className="flex flex-col items-center">

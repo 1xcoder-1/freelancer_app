@@ -14,10 +14,10 @@ import { GradientText } from "@/components/ui/gradient-text";
 
 export function CtaSection() {
   return (
-    <Section className="py-16 sm:py-20">
+    <Section className="py-12 sm:py-16 pb-24 sm:pb-32">
       <Container>
         <Rise>
-          <div className="relative overflow-hidden rounded-[28px] bg-[#e9e6e0] px-6 py-12 text-center sm:rounded-[36px] sm:py-16">
+          <div className="relative overflow-hidden rounded-[28px] bg-[#e9e6e0] px-6 py-10 text-center sm:rounded-[36px] sm:py-12">
             {/* dotted texture, strongest toward the edges */}
             <TextureOverlay
               texture="dots"

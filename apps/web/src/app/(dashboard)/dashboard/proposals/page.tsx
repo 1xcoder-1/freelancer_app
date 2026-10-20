@@ -26,10 +26,13 @@ import {
   type Proposal,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { logHandledError } from "@/lib/log-error";
 
 function ProposalsList() {
   const { getToken } = useAuth();
+  const currency = useWorkspaceCurrency().currency;
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const { data: proposalsData, loading, refresh: loadData } = useApiData<Proposal[]>(
@@ -141,7 +144,7 @@ function ProposalsList() {
                   <h4 className="text-sm font-semibold text-fg truncate">{p.title}</h4>
                   <p className="text-xs text-muted">
                     {p.client_name ? `Client: ${p.client_name} • ` : ""}
-                    <span className="font-mono text-accent font-semibold">${p.budget.toLocaleString()}</span>
+                    <span className="font-mono text-accent font-semibold">{formatMoney(p.budget, currency, 0)}</span>
                     {" • "}
                     {p.created_at?.slice(0, 10)}
                   </p>
@@ -216,6 +219,7 @@ function ProposalsContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const currency = useWorkspaceCurrency().currency;
 
   const tab = searchParams.get("tab");
   const active = tab === "book-ai" ? "book-ai" : "proposals";

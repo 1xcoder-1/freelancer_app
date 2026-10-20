@@ -4,20 +4,12 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
-  Calendar as CalendarIcon,
   Clock,
   Video,
   CheckCircle2,
   AlertCircle,
-  ShieldCheck,
-  User,
-  FileText,
-  RefreshCw,
   CreditCard,
 } from "@/components/animated-icons";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
@@ -27,13 +19,11 @@ import {
   PublicBookingConsultation,
   BookingAppointment,
 } from "@/lib/api";
+import { formatMoney } from "@/lib/currency";
 
-// Re-opened slots are polled on this cadence so a slot a second client just
-// took disappears before this visitor can click it (B1).
 const SLOTS_POLL_MS = 15_000;
 
 function fmtDay(iso: string): string {
-  // Server times are naive UTC; append Z so the weekday label is truthful.
   return new Date(`${iso}Z`).toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -42,7 +32,7 @@ function fmtDay(iso: string): string {
 }
 
 function fmtTime(iso: string): string {
-  return `${iso.slice(11, 16)} UTC`;
+  return iso.slice(11, 16);
 }
 
 export default function PublicBookingPage() {
@@ -53,9 +43,7 @@ export default function PublicBookingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // B1/B2: live, server-computed conflict-free slots.
   const [slots, setSlots] = useState<string[]>([]);
-  const [slotsRefreshing, setSlotsRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<string>("");
 
@@ -65,10 +53,6 @@ export default function PublicBookingPage() {
   const [scheduling, setScheduling] = useState(false);
   const [confirmedAppt, setConfirmedAppt] = useState<BookingAppointment | null>(null);
 
-  // Unsaved-changes guard — a visitor who typed their details and clicks away
-  // by mistake gets a confirm and can restore the draft on return. Slot/day
-  // picks are excluded: they are auto-selected programmatically as the live
-  // slot list refreshes, so they are not "typed work" worth guarding.
   const formValues = useMemo(
     () => ({ clientName, clientEmail, notes }),
     [clientName, clientEmail, notes]
@@ -107,20 +91,16 @@ export default function PublicBookingPage() {
     };
   }, [token]);
 
-  const loadSlots = useCallback(async (manual = false) => {
+  const loadSlots = useCallback(async () => {
     if (!token) return;
-    if (manual) setSlotsRefreshing(true);
     try {
       const res = await getPublicBookingSlots(token, 14);
       setSlots(res.slots);
     } catch {
-      // Graceful: keep the last known slots rather than blanking the picker.
-    } finally {
-      setSlotsRefreshing(false);
+      // Gracefully keep previous slots
     }
   }, [token]);
 
-  // Poll open slots every 15s (B1). Stops once an appointment is confirmed.
   useEffect(() => {
     if (!token || confirmedAppt) return;
     loadSlots();
@@ -135,7 +115,6 @@ export default function PublicBookingPage() {
     return Array.from(set).sort();
   }, [slots]);
 
-  // Keep a valid day/slot selected as the live slot list changes.
   useEffect(() => {
     if (days.length === 0) {
       setSelectedDay("");
@@ -161,7 +140,7 @@ export default function PublicBookingPage() {
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim() || !clientEmail.trim() || !selectedSlot) {
-      toast.error("Pick a time and add your details first.");
+      toast.error("Please pick a time and enter your details.");
       return;
     }
     setScheduling(true);
@@ -177,8 +156,7 @@ export default function PublicBookingPage() {
     } catch (err: any) {
       const msg = err?.message || "That slot was just taken. Please pick another.";
       toast.error(msg);
-      // A 409 (race) means the list is stale — refresh immediately.
-      void loadSlots(true);
+      void loadSlots();
     } finally {
       setScheduling(false);
     }
@@ -187,14 +165,14 @@ export default function PublicBookingPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-4">
-        <Card className="w-full max-w-xl bg-card border-line p-8 space-y-6">
-          <Skeleton className="h-8 w-48 mx-auto" />
-          <Skeleton className="h-4 w-64 mx-auto" />
-          <div className="space-y-4 pt-4">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-32 w-full" />
+        <div className="w-full max-w-xl mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 space-y-4">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-64" />
+          <div className="space-y-3 pt-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-24 w-full" />
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -202,57 +180,62 @@ export default function PublicBookingPage() {
   if (error || !consultation) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-4 text-fg">
-        <Card className="w-full max-w-md bg-card border-line p-8 text-center space-y-4">
-          <AlertCircle className="w-12 h-12 text-danger mx-auto" />
-          <h2 className="text-xl font-bold">Consultation Link Unavailable</h2>
-          <p className="text-sm text-muted">
-            {error || "This consultation calendar link is invalid or no longer accepting bookings."}
+        <div className="w-full max-w-md mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 text-center space-y-3 shadow-sm">
+          <AlertCircle className="w-8 h-8 text-danger mx-auto" />
+          <h2 className="text-lg font-bold">Consultation Unavailable</h2>
+          <p className="text-xs text-muted">
+            {error || "This consultation link is no longer accepting bookings."}
           </p>
-        </Card>
+        </div>
       </div>
     );
   }
 
+  const priceFormatted =
+    consultation.price > 0
+      ? formatMoney(consultation.price, consultation.currency, consultation.price % 1 === 0 ? 0 : 2)
+      : "Free";
+
   if (confirmedAppt) {
     const needsPayment = confirmedAppt.payment_status === "unpaid" && confirmedAppt.invoice_token;
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-4 text-fg">
-        <Card className="w-full max-w-lg bg-card border-line p-8 text-center space-y-6 shadow-2xl backdrop-blur-xl">
-          <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto border ${
-            needsPayment ? "bg-warn/10 text-warn border-warn/30" : "bg-accent-soft text-accent border-accent"
-          }`}>
-            {needsPayment ? <CreditCard className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
+      <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4">
+        <div className="w-full max-w-md mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 text-center space-y-5 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-accent-soft text-accent flex items-center justify-center mx-auto">
+            {needsPayment ? <CreditCard className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-fg">
-              {needsPayment ? "Almost booked — payment required" : "Appointment Confirmed!"}
+            <h2 className="text-xl font-bold text-fg">
+              {needsPayment ? "Almost booked" : "Booking Confirmed"}
             </h2>
-            <p className="text-sm text-fg mt-1">
-              {needsPayment
-                ? "Your slot is held. Complete payment to confirm the call."
-                : <>You&apos;re scheduled for <span className="text-info font-semibold">{consultation.title}</span> with {consultation.freelancer_name}</>}
+            <p className="text-xs sm:text-sm text-muted mt-1">
+              {needsPayment ? "Complete payment to secure your time slot." : consultation.title}
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-bg border border-line text-xs text-fg text-left space-y-2">
+          <div className="p-3.5 rounded-xl bg-surface border border-line text-xs text-left space-y-2">
             <div className="flex justify-between">
-              <span className="text-faint">Date:</span>
-              <span className="font-mono text-fg font-semibold">{fmtDay(confirmedAppt.appointment_time)}</span>
+              <span className="text-muted">Date:</span>
+              <span className="font-medium text-fg">{fmtDay(confirmedAppt.appointment_time)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-faint">Time:</span>
-              <span className="font-mono text-info font-semibold">{fmtTime(confirmedAppt.appointment_time)}</span>
+              <span className="text-muted">Time:</span>
+              <span className="font-mono text-accent font-medium">{fmtTime(confirmedAppt.appointment_time)} UTC</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-faint">Duration:</span>
-              <span className="text-fg">{consultation.duration_minutes} Minutes</span>
+              <span className="text-muted">Duration:</span>
+              <span className="text-fg">{consultation.duration_minutes} min</span>
             </div>
             {confirmedAppt.meeting_link && (
               <div className="flex justify-between items-center pt-2 border-t border-line">
-                <span className="text-faint">Video Call:</span>
-                <a href={confirmedAppt.meeting_link} target="_blank" rel="noopener noreferrer"
-                  className="text-info hover:underline flex items-center gap-1 font-semibold">
-                  <Video className="w-3.5 h-3.5" /> Join Call
+                <span className="text-muted">Meeting:</span>
+                <a
+                  href={confirmedAppt.meeting_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline flex items-center gap-1 font-medium"
+                >
+                  <Video className="w-3.5 h-3.5" /> Join call
                 </a>
               </div>
             )}
@@ -260,166 +243,175 @@ export default function PublicBookingPage() {
 
           {needsPayment && (
             <a href={`/pay/${confirmedAppt.invoice_token}`} className="block">
-              <Button className="w-full bg-accent hover:bg-accent-hi text-accent-fg font-semibold">
-                <CreditCard className="w-4 h-4 mr-2" />
-                Pay ${consultation.price.toFixed(2)} to confirm
-              </Button>
+              <button
+                type="button"
+                className="w-full h-10 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-medium text-sm transition-colors cursor-pointer"
+              >
+                Pay {priceFormatted}
+              </button>
             </a>
           )}
 
           {confirmedAppt.token && (
             <a href={`/reschedule/${confirmedAppt.token}`} className="block text-xs text-muted hover:text-fg underline">
-              Need to move this? Reschedule online
+              Reschedule
             </a>
           )}
-
-          <p className="text-xs text-faint">
-            A confirmation invite has been dispatched to <span className="text-fg font-mono">{confirmedAppt.client_email}</span>.
-          </p>
-        </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-bg text-fg flex flex-col justify-between p-4 sm:p-8">
-      <div className="w-full max-w-2xl mx-auto space-y-6">
-        {/* Header Banner */}
-        <Card className="bg-card border-line p-6 backdrop-blur-xl shadow-2xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <Badge className="bg-info/10 text-info border-info/20 font-mono text-xs mb-2">
-                1-on-1 Consultation
-              </Badge>
-              <h1 className="text-2xl sm:text-3xl font-bold text-fg">{consultation.title}</h1>
+    <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-xl mx-auto">
+        <div className="rounded-2xl border border-line bg-card p-6 sm:p-8 shadow-sm space-y-6">
+          {/* Minimal Clean Header */}
+          <div className="flex items-start justify-between gap-4 pb-5 border-b border-line">
+            <div className="space-y-1 flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-fg">
+                {consultation.title}
+              </h1>
               {consultation.description && (
-                <p className="text-muted text-xs sm:text-sm mt-1">{consultation.description}</p>
+                <p className="text-xs sm:text-sm text-muted">
+                  {consultation.description}
+                </p>
               )}
             </div>
 
-            <div className="text-left sm:text-right font-mono shrink-0">
-              <div className="text-2xl font-black text-accent">
-                {consultation.price > 0 ? `$${consultation.price.toFixed(2)}` : "Free"}
+            <div className="text-right shrink-0">
+              <div className="text-xl sm:text-2xl font-bold font-mono text-accent">
+                {priceFormatted}
               </div>
-              <div className="text-xs text-muted flex items-center sm:justify-end gap-1 mt-0.5">
-                <Clock className="w-3.5 h-3.5 text-info" />
-                {consultation.duration_minutes} Mins
+              <div className="text-xs text-muted flex items-center justify-end gap-1 mt-0.5">
+                <Clock className="w-3 h-3 text-muted" />
+                {consultation.duration_minutes} min
               </div>
             </div>
           </div>
-        </Card>
 
-        {/* B5: pre-call intake link */}
-        {consultation.intake_token && (
-          <a href={`/intake/${consultation.intake_token}`}
-            className="flex items-center gap-2 text-xs text-info hover:underline px-1">
-            <FileText className="w-4 h-4" />
-            Please complete the short intake form before your call.
-          </a>
-        )}
+          <form onSubmit={handleSchedule} className="space-y-5">
+            {/* Date Selection */}
+            {days.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted block">Select date</label>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  {days.map((d) => {
+                    const isSelected = selectedDay === d;
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setSelectedDay(d)}
+                        className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-accent text-accent-fg border-accent"
+                            : "bg-surface text-fg border-line hover:border-line-strong"
+                        }`}
+                      >
+                        {fmtDay(d)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-        {consultation.requires_payment && (
-          <p className="text-xs text-warn px-1">
-            This is a paid consultation — the slot is only confirmed once payment clears.
-          </p>
-        )}
-
-        {/* Schedule Form */}
-        <Card className="bg-card border-line shadow-2xl backdrop-blur-xl">
-          <form onSubmit={handleSchedule}>
-            <CardContent className="space-y-6 pt-6">
-              {/* Date & Time Slot Selection (live) */}
-              <div className="space-y-4 pb-4 border-b border-line">
+            {/* Time Slot Selection */}
+            {daySlots.length > 0 && (
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-info" /> 1. Pick an open time
-                  </h3>
-                  <button type="button" onClick={() => loadSlots(true)}
-                    className="text-xs text-muted hover:text-fg inline-flex items-center gap-1" title="Refresh slots">
-                    <RefreshCw className={`w-3.5 h-3.5 ${slotsRefreshing ? "animate-spin" : ""}`} />
-                    Live
-                  </button>
+                  <label className="text-xs font-medium text-muted block">Select time</label>
+                  <span className="text-[11px] text-muted font-mono">{consultation.timezone || "UTC"}</span>
                 </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {daySlots.map((s) => {
+                    const isSelected = selectedSlot === s;
+                    const timeOnly = fmtTime(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSelectedSlot(s)}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-mono font-medium transition-colors border text-center cursor-pointer ${
+                          isSelected
+                            ? "bg-accent text-accent-fg border-accent"
+                            : "bg-surface text-fg border-line hover:border-accent/40"
+                        }`}
+                      >
+                        {timeOnly}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-                {days.length === 0 ? (
-                  <p className="text-sm text-muted py-4">No open slots right now — please check back shortly.</p>
+            {days.length === 0 && (
+              <p className="text-xs text-muted py-4 text-center">No open slots available right now.</p>
+            )}
+
+            {/* Client Inputs */}
+            <div className="space-y-3 pt-3 border-t border-line">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-fg block">
+                    Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Your name"
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className="w-full h-9 px-3 rounded-xl bg-surface border border-line text-fg text-xs sm:text-sm focus:border-accent focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-fg block">
+                    Email <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Your email"
+                    value={clientEmail}
+                    onChange={(e) => setClientEmail(e.target.value)}
+                    className="w-full h-9 px-3 rounded-xl bg-surface border border-line text-fg text-xs sm:text-sm focus:border-accent focus:outline-none transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-fg block">Notes (optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="What would you like to discuss?"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-surface border border-line text-fg text-xs sm:text-sm focus:border-accent focus:outline-none transition-colors resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={scheduling || !selectedSlot}
+                className="w-full h-10 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+              >
+                {scheduling ? (
+                  "Booking..."
+                ) : consultation.price > 0 ? (
+                  `Reserve & Pay ${priceFormatted}`
                 ) : (
-                  <>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {days.map((d) => (
-                        <button key={d} type="button" onClick={() => setSelectedDay(d)}
-                          className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
-                            selectedDay === d ? "bg-accent text-accent-fg border-accent" : "bg-bg text-fg border-line hover:border-line-strong"
-                          }`}>
-                          {fmtDay(d)}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {daySlots.map((s) => (
-                        <button key={s} type="button" onClick={() => setSelectedSlot(s)}
-                          className={`px-3 py-2 rounded-xl text-xs font-mono font-medium transition-all border ${
-                            selectedSlot === s ? "bg-accent text-accent-fg border-accent shadow-sm" : "bg-bg text-fg border-line hover:border-line-strong"
-                          }`}>
-                          {fmtTime(s)}
-                        </button>
-                      ))}
-                    </div>
-                  </>
+                  "Confirm Booking"
                 )}
-              </div>
-
-              {/* Client Contact Info */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
-                  <User className="w-4 h-4 text-info" /> 2. Your Information
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-fg block mb-1">
-                      Your Name <span className="text-danger">*</span>
-                    </label>
-                    <input type="text" required placeholder="e.g. Marcus Vance" value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-fg block mb-1">
-                      Your Email <span className="text-danger">*</span>
-                    </label>
-                    <input type="email" required placeholder="marcus@company.com" value={clientEmail}
-                      onChange={(e) => setClientEmail(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-fg block mb-1">Meeting Topic / Project Overview</label>
-                  <textarea rows={3} placeholder="Briefly describe what you'd like to discuss..." value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-bg border border-line text-fg text-sm focus:outline-none focus:ring-2 focus:ring-accent" />
-                </div>
-              </div>
-            </CardContent>
-
-            <CardFooter className="pt-4 pb-6 border-t border-line flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs text-faint">
-                <ShieldCheck className="w-4 h-4 text-accent" />
-                Times shown in {consultation.timezone}
-              </div>
-              <Button type="submit" disabled={scheduling || !selectedSlot}
-                className="bg-accent hover:bg-accent-hi text-accent-fg font-semibold px-6 shadow-sm">
-                {scheduling ? "Confirming Slot..." : consultation.requires_payment ? "Reserve & Pay" : "Confirm Booking"}
-              </Button>
-            </CardFooter>
+              </button>
+            </div>
           </form>
-        </Card>
-      </div>
-
-      <div className="text-center py-6 text-xs text-faint">
-        Powered by <span className="text-fg font-semibold">Freelancer OS</span>
+        </div>
       </div>
     </div>
   );

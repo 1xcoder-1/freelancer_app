@@ -1,148 +1,129 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, Laptop, Smartphone } from "lucide-react";
-import { Container, Eyebrow, RadialGlow, Section } from "@/components/landing/layout";
-import { MacLid } from "@/components/landing/laptop";
-import { MobileTimerScreen } from "@/components/landing/mobile-app";
-import { ClientsView } from "@/components/landing/app";
-import { ScaledMock } from "@/components/landing/app";
+import { ArrowRight, Globe, Laptop, Smartphone } from "lucide-react";
+import { Container, Eyebrow, MkButton, Section } from "@/components/landing/layout";
 import { Rise, Stagger, StaggerItem } from "@/components/landing/motion";
 import { TextAnimate } from "@/components/ui/text-animate";
-import { TextureCard } from "@/components/ui/texture-card";
 
-/* ========================= DOWNLOAD SECTION ========================
-   "Your book on every screen": a mini MacBook preview with the real
-   clients panel overlapping a phone running the native timer screen,
-   beside honest pre-launch download tiles.
+/* ========================= DOWNLOAD OPTIONS ========================
+   The honest pre-launch download grid: the web app is live today,
+   the native companions are in final testing. One card per platform,
+   no fake download buttons — status is stated, the live path is first.
 =================================================================== */
 
-function DownloadTile({
-  icon: Icon,
-  name,
-  meta,
-  note,
-}: {
-  icon: React.ElementType;
-  name: string;
-  meta: string;
-  note: string;
-}) {
-  return (
-    <TextureCard
-      aria-disabled="true"
-      className="group relative overflow-hidden transition-colors hover:border-brand/40"
-    >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-brand/[0.05] to-transparent opacity-0 transition-opacity group-hover:opacity-100"
-      />
-      <div className="relative flex items-center gap-4 px-5 py-4">
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-[2px] border border-line bg-surface text-fg/80 transition-colors group-hover:border-brand/40 group-hover:text-brand">
-          <Icon className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="block text-[15px] font-medium text-fg">{name}</span>
-            <span className="rounded-[2px] border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#fcbb00]">
-              Soon
-            </span>
-          </span>
-          <span className="mt-0.5 block text-[13px] leading-5 text-muted">
-            {meta} — {note}
-          </span>
-        </span>
-        <ArrowDown className="size-4 shrink-0 text-muted/40" aria-hidden />
-      </div>
-    </TextureCard>
-  );
-}
+const platforms = [
+  {
+    icon: Globe,
+    name: "Web app",
+    status: "Live",
+    live: true,
+    desc: "The whole book in your browser — clients, projects, time, invoices and Book AI. Nothing to install, always the latest version.",
+    meta: "Any modern browser · starts free",
+  },
+  {
+    icon: Smartphone,
+    name: "Android app",
+    status: "Final testing",
+    live: false,
+    desc: "A timer that keeps counting offline, push reminders the moment an invoice moves, and your book in your pocket.",
+    meta: "Android 10+ · .apk or store",
+  },
+  {
+    icon: Laptop,
+    name: "Windows app",
+    status: "Final testing",
+    live: false,
+    desc: "Global Ctrl+Shift+F quick capture that works from any app, plus the whole book as its own native window.",
+    meta: "Windows 10+ · .exe installer",
+  },
+];
 
 export function DownloadSection() {
   return (
     <Section id="download" className="scroll-mt-24">
       <Container>
-        <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
-          <Rise className="relative overflow-x-clip">
-            <RadialGlow />
-            <div className="relative z-10 flex min-h-[440px] items-center justify-center py-6 sm:min-h-[520px]">
-              <div className="flex scale-[0.62] items-end sm:scale-[0.82] lg:scale-100">
-                <MacLid className="z-0 w-[560px] shrink-0 shadow-[0_30px_70px_-24px_rgba(0,0,0,0.85)]">
-                  <ScaledMock designWidth={860} designHeight={470}>
-                    <div className="bg-[#0e0e0f] px-6 py-5 text-[#f0efed]">
-                      <ClientsView compact />
-                    </div>
-                  </ScaledMock>
-                </MacLid>
-                <div
-                  className="relative z-10 -ml-24 shrink-0 pb-2"
-                  style={{
-                    boxShadow:
-                      "0 0 0 2px #090909, 0 0 0 3px #141517, 0 30px 80px -20px rgba(0,0,0,0.8)",
-                    borderRadius: 38,
-                  }}
-                >
-                  <div className="relative aspect-[9/19] w-[210px] rounded-[38px] border border-white/[0.025] bg-[linear-gradient(115deg,#090a0b_0%,#232529_22%,#0a0b0c_42%,#101113_76%,#282a2e_100%)] p-[5px]">
-                    <div className="relative flex h-full flex-col overflow-hidden rounded-[34px] bg-[#0b0b0b] text-white">
-                      <MobileTimerScreen scale={0.556} />
-                    </div>
-                  </div>
+        <Stagger className="flex flex-col items-center text-center">
+          <StaggerItem>
+            <Eyebrow>Download</Eyebrow>
+          </StaggerItem>
+          <StaggerItem>
+            <TextAnimate
+              as="h2"
+              variant="roll"
+              whileInView
+              text="Get the book on every screen."
+              className="mt-4 text-3xl font-medium tracking-tight leading-[1.1] text-fg sm:text-4xl lg:text-5xl"
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <p className="mt-4 max-w-2xl text-base text-muted sm:text-lg">
+              Start on the web today — the native companions ship right after
+              final testing, and your book syncs across all of them.
+            </p>
+          </StaggerItem>
+        </Stagger>
+
+        <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
+          {platforms.map((p, i) => (
+            <Rise key={p.name} delay={i * 0.08}>
+              <div className="group relative flex h-full flex-col rounded-[2px] border border-line bg-fg/[0.03] p-6 transition-colors hover:border-fg/20">
+                <div className="flex items-center justify-between">
+                  <span className="flex size-11 items-center justify-center rounded-[2px] border border-line bg-surface text-fg/80 transition-colors group-hover:border-brand/40 group-hover:text-brand">
+                    <p.icon className="size-5" />
+                  </span>
+                  <span
+                    className={
+                      p.live
+                        ? "rounded-[2px] border border-brand/40 bg-brand/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-brand"
+                        : "rounded-[2px] border border-line px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-[#fcbb00]"
+                    }
+                  >
+                    {p.status}
+                  </span>
+                </div>
+                <h3 className="mt-5 text-lg font-medium text-fg">{p.name}</h3>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">
+                  {p.desc}
+                </p>
+                <p className="mt-3 font-mono text-[11px] uppercase tracking-widest text-muted/60">
+                  {p.meta}
+                </p>
+                <div className="mt-5">
+                  {p.live ? (
+                    <Link href="/sign-up" className="block">
+                      <MkButton className="w-full">
+                        Open the web app
+                        <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                      </MkButton>
+                    </Link>
+                  ) : (
+                    <MkButton
+                      variant="outline"
+                      disabled
+                      aria-disabled="true"
+                      className="w-full cursor-default opacity-60"
+                    >
+                      Coming soon
+                    </MkButton>
+                  )}
                 </div>
               </div>
-            </div>
-          </Rise>
-
-          <Stagger className="space-y-4">
-            <StaggerItem>
-              <Eyebrow>Native apps</Eyebrow>
-            </StaggerItem>
-            <StaggerItem>
-              <TextAnimate
-                as="h2"
-                variant="roll"
-                whileInView
-                text="Take the book with you."
-                className="mt-4 text-3xl font-medium tracking-tight leading-[1.1] text-fg sm:text-4xl"
-              />
-            </StaggerItem>
-            <StaggerItem>
-              <p className="max-w-[500px] text-base leading-relaxed text-muted sm:text-lg">
-                The web app is live today. The native builds add what a browser
-                can&apos;t: a timer that keeps counting offline, push reminders
-                the moment an invoice moves, and a global quick capture that
-                works from any app.
-              </p>
-            </StaggerItem>
-            <StaggerItem>
-              <div className="flex max-w-md flex-col gap-3 pt-2">
-                <DownloadTile
-                  icon={Smartphone}
-                  name="Android app"
-                  meta=".apk, sideload or store"
-                  note="offline timer and push reminders"
-                />
-                <DownloadTile
-                  icon={Laptop}
-                  name="Windows app"
-                  meta=".exe installer"
-                  note="global Ctrl+Shift+F quick capture"
-                />
-              </div>
-            </StaggerItem>
-            <StaggerItem>
-              <p className="max-w-md text-sm leading-relaxed text-muted">
-                Native builds are in final testing — no waitlist needed, the web
-                app does everything today.{" "}
-                <Link
-                  href="/sign-up"
-                  className="whitespace-nowrap font-medium text-brand transition-colors hover:text-brand-light"
-                >
-                  Start on web →
-                </Link>
-              </p>
-            </StaggerItem>
-          </Stagger>
+            </Rise>
+          ))}
         </div>
+
+        <Rise className="mt-8 text-center">
+          <p className="text-sm text-muted">
+            No waitlist, no credit card — the web app does everything today,{" "}
+            <Link
+              href="/sign-up"
+              className="whitespace-nowrap font-medium text-brand transition-colors hover:text-brand-light"
+            >
+              start free →
+            </Link>
+          </p>
+        </Rise>
       </Container>
     </Section>
   );

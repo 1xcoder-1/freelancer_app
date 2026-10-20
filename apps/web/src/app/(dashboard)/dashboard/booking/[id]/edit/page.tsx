@@ -44,10 +44,10 @@ export default function EditBookingServicePage() {
           <h3 className="font-display text-lg font-medium text-fg">Service not found</h3>
           <p className="text-muted text-sm">This consultation does not exist (or was deleted) in your workspace.</p>
           <Link
-            href="/dashboard/booking/services"
-            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors"
+            href={`/dashboard/booking/${id}`}
+            className="group inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-all duration-150"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to Services
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-150 group-hover:-translate-x-1" /> Back to Service
           </Link>
         </Card>
       </div>
@@ -72,9 +72,10 @@ export default function EditBookingServicePage() {
       isActive={consultation.is_active}
       draftKey={`booking-edit-${consultation.id}`}
       headline="Edit service"
-      backHref="/dashboard/booking/services"
+      backHref={`/dashboard/booking/${consultation.id}`}
+      backLabel="Back to Service"
       submitLabel="Save changes"
-      doneHref="/dashboard/booking/services"
+      doneHref={`/dashboard/booking/${consultation.id}`}
       onSubmit={async (payload) => {
         const token = (await getToken()) || undefined;
         await updateBooking(consultation.id, payload, token);
@@ -84,13 +85,7 @@ export default function EditBookingServicePage() {
       }}
     >
       <Card className="p-5 sm:p-6 rounded-2xl border border-line bg-card space-y-4 shadow-xs">
-        <div className="flex items-center justify-between pb-1 border-b border-line/50">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-warn" />
-            <h2 className="text-sm font-medium text-fg">Days off</h2>
-          </div>
-          <span className="text-[11px] font-mono text-muted tracking-wider">Dates clients cannot book</span>
-        </div>
+        <h2 className="text-sm font-medium text-fg">Days Off</h2>
         <ServiceDaysOffEditor consultationId={consultation.id} />
       </Card>
     </ConsultationForm>

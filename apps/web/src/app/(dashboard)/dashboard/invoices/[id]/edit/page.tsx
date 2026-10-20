@@ -19,6 +19,8 @@ import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { getInvoice, updateInvoiceStatus, type Invoice } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { toast } from "sonner";
 import { logHandledError } from "@/lib/log-error";
 
@@ -27,6 +29,7 @@ export default function EditInvoicePage() {
   const invoiceId = params?.id as string;
   const router = useRouter();
   const { getToken } = useAuth();
+  const { currency } = useWorkspaceCurrency();
 
   const [status, setStatus] = useState<"draft" | "sent" | "paid" | "overdue">("sent");
   const [notes, setNotes] = useState("");
@@ -184,7 +187,7 @@ export default function EditInvoicePage() {
         <div className="lg:col-span-5 sticky top-24 space-y-4">
           <CategoryVisualCard
             title={invoice?.invoice_number || "Invoice"}
-            currentCount={`$${(invoice?.total_amount || 0).toLocaleString()}`}
+            currentCount={formatMoney(invoice?.total_amount || 0, currency, 0)}
             totalCount="Amount"
             subtitle={invoice?.client_name ? `Client: ${invoice.client_name}` : "Direct"}
             tags={

@@ -780,6 +780,7 @@ async def _portal_payload(db: AsyncSession, project: Project) -> dict:
         "description": project.description,
         "status": project.status,
         "budget": project.budget,
+        "currency": workspace.currency if workspace else "USD",
         "share_token": project.share_token,
         "progress_pct": calculate_progress(project.milestones, project.tasks, project.status),
         "freelancer_name": workspace.name if workspace else "",

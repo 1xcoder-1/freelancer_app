@@ -19,6 +19,7 @@ import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
 import { celebrate } from "@/components/common/Celebration";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -128,6 +129,7 @@ const formatAmountWithCommas = (val: string): string => {
 export default function NewClientPage() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -139,7 +141,8 @@ export default function NewClientPage() {
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
   const [rateOrBudget, setRateOrBudget] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [pickedCurrency, setCurrency] = useState("");
+  const currency = pickedCurrency || wsCurrency || "USD";
   const [category, setCategory] = useState("Featured");
   const [customCategory, setCustomCategory] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("50_advance_50_completion");
@@ -167,7 +170,7 @@ export default function NewClientPage() {
     setPhone(str("phone"));
     setWebsite(str("website"));
     setRateOrBudget(str("rateOrBudget"));
-    setCurrency(str("currency", "USD"));
+    setCurrency(str("currency", ""));
     setCategory(str("category", "Featured"));
     setCustomCategory(str("customCategory"));
     setPaymentTerms(str("paymentTerms", "50_advance_50_completion"));

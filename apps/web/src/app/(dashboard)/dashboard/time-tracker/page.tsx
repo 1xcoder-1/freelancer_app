@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import {
   Clock,
@@ -9,10 +10,16 @@ import {
   Square,
   Trash2,
   RefreshCw,
+  DollarSign,
+  Receipt,
+  TrendingUp,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/dashboard/patterns";
+import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import {
   getTimeEntries,
   deleteTimeEntry,
@@ -34,6 +41,14 @@ function formatTimer(total: number) {
   const mins = Math.floor((total % 3600) / 60);
   const secs = total % 60;
   return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+function fmtDur(total: number) {
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  if (hrs === 0 && mins === 0) return `${total}s`;
+  if (hrs === 0) return `${mins}m`;
+  return `${hrs}h ${mins}m`;
 }
 
 // Isolated leaf so the 1Hz tick re-renders only the clock text, not the
@@ -63,6 +78,9 @@ function LiveTimerDisplay({ session }: { session: TimerSession | null }) {
 
 export default function TimeTrackerPage() {
   const { getToken } = useAuth();
+  const router = useRouter();
+  // Captured once on mount so the "This Week" math stays pure during render.
+  const [mountedAt] = useState(() => Date.now());
 
   // Server-authoritative timer: the run lives in the DB, so this component only
   // renders it. Live tick smoothing is handled by the LiveTimerDisplay leaf.
@@ -226,27 +244,77 @@ export default function TimeTrackerPage() {
   const running = !!session?.is_running;
   const paused = !!session && !session.is_running;
 
+  const totalSeconds = entries.reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
+  const billableSeconds = entries
+    .filter((e) => e.is_billable)
+    .reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
+  const uninvoicedCount = entries.filter((e) => e.is_billable && !e.is_invoiced).length;
+  const weekAgo = mountedAt - 7 * 24 * 60 * 60 * 1000;
+  const weekSeconds = entries
+    .filter((e) => e.created_at && new Date(e.created_at).getTime() >= weekAgo)
+    .reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
-        <div>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Time</h1>
-          <p className="text-muted text-sm mt-1">
-            Start the clock, stop it, and the hours are ready to bill. It keeps counting even if you
-            close the tab or switch devices.
-          </p>
+    <div className="space-y-6">
+      {/* 4 Headline Cards at the top (same as Clients) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+        {loading && entries.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Logged"
+              value={fmtDur(totalSeconds)}
+              icon={Clock}
+              rows={[{ text: `${entries.length} session${entries.length === 1 ? "" : "s"}`, dot: "info" }]}
+            />
+            <StatCard
+              label="Billable Hours"
+              value={fmtDur(billableSeconds)}
+              icon={DollarSign}
+              rows={[{ text: billableSeconds > 0 ? "ready to invoice" : "nothing billable yet", dot: billableSeconds > 0 ? "ok" : "info" }]}
+            />
+            <StatCard
+              label="Uninvoiced"
+              value={uninvoicedCount}
+              icon={Receipt}
+              rows={[{ text: uninvoicedCount > 0 ? "entries waiting to bill" : "all billed up", dot: uninvoicedCount > 0 ? "warn" : "ok" }]}
+            />
+            <StatCard
+              label="This Week"
+              value={fmtDur(weekSeconds)}
+              icon={TrendingUp}
+              rows={[{ text: "last 7 days", dot: "info" }]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row (same as Clients) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {entries.length} Time Entry{entries.length === 1 ? "" : "s"}
+          </Badge>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => loadData(true)}
-          disabled={loading}
-          className="border-line text-fg w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadData(true)}
+            disabled={loading}
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
 
       {/* Interactive Timer Box (backed by a real-time DB session) */}
@@ -330,58 +398,59 @@ export default function TimeTrackerPage() {
         )}
       </Card>
 
-      {/* Time Log Table from Neon DB with Skeleton Loading */}
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="bg-card border-line p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Skeleton className="w-10 h-10 rounded-xl" />
-                <div className="space-y-1.5">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <Skeleton className="h-5 w-20" />
-                <Skeleton className="h-4 w-4 rounded" />
-              </div>
-            </Card>
+      {/* Time Log Cards (same visual language as Clients) */}
+      {loading && entries.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[180px] w-full rounded-2xl" />
           ))}
         </div>
       ) : entries.length > 0 ? (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 stagger-grid">
           {entries.map((e) => (
-            <Card key={e.id} className="bg-card border-line p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-info/10 text-info dark:text-info">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-fg">{e.description || "Focus Session"}</h4>
-                  <p className="text-xs text-muted">{e.project_title} • {e.created_at?.slice(0, 10)}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <span className="font-mono text-sm font-semibold text-info">
-                  {formatTimer(e.duration_seconds)}
+            <CategoryVisualCard
+              key={e.id}
+              title={e.description || "Focus Session"}
+              subtitle={e.project_title || "Unassigned"}
+              onClick={() => e.project_id && router.push(`/dashboard/projects/${e.project_id}`)}
+              topRightContent={
+                <span className="font-mono text-sm font-bold text-info bg-info/10 border border-info/25 px-2.5 py-1 rounded-full">
+                  {fmtDur(e.duration_seconds)}
                 </span>
-                <button
-                  onClick={() => handleDelete(e.id)}
-                  className="text-faint hover:text-danger transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </Card>
+              }
+              tags={
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-mono text-muted bg-surface px-2.5 py-0.5 rounded-full border border-line">
+                    {e.created_at?.slice(0, 10)}
+                  </span>
+                  {!e.is_billable && (
+                    <span className="text-[11px] font-medium text-muted bg-surface px-2.5 py-0.5 rounded-full border border-line">
+                      not billed
+                    </span>
+                  )}
+                  <button
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      handleDelete(e.id);
+                    }}
+                    className="ml-auto text-faint hover:text-danger transition-colors cursor-pointer"
+                    title="Delete time entry"
+                    aria-label="Delete time entry"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              }
+            />
           ))}
         </div>
       ) : (
-        <Card className="bg-card border-dashed border-line p-12 text-center">
-          <Clock className="w-12 h-12 text-faint mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-fg">No time logged yet</h3>
-          <p className="text-sm text-faint mt-1 max-w-md mx-auto">
+        <Card className="bg-card border-dashed border-line p-12 text-center rounded-2xl">
+          <div className="w-12 h-12 rounded-xl bg-accent-soft flex items-center justify-center mx-auto mb-3.5">
+            <Clock className="w-6 h-6 text-accent" />
+          </div>
+          <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No time logged yet</h3>
+          <p className="text-xs sm:text-sm text-muted mt-1 max-w-sm mx-auto leading-relaxed">
             Press Start Timer above — your hours are saved safely in the cloud, ready to invoice.
           </p>
         </Card>

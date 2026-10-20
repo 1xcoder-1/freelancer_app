@@ -41,6 +41,8 @@ import {
   type CalendarFeedItem,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 
 /* ------------------------------------------------------------------
    Home is deliberately simple: a greeting, the four numbers every
@@ -148,8 +150,8 @@ export default function DashboardPage() {
     day: "numeric",
   });
 
-  const usd = (n: number | undefined) =>
-    `$${Math.round(n ?? 0).toLocaleString("en-US")}`;
+  const { currency } = useWorkspaceCurrency();
+  const usd = (n: number | undefined) => formatMoney(n ?? 0, currency, 0);
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "today", label: "Today" },
@@ -497,7 +499,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-muted">{inv.client} • {inv.issue_date}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-fg font-mono">${inv.amount.toFixed(2)}</p>
+                    <p className="text-sm font-bold text-fg font-mono">{formatMoney(inv.amount, currency)}</p>
                     <span
                       className={`text-[10px] font-mono font-semibold ${
                         inv.status === "paid" ? "text-ok" : inv.status === "overdue" ? "text-danger" : "text-warn"

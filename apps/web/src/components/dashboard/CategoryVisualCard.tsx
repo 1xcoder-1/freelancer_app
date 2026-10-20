@@ -52,6 +52,7 @@ interface CategoryVisualCardProps {
   tags?: React.ReactNode;
   icon?: React.ReactNode;
   className?: string;
+  hidePrefix?: boolean;
 }
 
 export function CategoryVisualCard({
@@ -64,6 +65,7 @@ export function CategoryVisualCard({
   tags,
   icon,
   className = "",
+  hidePrefix = false,
 }: CategoryVisualCardProps) {
   const safeTitle =
     typeof title === "string" && title.trim() ? title.trim() : "Client Profile";
@@ -72,7 +74,11 @@ export function CategoryVisualCard({
     typeof subtitle === "string"
       ? subtitle.trim().replace(/^By\s+/i, "").trim()
       : "";
-  const displaySubtitle = cleanSubtitle ? `By ${cleanSubtitle}` : "By Direct Client";
+  const displaySubtitle = hidePrefix
+    ? cleanSubtitle
+    : cleanSubtitle
+      ? `By ${cleanSubtitle}`
+      : "By Direct Client";
 
   const textOf = (v?: number | string | null) =>
     typeof v === "number" ? String(v) : typeof v === "string" && v.trim() ? v.trim() : null;
@@ -126,12 +132,16 @@ export function CategoryVisualCard({
         ) : null}
       </div>
 
-      {/* Bottom Section: "By Subtitle" & Chai Cup */}
-      <div className="relative z-10 flex items-end justify-between gap-2 pt-2">
-        <span className="font-display text-xs sm:text-[13px] text-muted dark:text-[#a1a1aa] font-normal tracking-wide truncate max-w-[75%] group-hover:text-fg transition-colors capitalize">
+      {/* Bottom Section: Subtitle & Icon */}
+      <div className="relative z-10 flex items-center justify-between gap-3 pt-3 mt-auto border-t border-line/40 dark:border-white/5">
+        <span
+          className={`text-[13px] sm:text-sm text-fg/80 dark:text-[#d4d4d8] font-normal tracking-[0.02em] leading-relaxed truncate flex-1 min-w-0 group-hover:text-fg transition-colors ${
+            hidePrefix ? "" : "capitalize"
+          }`}
+        >
           {displaySubtitle}
         </span>
-        <div className="shrink-0 transition-transform duration-300 ease-out group-hover:scale-115 group-hover:rotate-3">
+        <div className="shrink-0 transition-transform duration-300 ease-out group-hover:scale-110">
           {icon || <ChaiCupIcon className="w-7 h-7" />}
         </div>
       </div>

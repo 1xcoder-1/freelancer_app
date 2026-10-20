@@ -10,41 +10,35 @@ import {
   ChevronRight,
   RotateCcw,
   CheckCircle2,
-  Trash2,
+  LayoutGrid,
+  Layers,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SubTabs } from "@/components/dashboard/SubTabs";
+import { StatCard } from "@/components/dashboard/patterns";
 import {
   getProjects,
-  deleteProject,
   updateProject,
   type Project,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { toast } from "sonner";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 import { logHandledError } from "@/lib/log-error";
 
-const DEFAULT_CATEGORIES = [
-  "Featured",
-  "Client Engagements",
-  "Design & Branding",
-  "Fullstack Web Apps",
-  "Mobile & AI Systems",
-  "Ongoing Retainers",
-];
-
 const CARDS_PER_PAGE = 20;
 
-const moneyShort = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+const moneyShort = (n: number, currency: string) => formatMoney(n, currency, 0);
 
 export function ProjectsPanel() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const { currency } = useWorkspaceCurrency();
 
   const [activeTab, setActiveTab] = useState<"now" | "archive">("now");
   const [catPages, setCatPages] = useState<Record<string, number>>({});
@@ -121,30 +115,76 @@ export function ProjectsPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-              Projects & Deliverables
-            </h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
-              {loading ? "Loading..." : `${projects.length} Total Projects`}
-            </Badge>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Run each job seamlessly: deliverables, milestones, budget burn, and e-signatures.
-          </p>
+    <div className="space-y-6">
+      {/* 4 Headline Cards at the top (same as Clients) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+        {loading && projects.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Projects"
+              value={projects.length}
+              icon={LayoutGrid}
+              rows={[
+                {
+                  text: `${activeProjects.length} active · ${archivedProjects.length} archived`,
+                  dot: "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Active Now"
+              value={activeProjects.length}
+              icon={CheckCircle2}
+              rows={[
+                {
+                  text: activeProjects.length > 0 ? "delivery in motion" : "nothing running",
+                  dot: activeProjects.length > 0 ? "ok" : "info",
+                },
+              ]}
+            />
+            <StatCard
+              label="Archived"
+              value={archivedProjects.length}
+              icon={RotateCcw}
+              rows={[
+                {
+                  text: archivedProjects.length > 0 ? "completed or paused" : "nothing archived",
+                  dot: archivedProjects.length > 0 ? "warn" : "ok",
+                },
+              ]}
+            />
+            <StatCard
+              label="Categories"
+              value={categoriesPresent.length}
+              icon={Layers}
+              rows={[{ text: `${categoriesPresent.length} project groups`, dot: "info" }]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row (same as Clients) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {projects.length} Total Project{projects.length === 1 ? "" : "s"}
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -152,7 +192,7 @@ export function ProjectsPanel() {
 
           <button
             onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Project</span>
@@ -160,7 +200,7 @@ export function ProjectsPanel() {
         </div>
       </div>
 
-      {/* Projects Board Filters */}
+      {/* Active / Archived filter */}
       <SubTabs
         tabs={[
           { value: "now", label: "Active Projects", count: activeProjects.length },
@@ -316,27 +356,8 @@ export function ProjectsPanel() {
                                   {p.status === "in_progress" ? "In Progress" : p.status}
                                 </span>
                                 <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
-                                  {moneyShort(p.budget || 0)}
+                                  {moneyShort(p.budget || 0, currency)}
                                 </span>
-                                {/* P2 deadline risk (verdict derived server-side) */}
-                                {p.deadline && p.deadline.verdict !== "on_track" && p.deadline.verdict !== "completed" && (
-                                  <span
-                                    className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${p.deadline.verdict === "overdue"
-                                        ? "bg-danger/15 text-danger border-danger/30"
-                                        : "bg-warn/20 text-warn border-warn/30"
-                                      }`}
-                                  >
-                                    {p.deadline.verdict === "overdue"
-                                      ? `${-p.deadline.days_left}d overdue`
-                                      : `${p.deadline.days_left}d left`}
-                                  </span>
-                                )}
-                                {/* P1 unbilled hours earned on this project */}
-                                {p.unbilled_hours > 0 && (
-                                  <span className="text-[11px] font-mono text-accent bg-accent-soft px-2.5 py-0.5 rounded-full border border-accent/20">
-                                    {p.unbilled_hours.toFixed(0)}h unbilled
-                                  </span>
-                                )}
                                 {activeTab === "archive" && (
                                   <button
                                     onClick={(e) => handleRestoreProject(p.id, e)}

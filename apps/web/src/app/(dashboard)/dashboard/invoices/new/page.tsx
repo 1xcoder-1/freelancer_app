@@ -21,6 +21,8 @@ import {
   type UnbilledTimeEntry,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney, currencySymbol } from "@/lib/currency";
 import { toast } from "sonner";
 import { z } from "zod";
 import { validateOrToast } from "@/lib/validation";
@@ -40,6 +42,7 @@ const newInvoiceNumber = () =>
 export default function NewInvoicePage() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const { currency } = useWorkspaceCurrency();
 
   const [clientId, setClientId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState(newInvoiceNumber);
@@ -148,7 +151,7 @@ export default function NewInvoicePage() {
         ...unbilledTime
           .filter((e) => selectedTimeIds.includes(e.id))
           .map((e) => ({
-            description: `${e.project_title}: ${e.description || "Logged Time"} (${e.hours}h @ $${e.hourly_rate}/h)`,
+            description: `${e.project_title}: ${e.description || "Logged Time"} (${e.hours}h @ ${formatMoney(e.hourly_rate, currency)}/h)`,
             quantity: e.hours,
             unit_price: e.hourly_rate,
           })),
@@ -172,9 +175,9 @@ export default function NewInvoicePage() {
       guard.markSaved();
       toast.success("Invoice created & sent to client!");
       router.push(`/dashboard/invoices/${created.id}`);
-    } catch (err: any) {
+    } catch (err) {
       logHandledError("Error creating invoice:", err);
-      toast.error(err?.response?.data?.detail || "Could not create invoice");
+      toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Could not create invoice");
     } finally {
       setSubmitting(false);
     }
@@ -302,7 +305,7 @@ export default function NewInvoicePage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted">Rate / Price ($) *</label>
+                  <label className="text-xs font-semibold text-muted">Rate / Price ({currencySymbol(currency)}) *</label>
                   <input
                     type="number"
                     min="0"
@@ -326,7 +329,7 @@ export default function NewInvoicePage() {
                   <span className="text-xs font-bold text-fg">Import Unbilled Logged Hours</span>
                 </div>
                 <span className="text-xs text-accent font-mono font-semibold">
-                  {selectedTimeIds.length} selected (${selectedUnbilledTotal.toLocaleString()})
+                  {selectedTimeIds.length} selected ({formatMoney(selectedUnbilledTotal, currency, 0)})
                 </span>
               </div>
 
@@ -354,7 +357,7 @@ export default function NewInvoicePage() {
                         </div>
                       </div>
                       <span className="font-mono font-bold text-accent">
-                        {entry.hours}h (${entry.amount})
+                        {entry.hours}h ({formatMoney(entry.amount, currency)})
                       </span>
                     </label>
                   );
@@ -380,7 +383,7 @@ export default function NewInvoicePage() {
             className="w-full bg-accent hover:bg-accent-hi text-accent-fg font-bold h-11 rounded-xl shadow-md text-sm"
           >
             <Send className="w-4 h-4 mr-2" />
-            {submitting ? "Creating..." : `Create & Send Invoice ($${totalAmount.toLocaleString()})`}
+            {submitting ? "Creating..." : `Create & Send Invoice (${formatMoney(totalAmount, currency, 0)})`}
           </Button>
         </form>
 
@@ -389,13 +392,13 @@ export default function NewInvoicePage() {
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-bold text-fg">Live Invoice Summary</span>
             <span className="text-[11px] text-accent font-semibold font-mono">
-              ${totalAmount.toLocaleString()} Total
+              {formatMoney(totalAmount, currency, 0)} Total
             </span>
           </div>
 
           <CategoryVisualCard
             title={invoiceNumber || "INV-001"}
-            currentCount={`$${totalAmount.toLocaleString()}`}
+            currentCount={formatMoney(totalAmount, currency, 0)}
             totalCount="Due"
             subtitle={selectedClient ? `Client: ${selectedClient.name}` : "Direct Invoice"}
             tags={

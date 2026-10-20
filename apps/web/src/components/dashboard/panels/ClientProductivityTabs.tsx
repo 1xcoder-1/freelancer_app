@@ -9,24 +9,16 @@ import {
 } from "@/components/animated-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { joinSymbol, currencySymbol } from "@/lib/currency";
 import { getClientRelationship } from "@/lib/api";
 
-const formatMoney = (amount: number | null | undefined, currency = "USD") => {
-  const symbolMap: Record<string, string> = {
-    USD: "$",
-    PKR: "Rs ",
-    EUR: "€",
-    GBP: "£",
-    AED: "AED ",
-    CAD: "CA$",
-    AUD: "AU$",
-  };
-  const sym = symbolMap[currency] ?? `${currency} `;
+const formatMoney = (amount: number | null | undefined, currency: string) => {
   const val = amount ?? 0;
-  return `${sym}${val.toLocaleString("en-US", {
+  return joinSymbol(currencySymbol(currency), val.toLocaleString("en-US", {
     minimumFractionDigits: val % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
-  })}`;
+  }));
 };
 
 export function ClientProductivityTabs({ clientId }: { clientId: string }) {
@@ -35,6 +27,7 @@ export function ClientProductivityTabs({ clientId }: { clientId: string }) {
     (token) => getClientRelationship(clientId, token),
     { pollMs: 15000, reportContext: "clients-relationship" }
   );
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   if (loading && !data) {
     return (
@@ -46,7 +39,7 @@ export function ClientProductivityTabs({ clientId }: { clientId: string }) {
     );
   }
 
-  const currency = data?.currency || "USD";
+  const currency = wsCurrency || data?.currency || "USD";
 
   // Card 1: Projects
   const totalProjects = data?.total_projects ?? 0;

@@ -32,6 +32,8 @@ import {
   type PipelineInsights,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
 
 const CARDS_PER_PAGE = 20;
@@ -45,8 +47,7 @@ const STAGES: Array<{ key: LeadStage; label: string; step: number; tone: string 
   { key: "lost", label: "Lost", step: 0, tone: "bg-danger/10 text-danger" },
 ];
 
-const money = (n: number, currency: string) =>
-  `${currency === "USD" ? "$" : `${currency} `}${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+const money = (n: number, currency: string) => formatMoney(n, currency, 0);
 
 // L4 proposal expiry chip. Pure by construction: both dates come from server
 // data (never a render-time clock read), so it respects the react-hooks/purity
@@ -80,7 +81,7 @@ export function LeadsPanel() {
   );
 
   const leads = leadsData ?? [];
-  const currency = insights?.currency ?? "USD";
+  const currency = useWorkspaceCurrency().currency || insights?.currency || "USD";
 
   const getLeadCategory = (l: Lead): string => {
     if (!l) return "Featured";

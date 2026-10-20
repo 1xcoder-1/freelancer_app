@@ -9,6 +9,7 @@ from app.core.auth import require_authenticated_user
 from app.core.inngest_client import emit
 from app.core.workspace import get_or_create_user_workspace
 from app.models.booking import BookingConsultation, BookingAppointment, BookingBlockedDay
+from app.models.calendar import GoogleCalendarConnection
 from app.models.client import Client
 from app.models.finance import Invoice, InvoiceItem
 from app.models.intake import IntakeForm
@@ -624,6 +625,7 @@ async def get_public_consultation(
         "max_advance_days": consultation.max_advance_days,
         "buffer_minutes": consultation.buffer_minutes,
         "requires_payment": consultation.price > 0,
+        "currency": workspace.currency if workspace else "USD",
         "intake_form_id": consultation.intake_form_id,
         "intake_token": intake_token,
     }
@@ -714,7 +716,18 @@ async def schedule_public_appointment(
     # just-taken race).
     await _assert_no_overlap(db, consultation, when)
 
-    meeting_link = f"https://meet.google.com/{consultation.token[:3]}-{consultation.token[3:7]}-{consultation.token[7:10]}"
+    # Placeholder Meet link only when the workspace actually wants Meet links
+    # (connected Google Calendar + Meet toggle on); the sync job replaces it
+    # with the real link. Otherwise the client gets no meeting link at all.
+    conn = (await db.execute(
+        select(GoogleCalendarConnection).where(
+            GoogleCalendarConnection.workspace_id == consultation.workspace_id
+        )
+    )).scalar_one_or_none()
+    if conn and conn.refresh_token and conn.meet_enabled:
+        meeting_link = f"https://meet.google.com/{consultation.token[:3]}-{consultation.token[3:7]}-{consultation.token[7:10]}"
+    else:
+        meeting_link = None
     is_paid = consultation.price > 0
 
     appointment = BookingAppointment(

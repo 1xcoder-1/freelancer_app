@@ -2,39 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
 import {
   Receipt,
   Plus,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  Copy,
-  CheckCircle2,
-  Trash2,
-  Send,
   Clock,
   DollarSign,
-  Calendar,
+  AlertCircle,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/dashboard/patterns";
 import {
   getInvoices,
-  deleteInvoice,
-  updateInvoiceStatus,
   getUnbilledTimeEntries,
   type Invoice,
   type UnbilledTimeEntry,
 } from "@/lib/api";
-import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
-import { toast } from "sonner";
+import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
-import { logHandledError } from "@/lib/log-error";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -48,9 +40,8 @@ const CARDS_PER_PAGE = 20;
 
 export function InvoicesPanel() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { currency } = useWorkspaceCurrency();
   const [catPages, setCatPages] = useState<Record<string, number>>({});
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const { data: invoicesData, loading, refresh: loadData } = useApiData<Invoice[]>(
     "invoices:data",
@@ -84,38 +75,6 @@ export function InvoicesPanel() {
     router.push(`/dashboard/invoices/${invoice.id}`);
   };
 
-  const copyPaymentLink = (invoiceId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/pay/${invoiceId}`;
-    navigator.clipboard.writeText(url);
-    setCopiedId(invoiceId);
-    toast.success("Payment link copied to clipboard");
-    setTimeout(() => setCopiedId(null), 2500);
-  };
-
-  const handleDeleteInvoice = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const confirmed = await confirmDialog({
-      title: "Delete Invoice",
-      message: "Are you sure you want to delete this invoice? This cannot be undone.",
-      confirmLabel: "Delete",
-      danger: true,
-    });
-    if (!confirmed) return;
-
-    try {
-      const token = (await getToken()) || undefined;
-      await deleteInvoice(id, token);
-      invalidateCache("invoices:data");
-      loadData(true);
-      toast.success("Invoice deleted");
-    } catch (err) {
-      logHandledError("Error deleting invoice:", err);
-      toast.error("Could not delete invoice");
-    }
-  };
-
   const categoriesPresent = DEFAULT_CATEGORIES.filter((cat) =>
     invoices.some((inv) => getInvoiceCategory(inv) === cat)
   );
@@ -125,34 +84,81 @@ export function InvoicesPanel() {
 
   const unbilledCount = unbilledTimeData?.length ?? 0;
   const unbilledTotal = (unbilledTimeData ?? []).reduce((acc, u) => acc + (u.amount || 0), 0);
+  const outstandingCount = invoices.filter((inv) => inv.status === "sent").length;
+  const overdueCount = invoices.filter((inv) => inv.status === "overdue").length;
+  const paidCount = invoices.filter((inv) => inv.status === "paid").length;
+  const paidTotal = invoices
+    .filter((inv) => inv.status === "paid")
+    .reduce((acc, inv) => acc + (inv.total_amount || 0), 0);
 
   return (
-    <div className="space-y-8">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-              Invoices & Billing
-            </h2>
-            <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
-              {loading
-                ? "Loading..."
-                : `${invoices.length} Total Invoices • ${unbilledCount} Unbilled Logs ($${unbilledTotal.toLocaleString()})`}
-            </Badge>
-          </div>
-          <p className="text-muted text-sm mt-1">
-            Bill clients for deliverables, track settlements, and import logged sprint time automatically.
-          </p>
+    <div className="space-y-6">
+      {/* 4 Headline Cards at the top (same as Clients) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+        {loading && invoices.length === 0 ? (
+          <>
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Invoices"
+              value={invoices.length}
+              icon={Receipt}
+              rows={[
+                { text: `${unbilledCount} unbilled time logs`, dot: unbilledCount > 0 ? "warn" : "info" },
+              ]}
+            />
+            <StatCard
+              label="Outstanding"
+              value={outstandingCount}
+              icon={Clock}
+              rows={[
+                {
+                  text: `${formatMoney(unbilledTotal, currency, 0)} ready to bill`,
+                  dot: outstandingCount > 0 ? "warn" : "ok",
+                },
+              ]}
+            />
+            <StatCard
+              label="Overdue"
+              value={overdueCount}
+              icon={AlertCircle}
+              rows={[
+                {
+                  text: overdueCount > 0 ? "needs a follow-up" : "nothing overdue",
+                  dot: overdueCount > 0 ? "danger" : "ok",
+                },
+              ]}
+            />
+            <StatCard
+              label="Paid & Settled"
+              value={paidCount}
+              icon={DollarSign}
+              rows={[{ text: `${formatMoney(paidTotal, currency, 0)} collected`, dot: "ok" }]}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Action Controls Row (same as Clients) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2">
+          <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+            {invoices.length} Total Invoice{invoices.length === 1 ? "" : "s"}
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => loadData(true)}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -160,7 +166,7 @@ export function InvoicesPanel() {
 
           <button
             onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Issue Invoice</span>
@@ -277,33 +283,29 @@ export function InvoicesPanel() {
                       <CategoryVisualCard
                         key={inv.id}
                         title={inv.invoice_number}
-                        currentCount={`$${inv.total_amount.toLocaleString()}`}
-                        totalCount={isPaid ? "Paid" : isOverdue ? "Overdue" : "Due"}
                         subtitle={inv.client_name ? `Client: ${inv.client_name}` : "Direct Client"}
                         onClick={() => handleOpenDetail(inv)}
+                        topRightContent={
+                          <span
+                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${isPaid
+                                ? "bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/25"
+                                : isOverdue
+                                  ? "bg-rose-500/10 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/20 dark:border-rose-500/25"
+                                  : isSent
+                                    ? "bg-sky-500/10 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25"
+                                    : "bg-surface text-muted border-line"
+                              }`}
+                          >
+                            {isPaid ? "Paid" : isOverdue ? "Overdue" : isSent ? "Sent" : "Draft"}
+                          </span>
+                        }
                         tags={
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border capitalize ${isPaid
-                                  ? "bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/25 font-semibold"
-                                  : isOverdue
-                                    ? "bg-rose-500/10 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/20 dark:border-rose-500/25 font-semibold"
-                                    : isSent
-                                      ? "bg-sky-500/10 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/20 dark:border-sky-500/25"
-                                      : "bg-surface text-muted border-line"
-                                }`}
-                            >
-                              {isPaid
-                                ? "★ Paid"
-                                : isOverdue
-                                  ? "Overdue"
-                                  : isSent
-                                    ? "Sent to Client"
-                                    : "Draft"}
+                            <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
+                              {formatMoney(inv.total_amount, currency, 0)}
                             </span>
-
-                            {inv.due_date && (
-                              <span className="text-[11px] font-mono font-medium text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-500/20 dark:border-orange-500/25">
+                            {inv.due_date && !isPaid && (
+                              <span className="text-[11px] font-mono text-muted bg-surface px-2.5 py-0.5 rounded-full border border-line">
                                 Due {new Date(inv.due_date).toLocaleDateString()}
                               </span>
                             )}

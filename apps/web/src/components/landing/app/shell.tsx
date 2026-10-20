@@ -161,7 +161,10 @@ export function AppWindow({ view }: { view: AppViewId }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar />
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          <AnimatePresence mode="wait" initial={false}>
+          {/* default (sync) mode: the panes are absolute inset-0, so enter and
+              exit overlap into a crossfade — mode="wait" left a blank frame
+              between views, which read as a flicker every cycle */}
+          <AnimatePresence initial={false}>
             <motion.div
               key={view}
               initial={{ opacity: 0, y: 6 }}

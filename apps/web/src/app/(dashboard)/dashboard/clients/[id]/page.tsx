@@ -33,12 +33,12 @@ import { Card } from "@/components/ui/card";
 import {
   getClient,
   deleteClient,
-  getWorkspaceSettings,
   getProjects,
   type Client,
   type Project,
 } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -60,7 +60,7 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [currency, setCurrency] = useState("USD");
+  const currency = useWorkspaceCurrency().currency || "USD";
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
@@ -71,18 +71,14 @@ export default function ClientDetailPage() {
       if (!clientId) return;
       try {
         const token = (await getToken()) || undefined;
-        const [clientData, wsData, projectsData] = await Promise.all([
+        const [clientData, projectsData] = await Promise.all([
           getClient(clientId, token),
-          getWorkspaceSettings(token).catch(() => null),
           getProjects(token).catch(() => [] as Project[]),
         ]);
 
         if (!mounted) return;
         setClient(clientData);
         setProjects(projectsData || []);
-        if (wsData?.currency) {
-          setCurrency(wsData.currency);
-        }
       } catch (err) {
         logHandledError("Error loading client details:", err);
         toast.error("Could not load client profile");

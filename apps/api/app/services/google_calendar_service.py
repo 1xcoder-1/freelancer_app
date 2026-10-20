@@ -223,6 +223,38 @@ async def create_meet_event(
     }
 
 
+async def create_calendar_event(
+    access_token: str,
+    *,
+    title: str,
+    description: str,
+    start: datetime,
+    end: datetime,
+    attendee_email: str,
+    attendee_name: str,
+) -> Dict[str, Any]:
+    """Insert a primary-calendar event with NO Meet conference (Meet toggle off)."""
+    body = {
+        "summary": title,
+        "description": description,
+        "start": _google_instant(start),
+        "end": _google_instant(end),
+        "attendees": [{"email": attendee_email, "displayName": attendee_name}],
+        "source": {"title": "Freelance Book", "url": settings.WEB_APP_URL},
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.post(
+            CALENDAR_EVENTS_URL,
+            params={"sendUpdates": "all"},
+            json=body,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if res.status_code not in (200, 201):
+        raise GoogleCalendarError(f"Google event creation failed (HTTP {res.status_code})")
+    event = res.json()
+    return {"google_event_id": event.get("id"), "meeting_link": None}
+
+
 async def update_event(
     access_token: str,
     google_event_id: str,

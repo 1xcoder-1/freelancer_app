@@ -31,6 +31,7 @@ from app.services.email_service import (
 )
 from app.services.google_calendar_service import (
     GoogleCalendarError,
+    create_calendar_event,
     create_meet_event,
     delete_event,
     refresh_access_token,
@@ -208,7 +209,7 @@ async def _sync_google_event(appointment_id: str) -> dict:
                 description=description,
             )
             action = "updated"
-        else:
+        elif conn.meet_enabled:
             result = await create_meet_event(
                 access_token,
                 title=title,
@@ -222,6 +223,20 @@ async def _sync_google_event(appointment_id: str) -> dict:
             appt.google_event_id = result.get("google_event_id")
             if result.get("meeting_link"):
                 appt.meeting_link = result["meeting_link"]
+            action = "created"
+        else:
+            # Meet toggled off: the event still lands on Google Calendar,
+            # just without a conference.
+            result = await create_calendar_event(
+                access_token,
+                title=title,
+                description=description,
+                start=appt.appointment_time,
+                end=end_time,
+                attendee_email=appt.client_email,
+                attendee_name=appt.client_name,
+            )
+            appt.google_event_id = result.get("google_event_id")
             action = "created"
         await session.commit()
         return {"synced": True, "action": action, "appointment_id": appt.id, "meeting_link": appt.meeting_link}

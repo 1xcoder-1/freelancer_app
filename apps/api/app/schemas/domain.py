@@ -445,6 +445,8 @@ class PublicProjectPortalOut(BaseModel):
     description: Optional[str] = None
     status: str
     budget: float
+    # Display currency (the workspace's billing currency from Settings)
+    currency: str = "USD"
     share_token: str
     progress_pct: int
     freelancer_name: str
@@ -1211,6 +1213,8 @@ class PublicBookingConsultationOut(BaseModel):
     buffer_minutes: int = 0
     # B4 a paid consult is not confirmed until its invoice is paid
     requires_payment: bool = False
+    # Display currency (the workspace's billing currency from Settings)
+    currency: str = "USD"
     # B5 link an intake form so answers arrive before the call
     intake_form_id: Optional[str] = None
     intake_token: Optional[str] = None
@@ -1300,6 +1304,10 @@ class GoogleConnectionStatus(BaseModel):
     google_email: Optional[str] = None
     last_synced_at: Optional[datetime] = None
     sync_enabled: bool = False
+    meet_enabled: bool = True
+
+class GoogleMeetTogglePayload(BaseModel):
+    meet_enabled: bool
 
 class GoogleCallbackPayload(BaseModel):
     code: str = Field(..., min_length=10)
@@ -1490,5 +1498,28 @@ class PublicPlannerBoardOut(BaseModel):
     name: str
     elements: List[Dict[str, Any]] = []
     todos: List[PlannerTodoOut] = []
+
+
+# ------------------------------------------------------------------------------
+# Feature Flags (dashboard feature visibility)
+# ------------------------------------------------------------------------------
+class FeatureFlagOut(BaseModel):
+    """One stored flag row. Missing keys default to visible on the client."""
+    key: str
+    visible: bool = True
+    label_override: Optional[str] = None
+
+class FeatureFlagsPayload(BaseModel):
+    """GET /feature-flags response: every stored row plus whether the caller
+    bypasses the gate (owner email / dev-auth session)."""
+    is_owner: bool
+    flags: List[FeatureFlagOut] = []
+
+class FeatureFlagUpdate(BaseModel):
+    """Upsert one flag. `label_override=""` resets the sidebar text to its
+    default (stored as NULL)."""
+    key: str = Field(..., min_length=1, max_length=64)
+    visible: Optional[bool] = None
+    label_override: Optional[str] = Field(None, max_length=80)
 
 

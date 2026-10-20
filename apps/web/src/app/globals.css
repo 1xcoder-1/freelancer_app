@@ -86,8 +86,9 @@ body {
   background: var(--bg);
   color: var(--fg);
   -webkit-tap-highlight-color: transparent;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* no overflow rules here: an overflow-y on body creates a scroll
+     container that never scrolls (html is the scroller), which silently
+     breaks every position:sticky below it — docs sidebar/TOC, FAQ column */
   min-height: 100vh;
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -109,6 +110,17 @@ select,
 [contenteditable="true"] {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Hide native number input spin buttons to eliminate white box artifacts in dark mode */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 /* Utility to hide scrollbars while keeping scrollable (sidebar rail, dropdown
@@ -570,14 +582,6 @@ select,
 }
 
 /* Subtle dot grid for the hero backdrop (stands in for superset's canvas) */
-.mk-dot-grid {
-  background-image: radial-gradient(
-    rgb(255 255 255 / 0.06) 1px,
-    transparent 1px
-  );
-  background-size: 24px 24px;
-}
-
 /* BeamButton border: a brand conic gradient that sweeps around the ring.
    Animating an @property angle (not a rotating oversized layer, which is
    what the original Cult UI block does) keeps the repaint inside the
@@ -652,7 +656,10 @@ select,
   --color-fd-secondary-foreground: #fafafa;
   --color-fd-accent: rgb(255 255 255 / 0.07);
   --color-fd-accent-foreground: #fafafa;
-  --color-fd-ring: #d25611;
+  /* Focus ring: translucent accent instead of the solid #d25611 fumadocs
+     default — the opaque ring read as a broken orange box on the sidebar
+     collapse trigger and active tree item. */
+  --color-fd-ring: rgb(232 128 74 / 0.45);
 }
 
 /* The docs layout claims 100dvh by default; subtract the navbar so the
@@ -667,3 +674,31 @@ select,
   --color-fd-secondary: #202020;
   --color-fd-muted-foreground: #bebebe;
 }
+
+/* fumadocs floats the sidebar in an inset panel (top = navbar offset,
+   bottom = one banner above the viewport edge); pin it flush to the
+   viewport edges so it runs the full page height. The negative margin
+   cancels the 64px banner row so it's flush even before scrolling. */
+.dark.mk-docs [data-sidebar-placeholder] {
+  top: 0;
+  height: 100dvh;
+  margin-top: calc(-1 * var(--fd-docs-row-1, 0px));
+}
+
+/* The fixed navbar overlays the full-height sidebar panel; push the
+   sidebar's content (collapse trigger, tree) below it so the trigger
+   stays clickable and isn't hidden under the bar. */
+.dark.mk-docs #nd-sidebar > div:first-child {
+  padding-top: 5rem;
+}
+
+/* Sidebar collapse trigger alignment:
+   Align the collapse trigger to the left with the tree items (e.g. Introduction) */
+.dark.mk-docs #nd-sidebar a[class*="me-auto"]:empty {
+  display: none;
+}
+
+.dark.mk-docs #nd-sidebar button[aria-label*="Sidebar"] {
+  margin-right: auto;
+}
+

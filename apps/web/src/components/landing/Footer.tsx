@@ -15,7 +15,6 @@ const columns = [
       { label: "Features", href: "/features" },
       { label: "Book AI", href: "/features#ai" },
       { label: "Download", href: "/download" },
-      { label: "Changelog", href: "/changelog" },
       { label: "Sign up", href: "/sign-up" },
     ],
   },

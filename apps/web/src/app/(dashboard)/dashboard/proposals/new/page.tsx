@@ -24,6 +24,8 @@ import {
 } from "@/lib/api";
 import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 import { celebrate } from "@/components/common/Celebration";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { logHandledError } from "@/lib/log-error";
@@ -40,6 +42,7 @@ const saveSchema = z.object({
 });
 
 export default function NewProposalPage() {
+  const currency = useWorkspaceCurrency().currency;
   const router = useRouter();
   const { getToken } = useAuth();
 
@@ -296,7 +299,7 @@ export default function NewProposalPage() {
         <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-medium text-muted">Proposal Preview</span>
-            <span className="text-[11px] font-mono text-muted">${Number(targetBudget || 0).toLocaleString()}</span>
+            <span className="text-[11px] font-mono text-muted">{formatMoney(Number(targetBudget || 0), currency, 0)}</span>
           </div>
 
           <Card className="rounded-2xl border-line bg-card p-6 space-y-3 shadow-xs">

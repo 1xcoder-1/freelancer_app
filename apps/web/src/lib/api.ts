@@ -620,6 +620,7 @@ export interface PublicProjectPortal {
   description?: string;
   status: string;
   budget: number;
+  currency: string;
   share_token: string;
   progress_pct: number;
   freelancer_name: string;
@@ -1019,6 +1020,144 @@ export const updateWorkspaceSettings = async (
   token?: string
 ): Promise<WorkspaceSettings> => {
   const response = await apiClient.put<WorkspaceSettings>('/workspace', payload, authHeaders(token));
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// User Profile — the tabbed profile document (Personal, Professional and the
+// Experience / Certifications / Education / Projects lists). One JSON document
+// per user; name / avatar / email are NOT here — those are edited live through
+// Clerk and read via useUser().
+// ------------------------------------------------------------------------------
+export interface ProfilePersonal {
+  username: string;
+  bio: string;
+  company: string;
+  job_title: string;
+  location: string;
+  institution: string;
+  website: string;
+  github: string;
+  linkedin: string;
+  twitter: string;
+}
+
+export interface ProfileProfessional {
+  about_me: string;
+  current_job_role: string;
+  current_company: string;
+  experience_level: string;
+  years_of_experience: number;
+  current_location: string;
+  preferred_roles: string[];
+  preferred_locations: string[];
+  min_salary_lpa: number;
+  max_salary_lpa: number;
+  preferred_work_type: string;
+  notice_period_days: number;
+  immediate_joiner: boolean;
+  ready_to_relocate: boolean;
+  technical_skills: string[];
+}
+
+export interface ProfileExperience {
+  id: string;
+  role: string;
+  company: string;
+  employment_type: string;
+  location: string;
+  start_date: string;
+  end_date: string;
+  current: boolean;
+  description: string;
+}
+
+export interface ProfileCertification {
+  id: string;
+  name: string;
+  issuer: string;
+  issue_date: string;
+  expiry_date: string;
+  credential_id: string;
+  credential_url: string;
+}
+
+export interface ProfileEducation {
+  id: string;
+  institution: string;
+  degree: string;
+  field_of_study: string;
+  start_year: string;
+  end_year: string;
+  grade: string;
+  description: string;
+}
+
+export interface ProfileProject {
+  id: string;
+  name: string;
+  description: string;
+  tech_stack: string[];
+  link: string;
+  year: string;
+}
+
+export interface UserProfileContent {
+  personal: ProfilePersonal;
+  professional: ProfileProfessional;
+  experiences: ProfileExperience[];
+  certifications: ProfileCertification[];
+  education: ProfileEducation[];
+  projects: ProfileProject[];
+}
+
+export const getProfile = async (token?: string): Promise<UserProfileContent> => {
+  const response = await apiClient.get<{ content: UserProfileContent }>('/profile/me', authHeaders(token));
+  return response.data.content;
+};
+
+export const updateProfile = async (
+  content: UserProfileContent,
+  token?: string
+): Promise<UserProfileContent> => {
+  const response = await apiClient.put<{ content: UserProfileContent }>('/profile/me', { content }, authHeaders(token));
+  return response.data.content;
+};
+
+// ------------------------------------------------------------------------------
+// Feature Flags — which dashboard features non-owner accounts can see. The
+// owner account always bypasses the gate; `email` covers Clerk session tokens
+// that omit the email claim (the API only uses it to unlock the Settings
+// toggles, never for data access).
+// ------------------------------------------------------------------------------
+export interface FeatureFlag {
+  key: string;
+  visible: boolean;
+  label_override: string | null;
+}
+
+export interface FeatureFlagsPayload {
+  is_owner: boolean;
+  flags: FeatureFlag[];
+}
+
+export const getFeatureFlags = async (token?: string, email?: string): Promise<FeatureFlagsPayload> => {
+  const response = await apiClient.get<FeatureFlagsPayload>('/feature-flags', {
+    ...authHeaders(token),
+    params: email ? { email } : undefined,
+  });
+  return response.data;
+};
+
+export const updateFeatureFlag = async (
+  payload: { key: string; visible?: boolean; label_override?: string | null },
+  token?: string,
+  email?: string
+): Promise<FeatureFlag> => {
+  const response = await apiClient.put<FeatureFlag>('/feature-flags', payload, {
+    ...authHeaders(token),
+    params: email ? { email } : undefined,
+  });
   return response.data;
 };
 
@@ -1442,6 +1581,7 @@ export interface PublicBookingConsultation {
   max_advance_days: number;
   buffer_minutes: number;
   requires_payment: boolean;
+  currency: string;
   intake_form_id?: string | null;
   intake_token?: string | null;
 }
@@ -1621,6 +1761,7 @@ export interface GoogleConnectionStatus {
   google_email?: string | null;
   last_synced_at?: string | null;
   sync_enabled: boolean;
+  meet_enabled: boolean;
 }
 
 export interface CalendarSyncResult {
@@ -1683,6 +1824,18 @@ export const syncGoogleCalendar = async (token?: string): Promise<CalendarSyncRe
 
 export const disconnectGoogleCalendar = async (token?: string): Promise<void> => {
   await apiClient.delete('/calendar/google/disconnect', authHeaders(token));
+};
+
+export const setGoogleMeetEnabled = async (
+  meet_enabled: boolean,
+  token?: string
+): Promise<GoogleConnectionStatus> => {
+  const response = await apiClient.put<GoogleConnectionStatus>(
+    '/calendar/google/meet-toggle',
+    { meet_enabled },
+    authHeaders(token)
+  );
+  return response.data;
 };
 
 // ------------------------------------------------------------------------------

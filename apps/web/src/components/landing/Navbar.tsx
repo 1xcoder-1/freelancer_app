@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import {
   AnimatePresence,
@@ -17,16 +18,12 @@ import { cn } from "@/lib/utils";
    transparent. Past ~100px of scroll the bar springs into a
    floating glass pill: width 80%, shifted 20px down, translucent
    bg with 10px backdrop blur and a layered floating shadow.
-
-   fixed + h-16 spacer instead of sticky: body has overflow-y:auto,
-   which silently disables sticky pinning for the whole landing shell.
 ------------------------------------------------------------------- */
 
 const navLinks = [
   { label: "Features", href: "/features" },
   { label: "Download", href: "/download" },
   { label: "Docs", href: "/docs" },
-  { label: "Changelog", href: "/changelog" },
 ];
 
 const GLASS_BG = "rgba(22, 22, 23, 0.8)";
@@ -35,9 +32,11 @@ const GLASS_SHADOW =
 const CLEAR_SHADOW =
   "0px 0px 24px rgba(0,0,0,0), 0px 1px 1px rgba(0,0,0,0), 0px 0px 0px 1px rgba(255,255,255,0), 0px 16px 68px rgba(0,0,0,0), 0px 1px 0px rgba(255,255,255,0) inset";
 
-const glassMorph = (floating: boolean) => ({
-  width: floating ? "80%" : "100%",
-  y: floating ? 20 : 0,
+const glassMorph = (floating: boolean, pinned = false) => ({
+  // pinned (docs): the bar never shrinks into the floating pill — it only
+  // gains the glass background so content scrolls under it readably
+  width: floating && !pinned ? "80%" : "100%",
+  y: floating && !pinned ? 20 : 0,
   backgroundColor: floating ? GLASS_BG : "rgba(22, 22, 23, 0)",
   backdropFilter: floating ? "blur(10px)" : "blur(0px)",
   boxShadow: floating ? GLASS_SHADOW : CLEAR_SHADOW,
@@ -115,8 +114,14 @@ function StarPill({
   );
 }
 
-export function Navbar() {
+export function Navbar({ pinned = false }: { pinned?: boolean }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+  // the homepage doesn't need a self-link; every other page gets one back
+  const links =
+    pathname === "/"
+      ? navLinks
+      : [{ label: "Home", href: "/" }, ...navLinks];
   const { scrollY } = useScroll();
   const [floating, setFloating] = useState(false);
   useMotionValueEvent(scrollY, "change", (y) => setFloating(y > 100));
@@ -124,17 +129,25 @@ export function Navbar() {
   return (
     <>
       <div aria-hidden className="h-16" />
-      <header className="fixed inset-x-0 top-0 z-50 lg:px-6">
+      <header
+        className={cn(
+          "fixed inset-x-0 top-0 z-50",
+          !pinned && "lg:px-6"
+        )}
+      >
         {/* Desktop bar — transparent at rest, floating glass pill on scroll */}
         <motion.div
-          animate={glassMorph(floating)}
+          animate={glassMorph(floating, pinned)}
           transition={glassSpring}
-          className="relative z-[60] mx-auto hidden w-full max-w-7xl flex-row items-center justify-between self-start rounded-full p-4 lg:flex"
+          className={cn(
+            "relative z-[60] mx-auto hidden w-full max-w-7xl flex-row items-center justify-between self-start p-4 lg:flex",
+            pinned ? "rounded-none" : "rounded-full"
+          )}
         >
           <Wordmark className="z-10" />
 
           <nav className="absolute inset-0 hidden flex-1 flex-row items-center justify-center space-x-2 text-sm font-medium lg:flex">
-            {navLinks.map((link) => (
+            {links.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
@@ -169,7 +182,7 @@ export function Navbar() {
 
         {/* Mobile bar — same transparent-to-glass morph */}
         <motion.div
-          animate={glassMorph(floating)}
+          animate={glassMorph(floating, pinned)}
           transition={glassSpring}
           className="relative z-50 mx-auto flex w-full flex-col items-center justify-between py-4 lg:hidden"
         >
@@ -199,7 +212,7 @@ export function Navbar() {
               className="lg:hidden overflow-hidden border-t border-line bg-bg"
             >
               <div className="space-y-1 px-4 py-4">
-                {navLinks.map((link) => (
+                {links.map((link) => (
                   <Link
                     key={link.label}
                     href={link.href}

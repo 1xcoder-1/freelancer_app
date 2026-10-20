@@ -232,7 +232,6 @@ export function SignUpForm() {
           Already have an account? <AuthLink href="/sign-in">Sign in</AuthLink>
         </>
       }
-      finePrint="No credit card required · Instant workspace setup"
     >
       <ErrorBanner message={error} />
       {form}

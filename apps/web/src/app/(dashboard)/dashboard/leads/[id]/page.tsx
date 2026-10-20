@@ -35,6 +35,7 @@ import {
   type LeadStage,
 } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { logHandledError } from "@/lib/log-error";
@@ -58,6 +59,7 @@ const LOST_REASONS: Array<{ value: string; label: string }> = [
 ];
 
 export default function LeadDetailPage() {
+  const wsCurrency = useWorkspaceCurrency().currency;
   const router = useRouter();
   const params = useParams();
   const leadId = String(params?.id || "");
@@ -281,7 +283,7 @@ export default function LeadDetailPage() {
 
   // Parse notes, category & currency
   let category = "Featured";
-  let currency = "USD";
+  let currency = wsCurrency;
   let cleanNotes = lead.notes || "";
   if (cleanNotes) {
     const catMatch = cleanNotes.match(/\[category:\s*([^\]]+)\]/i);

@@ -31,6 +31,7 @@ import {
   decidePortalChangeRequest,
   type PublicProjectPortal,
 } from "@/lib/api";
+import { currencySymbol } from "@/lib/currency";
 import { toast } from "sonner";
 
 interface PageProps {
@@ -281,7 +282,7 @@ export default function ClientPortalPage({ params }: PageProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-line">
             <div className="p-3 rounded-lg bg-bg border border-line space-y-0.5">
               <span className="text-[10px] font-mono text-faint uppercase">Total Budget</span>
-              <p className="text-base font-bold text-fg">${portal.budget.toLocaleString()}</p>
+              <p className="text-base font-bold text-fg">{currencySymbol(portal.currency)}{portal.budget.toLocaleString()}</p>
             </div>
 
             <div className="p-3 rounded-lg bg-bg border border-line space-y-0.5">
@@ -351,7 +352,7 @@ export default function ClientPortalPage({ params }: PageProps) {
                           <h3 className="text-base font-bold text-fg">{m.title}</h3>
                           {m.amount > 0 && (
                             <span className="text-xs font-mono text-info font-semibold">
-                              (${m.amount.toLocaleString()})
+                              ({currencySymbol(portal.currency)}{m.amount.toLocaleString()})
                             </span>
                           )}
                           {isCompleted ? (

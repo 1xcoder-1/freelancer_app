@@ -23,6 +23,7 @@ import {
   CalendarClock,
   AlertCircle,
   RotateCcw,
+  Folder,
 } from "@/components/animated-icons";
 import { toast } from "sonner";
 
@@ -61,12 +62,15 @@ import {
   disablePlannerShare,
   listPlannerSnapshots,
   restorePlannerSnapshot,
+  getProjects,
+  type Project,
   type PlannerTodo,
   type PlannerTodoPayload,
   type PlannerShare,
   type PlannerSnapshotSummary,
   type ApiError,
 } from "@/lib/api";
+import { useApiData } from "@/hooks/use-api-data";
 
 // Real-time cadence. The poll hits the cheap /head endpoint (revision + todos
 // only), so it stays fast and never moves scene bytes unless the revision
@@ -116,20 +120,24 @@ function CanvasSkeleton() {
 }
 
 // PL1/PL2/PL3 — inline per-todo planner (no modal): due date, priority,
-// recurrence and a timebox block (day + start + duration). Saved through the
-// same PATCH endpoint the tick uses, so the revision bump propagates live.
+// recurrence, project link and a timebox block (day + start + duration).
+// Saved through the same PATCH endpoint the tick uses, so the revision bump
+// propagates live.
 function TodoPlanner({
   todo,
+  projects,
   onSave,
   onCancel,
 }: {
   todo: PlannerTodo;
+  projects: Project[];
   onSave: (patch: PlannerTodoPayload) => void;
   onCancel: () => void;
 }) {
   const [dueDate, setDueDate] = useState(todo.due_date ?? "");
   const [priority, setPriority] = useState(todo.priority || "medium");
   const [recurrence, setRecurrence] = useState(todo.recurrence ?? "");
+  const [projectId, setProjectId] = useState(todo.project_id ?? "");
   const [day, setDay] = useState(todo.date ?? "");
   const [start, setStart] = useState(todo.start_minute != null ? fmtMinute(todo.start_minute) : "");
   const [duration, setDuration] = useState(todo.duration_minutes != null ? String(todo.duration_minutes) : "");
@@ -139,6 +147,7 @@ function TodoPlanner({
       due_date: dueDate || null,
       priority: priority as PlannerTodoPayload["priority"],
       recurrence: (recurrence || null) as PlannerTodoPayload["recurrence"],
+      project_id: projectId || null,
       date: day || null,
       start_minute: start ? parseMinute(start) : null,
       duration_minutes: duration ? Math.max(0, Number(duration) || 0) : null,
@@ -172,6 +181,17 @@ function TodoPlanner({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
+          Project
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={field}>
+            <option value="">no project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
           Timebox day
           <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={field} />
         </label>
@@ -195,6 +215,19 @@ function TodoPlanner({
 export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   const { getToken } = useAuth();
   const theme = useThemeMode();
+
+  // Projects feed the per-todo link picker + row chips. Shares the cached
+  // "projects:data" key with the projects panel, so it's usually one request.
+  const { data: projectsData } = useApiData<Project[]>(
+    "projects:data",
+    async (token) => await getProjects(token),
+    { reportContext: "planner-board-projects" }
+  );
+  const projects = projectsData ?? [];
+  const projectName = useCallback(
+    (id: string) => projects.find((p) => p.id === id)?.title ?? null,
+    [projects]
+  );
 
   const [api, setApi] = useState<ExcalidrawAPI | null>(null);
   const [name, setName] = useState("Board");
@@ -757,8 +790,13 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
                         <span className={`block text-sm truncate ${todo.is_done ? "line-through text-faint" : "text-fg"}`}>
                           {todo.text}
                         </span>
-                        {(todo.due_date || todo.start_minute != null || todo.recurrence || (todo.priority && todo.priority !== "medium")) && (
+                        {(todo.due_date || todo.start_minute != null || todo.recurrence || (todo.priority && todo.priority !== "medium") || (todo.project_id && projectName(todo.project_id))) && (
                           <div className="flex flex-wrap items-center gap-1 text-[10px] mt-0.5">
+                            {todo.project_id && projectName(todo.project_id) && (
+                              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-accent/10 text-accent" title="Linked project">
+                                <Folder className="w-2.5 h-2.5" />{projectName(todo.project_id)}
+                              </span>
+                            )}
                             {todo.priority && todo.priority !== "medium" && (
                               <span className="px-1 py-0.5 rounded bg-surface text-muted capitalize">{todo.priority}</span>
                             )}
@@ -800,7 +838,14 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    {planning && <TodoPlanner todo={todo} onSave={(p) => void saveTodoPlan(todo, p)} onCancel={() => setPlanningId(null)} />}
+                    {planning && (
+                      <TodoPlanner
+                        todo={todo}
+                        projects={projects}
+                        onSave={(p) => void saveTodoPlan(todo, p)}
+                        onCancel={() => setPlanningId(null)}
+                      />
+                    )}
                   </div>
                 );
               })

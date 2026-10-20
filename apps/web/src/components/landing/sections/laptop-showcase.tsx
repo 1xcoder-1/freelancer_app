@@ -41,7 +41,7 @@ export function LaptopShowcase() {
       ref={sectionRef}
       id="desktop"
       aria-labelledby="desktop-heading"
-      className="scroll-mt-24 overflow-hidden pt-24 pb-16 sm:pt-32 sm:pb-24"
+      className="scroll-mt-24 overflow-hidden py-16 sm:py-24"
     >
       <div className="relative mx-auto max-w-6xl px-6 text-center sm:px-8">
         <Stagger className="flex flex-col items-center">

@@ -3,7 +3,6 @@
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
 import { TextAnimate } from "@/components/ui/text-animate";
-import { TextureOverlay } from "@/components/ui/texture-overlay";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------
@@ -19,7 +18,7 @@ import { cn } from "@/lib/utils";
    · floating "mac window" mockups with layered black shadows and an
      inset white ring highlight
    · radial orange glows behind visuals
-   · sections py-24 sm:py-32, container max-w-7xl px-6 sm:px-8
+   · sections py-16 sm:py-24, container max-w-7xl px-6 sm:px-8
 ------------------------------------------------------------------- */
 
 /** Global page width for everything marketing. */
@@ -48,7 +47,7 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn("relative py-24 sm:py-32", className)}>
+    <section id={id} className={cn("relative py-16 sm:py-24", className)}>
       {children}
     </section>
   );
@@ -107,22 +106,10 @@ export function PageHero({
         aria-hidden
         className="absolute inset-0 pointer-events-none z-0"
         style={{
-          maskImage:
-            "linear-gradient(to bottom, black 0%, black 40%, transparent 70%)",
-          WebkitMaskImage:
-            "linear-gradient(to bottom, black 0%, black 40%, transparent 70%)",
+          background:
+            "radial-gradient(ellipse 50% 42% at 50% 28%, rgba(232,128,74,0.07), transparent 70%)",
         }}
-      >
-        <div className="absolute inset-0 mk-dot-grid" />
-        <TextureOverlay texture="noise" opacity={0.6} />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 50% 42% at 50% 28%, rgba(232,128,74,0.07), transparent 70%)",
-          }}
-        />
-      </div>
+      />
       <Container className="relative z-10">
         <div className="flex flex-col items-center text-center">
           <Eyebrow className="mb-4">{eyebrow}</Eyebrow>

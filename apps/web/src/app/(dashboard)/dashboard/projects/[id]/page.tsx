@@ -63,11 +63,13 @@ import {
   type ProjectFile,
 } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { logHandledError } from "@/lib/log-error";
 
 export default function ProjectDetailPage() {
+  const wsCurrency = useWorkspaceCurrency().currency;
   const router = useRouter();
   const params = useParams();
   const projectId = String(params?.id || "");
@@ -494,7 +496,7 @@ export default function ProjectDetailPage() {
 
   // Parse metadata from description
   let category = "Featured";
-  let currency = "USD";
+  let currency = wsCurrency;
   let priority = "medium";
   let deadline = "";
   let rawDescription = project.description || "";

@@ -17,22 +17,18 @@ export function AuthShell({
   subtitle,
   children,
   footer,
-  finePrint,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
   footer: ReactNode;
-  finePrint?: ReactNode;
 }) {
   return (
     <div className="min-h-screen bg-bg flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Brand mark */}
+        {/* Brand — identical to the dashboard sidebar mark */}
         <div className="mb-8 flex justify-center">
-          <span className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center text-accent-fg text-lg font-black font-mono shadow-lg">
-            fb
-          </span>
+          <AuthBrand />
         </div>
 
         {/* Header */}
@@ -47,13 +43,16 @@ export function AuthShell({
         {/* Cross-link */}
         <p className="mt-8 text-center text-sm text-fg">{footer}</p>
       </div>
-
-      {finePrint && (
-        <p className="mt-12 font-mono text-[10px] uppercase tracking-wider text-faint">
-          {finePrint}
-        </p>
-      )}
     </div>
+  );
+}
+
+export function AuthBrand() {
+  // Icon-only variant of the dashboard sidebar mark (no wordmark).
+  return (
+    <span className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/40 text-fg font-bold flex items-center justify-center text-sm font-mono shrink-0 shadow-xs">
+      fb
+    </span>
   );
 }
 

@@ -17,8 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard, FilterPill } from "@/components/dashboard/patterns";
-import { getReportsSummary, getWorkspaceSettings, type ReportsSummary } from "@/lib/api";
+import { getReportsSummary, type ReportsSummary } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { formatMoney } from "@/lib/currency";
 
 const WINDOWS = [3, 6, 12];
 
@@ -48,14 +50,9 @@ export function ReportsPanel() {
     { reportContext: "reports" }
   );
 
-  const { data: ws } = useApiData(
-    "workspace:settings",
-    async (token) => getWorkspaceSettings(token),
-    { ttlMs: 10 * 60_000 }
-  );
-  const currency = ws?.currency ?? data?.revenue_at_stake?.currency ?? "USD";
-  const money = (n: number) =>
-    `${currency === "USD" ? "$" : `${currency} `}${Math.round(n ?? 0).toLocaleString("en-US")}`;
+  const { currency: wsCurrency } = useWorkspaceCurrency();
+  const currency = wsCurrency || data?.revenue_at_stake?.currency || "USD";
+  const money = (n: number) => formatMoney(n ?? 0, currency, 0);
 
   const revenueTotal = useMemo(
     () => (data?.revenue_by_month ?? []).reduce((sum, row) => sum + row.total, 0),

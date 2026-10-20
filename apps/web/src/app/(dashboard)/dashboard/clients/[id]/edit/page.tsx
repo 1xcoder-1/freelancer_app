@@ -18,6 +18,7 @@ import { getClient, getDuplicateConflict, updateClient, type Client } from "@/li
 import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -130,6 +131,7 @@ export default function EditClientPage() {
   const params = useParams();
   const clientId = String(params?.id || "");
   const { getToken } = useAuth();
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -142,7 +144,8 @@ export default function EditClientPage() {
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
   const [rateOrBudget, setRateOrBudget] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [pickedCurrency, setCurrency] = useState("");
+  const currency = pickedCurrency || wsCurrency || "USD";
   const [category, setCategory] = useState("Featured");
   const [customCategory, setCustomCategory] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("50_advance_50_completion");
@@ -175,7 +178,7 @@ export default function EditClientPage() {
     setPhone(str("phone"));
     setWebsite(str("website"));
     setRateOrBudget(str("rateOrBudget"));
-    setCurrency(str("currency", "USD"));
+    setCurrency(str("currency", ""));
     setCategory(str("category", "Featured"));
     setCustomCategory(str("customCategory"));
     setPaymentTerms(str("paymentTerms", "50_advance_50_completion"));

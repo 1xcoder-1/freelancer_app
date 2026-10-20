@@ -33,37 +33,37 @@ export function CookieBanner() {
     <AnimatePresence>
       {show && (
         <motion.div
-          initial={{ opacity: 0, y: 50 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-          transition={{ duration: 0.4 }}
-          className="fixed bottom-6 left-6 right-6 md:left-6 md:right-auto md:max-w-md z-50 p-5 rounded-xl bg-card border border-line shadow-2xl backdrop-blur-2xl text-fg"
+          exit={{ opacity: 0, y: 16 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="fixed bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-auto sm:max-w-sm z-50 rounded-[2px] border border-line bg-card/95 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md text-fg"
         >
-          <div className="flex items-start gap-3 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-accent-soft border border-accent/20 text-accent flex items-center justify-center flex-shrink-0">
-              <Cookie className="w-4 h-4" />
+          <div className="p-4">
+            <div className="flex items-center gap-2">
+              <Cookie className="size-3.5 shrink-0 text-muted" />
+              <h4 className="text-[13px] font-medium text-fg">
+                We value your privacy
+              </h4>
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-fg">We value your privacy</h4>
-              <p className="text-xs text-muted mt-1 leading-relaxed">
-                We use essential cookies to maintain your login session and enhance your freelance dashboard experience. No third-party ad tracking.
-              </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+              Essential cookies keep you signed in and remember your preferences.
+              No third-party ad tracking.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={handleAccept}
+                className="flex-1 cursor-pointer border border-line bg-fg px-3 py-1.5 text-xs font-medium text-bg transition-colors hover:bg-brand hover:text-white"
+              >
+                Accept all
+              </button>
+              <button
+                onClick={handleDecline}
+                className="cursor-pointer border border-line bg-bg px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-surface"
+              >
+                Necessary only
+              </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 pt-2 border-t border-line">
-            <button
-              onClick={handleAccept}
-              className="flex-1 py-2 px-3 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-bold text-xs transition-all shadow-sm cursor-pointer text-center"
-            >
-              Accept All
-            </button>
-            <button
-              onClick={handleDecline}
-              className="py-2 px-3 rounded-xl bg-bg hover:bg-surface border border-line text-fg font-semibold text-xs transition-all cursor-pointer text-center"
-            >
-              Necessary Only
-            </button>
           </div>
         </motion.div>
       )}

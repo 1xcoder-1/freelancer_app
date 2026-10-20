@@ -34,6 +34,7 @@ from app.schemas.domain import (
     GoogleCallbackPayload,
     GoogleConnectResponse,
     GoogleConnectionStatus,
+    GoogleMeetTogglePayload,
 )
 from app.schemas.types import to_naive_utc
 from app.services import google_calendar_service
@@ -239,6 +240,7 @@ async def google_status(
         google_email=conn.google_email if conn else None,
         last_synced_at=conn.last_synced_at if conn else None,
         sync_enabled=bool(conn and conn.sync_enabled),
+        meet_enabled=bool(conn.meet_enabled) if conn else True,
     )
 
 
@@ -308,7 +310,33 @@ async def google_callback(
     return GoogleConnectionStatus(
         connected=True, configured=True,
         google_email=conn.google_email, last_synced_at=conn.last_synced_at,
-        sync_enabled=conn.sync_enabled,
+        sync_enabled=conn.sync_enabled, meet_enabled=conn.meet_enabled,
+    )
+
+
+@router.put("/google/meet-toggle", response_model=GoogleConnectionStatus)
+async def google_meet_toggle(
+    payload: GoogleMeetTogglePayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """Google Meet on/off: when off, synced booking events are created without a
+    Meet conference and new appointments carry no meeting link."""
+    _, workspace = await get_or_create_user_workspace(db, current_user)
+    conn = await _get_connection(db, workspace.id)
+    if not conn or not conn.refresh_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Connect Google Calendar first — Meet links come from the same connection",
+        )
+
+    conn.meet_enabled = payload.meet_enabled
+    await db.commit()
+    await db.refresh(conn)
+    return GoogleConnectionStatus(
+        connected=True, configured=True,
+        google_email=conn.google_email, last_synced_at=conn.last_synced_at,
+        sync_enabled=conn.sync_enabled, meet_enabled=conn.meet_enabled,
     )
 
 

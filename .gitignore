@@ -21,3 +21,5 @@ build/
 
 # PR Lens writes its previews here. They are rebuilt on demand.
 .pr-lens/
+.impeccable/
+.anlsys-docs.mjs

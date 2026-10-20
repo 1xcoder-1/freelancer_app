@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createProject, getClients, type Client } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -55,6 +56,7 @@ export default function NewProjectPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   // Form states
   const [title, setTitle] = useState("");
@@ -63,7 +65,8 @@ export default function NewProjectPage() {
   const [customCategory, setCustomCategory] = useState("");
   const [budgetStr, setBudgetStr] = useState("5,000");
   const [hourlyRateStr, setHourlyRateStr] = useState("100");
-  const [currency, setCurrency] = useState("USD");
+  const [pickedCurrency, setCurrency] = useState("");
+  const currency = pickedCurrency || wsCurrency || "USD";
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [deadline, setDeadline] = useState("");
   const [description, setDescription] = useState("");

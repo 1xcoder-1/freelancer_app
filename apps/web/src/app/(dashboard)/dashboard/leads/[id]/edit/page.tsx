@@ -17,6 +17,7 @@ import { getLead, getDuplicateConflict, updateLead, closeLead, type Lead, type L
 import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
@@ -120,6 +121,7 @@ export default function EditLeadPage() {
   const params = useParams();
   const leadId = String(params?.id || "");
   const { getToken } = useAuth();
+  const wsCurrency = useWorkspaceCurrency().currency;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -132,7 +134,8 @@ export default function EditLeadPage() {
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("Referral");
   const [estimatedValue, setEstimatedValue] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [pickedCurrency, setCurrency] = useState("");
+  const currency = pickedCurrency || wsCurrency || "USD";
   const [priority, setPriority] = useState<Lead["priority"]>("medium");
   const [stage, setStage] = useState<LeadStage>("new");
   const [followUpDays, setFollowUpDays] = useState("3");
@@ -166,7 +169,7 @@ export default function EditLeadPage() {
     setPhone(str("phone"));
     setSource(str("source", "Referral"));
     setEstimatedValue(str("estimatedValue"));
-    setCurrency(str("currency", "USD"));
+    setCurrency(str("currency", ""));
     const pr = str("priority", "medium");
     setPriority(["low", "medium", "high", "urgent"].includes(pr) ? (pr as Lead["priority"]) : "medium");
     const st = str("stage", "new");

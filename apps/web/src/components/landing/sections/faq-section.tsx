@@ -128,7 +128,7 @@ export function FaqSection() {
                         </span>
                         <span
                           aria-hidden
-                          className={`inline-flex size-8 shrink-0 items-center justify-center rounded-[2px] border transition-all duration-300 motion-reduce:transition-none ${
+                          className={`mr-1.5 inline-flex size-8 shrink-0 items-center justify-center rounded-[2px] border transition-all duration-300 motion-reduce:transition-none ${
                             isOpen
                               ? "rotate-45 border-brand/60 bg-brand/10 text-brand"
                               : "border-line text-muted"

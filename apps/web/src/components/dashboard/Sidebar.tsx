@@ -1,50 +1,25 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
+import { useUser, useClerk } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Home,
-  Clock,
-  Users,
-  Wallet,
-  LayoutGrid,
-  Sparkles,
-  Calendar,
-  IdCard,
-  PenLine,
-  Settings,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Target,
-  ClipboardList,
-  Receipt,
-  FileSignature,
-  TrendingUp,
-  Star,
-  Link2,
-  FileText,
-  Bot,
-  CalendarDays,
-  Phone,
+  User,
 } from "@/components/animated-icons";
+import { LogOut } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
+import { FEATURES, type FeatureSubItem } from "@/lib/features";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 
-interface SubNavItem {
-  title: string;
-  href: string;
-  icon: React.ElementType;
-  // Precise active detection: handles both the ?tab= URL style used by the
-  // panels/command menu and the legacy standalone routes (/dashboard/leads…).
-  active: (path: string, tab: string) => boolean;
-}
-
-const onPath = (path: string, prefix: string) =>
-  path === prefix || path.startsWith(`${prefix}/`);
+// Precise active detection: handles both the ?tab= URL style used by the
+// panels/command menu and the legacy standalone routes (/dashboard/leads…).
+// It lives on each FeatureSubItem in lib/features.ts.
 
 // Row-level play: moving the pointer anywhere onto a nav row sets its icon
 // animating, not just a hover landing on the small glyph itself. Icons that
@@ -74,166 +49,144 @@ interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
-  children?: SubNavItem[];
+  children?: FeatureSubItem[];
 }
 
-const navItems: NavItem[] = [
-  { title: "Home", href: "/dashboard", icon: Home },
-  {
-    title: "Booking",
-    href: "/dashboard/booking",
-    icon: Calendar,
-    children: [
-      {
-        title: "Calls",
-        href: "/dashboard/booking",
-        icon: Phone,
-        active: (p) => p === "/dashboard/booking",
-      },
-      {
-        title: "Services",
-        href: "/dashboard/booking/services",
-        icon: CalendarDays,
-        active: (p) => p.startsWith("/dashboard/booking/"),
-      },
-    ],
-  },
-  {
-    title: "Clients",
-    href: "/dashboard/clients",
-    icon: Users,
-    children: [
-      {
-        title: "Clients Roster",
-        href: "/dashboard/clients",
-        icon: Users,
-        active: (p, t) => onPath(p, "/dashboard/clients") && (t === "" || t === "clients"),
-      },
-      {
-        title: "Leads Pipeline",
-        href: "/dashboard/clients?tab=leads",
-        icon: Target,
-        active: (p, t) =>
-          (p === "/dashboard/clients" && t === "leads") || onPath(p, "/dashboard/leads"),
-      },
-      {
-        title: "Intake Forms",
-        href: "/dashboard/clients?tab=forms",
-        icon: ClipboardList,
-        active: (p, t) =>
-          (p === "/dashboard/clients" && (t === "forms" || t === "intake")) ||
-          onPath(p, "/dashboard/intake"),
-      },
-    ],
-  },
-  {
-    title: "Proposals",
-    href: "/dashboard/proposals",
-    icon: Sparkles,
-    children: [
-      {
-        title: "Saved Proposals",
-        href: "/dashboard/proposals",
-        icon: FileText,
-        active: (p, t) => p === "/dashboard/proposals" && (t === "" || t === "proposals"),
-      },
-      {
-        title: "AI Composer",
-        href: "/dashboard/proposals/new",
-        icon: PenLine,
-        active: (p) => onPath(p, "/dashboard/proposals/new"),
-      },
-      {
-        title: "Book AI",
-        href: "/dashboard/proposals?tab=book-ai",
-        icon: Bot,
-        active: (p, t) => p === "/dashboard/proposals" && t === "book-ai",
-      },
-    ],
-  },
-  {
-    title: "Projects",
-    href: "/dashboard/projects",
-    icon: LayoutGrid,
-    children: [
-      {
-        title: "Projects Roster",
-        href: "/dashboard/projects",
-        icon: LayoutGrid,
-        active: (p, t) => onPath(p, "/dashboard/projects") && (t === "" || t === "projects"),
-      },
-      {
-        title: "Invoices & Billing",
-        href: "/dashboard/projects?tab=invoices",
-        icon: Receipt,
-        active: (p, t) =>
-          (p === "/dashboard/projects" && t === "invoices") || onPath(p, "/dashboard/invoices"),
-      },
-      {
-        title: "Contracts",
-        href: "/dashboard/projects?tab=contracts",
-        icon: FileSignature,
-        active: (p, t) =>
-          (p === "/dashboard/projects" && t === "contracts") || onPath(p, "/dashboard/contracts"),
-      },
-    ],
-  },
-  { title: "Money", href: "/dashboard/cashflow", icon: Wallet },
-  { title: "Time", href: "/dashboard/time-tracker", icon: Clock },
-  { title: "Planner", href: "/dashboard/planner", icon: PenLine },
-  {
-    title: "Insights",
-    href: "/dashboard/reports",
-    icon: TrendingUp,
-    children: [
-      {
-        title: "Reports",
-        href: "/dashboard/reports",
-        icon: TrendingUp,
-        active: (p) => onPath(p, "/dashboard/reports"),
-      },
-      {
-        title: "Testimonials",
-        href: "/dashboard/testimonials",
-        icon: Star,
-        active: (p) => onPath(p, "/dashboard/testimonials"),
-      },
-      {
-        title: "Shared Links",
-        href: "/dashboard/links",
-        icon: Link2,
-        active: (p) => onPath(p, "/dashboard/links"),
-      },
-    ],
-  },
-  {
-    title: "Profile",
-    href: "/dashboard/report-card",
-    icon: IdCard,
-    children: [
-      {
-        title: "Profile Report Card",
-        href: "/dashboard/report-card",
-        icon: IdCard,
-        active: (p) => onPath(p, "/dashboard/report-card"),
-      },
-      {
-        title: "Link Page",
-        href: "/dashboard/link-page",
-        icon: Link2,
-        active: (p) => onPath(p, "/dashboard/link-page"),
-      },
-    ],
-  },
-  { title: "Settings", href: "/dashboard/settings", icon: Settings },
-];
+// Account menu under the sidebar user pill: signed-in identity, the profile
+// page, a real-time theme switch and the only sign-out in the app. Opens
+// upward from the bottom of the rail (absolute, inside the aside — nothing
+// clips it because the nav list's overflow container is a sibling, not an
+// ancestor).
+function ProfileMenuPanel({
+  email,
+  onClose,
+}: {
+  email?: string;
+  onClose: () => void;
+}) {
+  // Lazy init is safe: the panel only renders after a user click (never in
+  // the SSR output), so document is always available here.
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+      ? "dark"
+      : "light"
+  );
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", next === "dark");
+    localStorage.setItem("fb-theme", next);
+    setTheme(next);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8, scale: 0.97 }}
+      transition={{ duration: 0.16, ease: "easeOut" }}
+      className="absolute bottom-full left-0 mb-2 w-60 rounded-2xl bg-card border border-line shadow-2xl shadow-black/40 p-1.5 origin-bottom-left"
+    >
+      <div className="px-3 pt-2 pb-2.5 min-w-0">
+        <div className="text-[11px] text-muted">Signed in as</div>
+        <div className="text-xs font-semibold text-accent truncate mt-0.5" suppressHydrationWarning>
+          {email || "…"}
+        </div>
+      </div>
+
+      <div className="border-t border-dashed border-line my-1" />
+
+      <Link
+        href="/dashboard/settings"
+        onClick={onClose}
+        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg hover:bg-surface transition-colors"
+      >
+        <User className="w-4 h-4 text-muted shrink-0" />
+        My Profile
+      </Link>
+
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg hover:bg-surface transition-colors"
+      >
+        <span className="w-4 h-4 flex items-center justify-center text-muted shrink-0">
+          {/* Same half-circle mark as the top-bar ThemeToggle */}
+          {theme === "dark" ? (
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+            </svg>
+          )}
+        </span>
+        Toggle theme
+      </button>
+
+      <div className="border-t border-dashed border-line my-1" />
+
+      <LogOutButton onDone={onClose} />
+    </motion.div>
+  );
+}
+
+function LogOutButton({ onDone }: { onDone: () => void }) {
+  const clerk = useClerk();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  const handleLogOut = async () => {
+    setBusy(true);
+    try {
+      await clerk.signOut();
+      router.push("/sign-in");
+    } finally {
+      onDone();
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleLogOut}
+      disabled={busy}
+      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg hover:bg-surface hover:text-danger transition-colors disabled:opacity-50"
+    >
+      <LogOut className="w-4 h-4 text-muted shrink-0" />
+      Log Out
+    </button>
+  );
+}
 
 export function DashboardSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useUser();
+  const { isVisible, labelFor } = useFeatureFlags();
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Nav is derived from the shared feature registry so the owner's Settings →
+  // Features toggles and label overrides apply here automatically. Hidden
+  // features drop out of the rail entirely (children inherit the gate).
+  const navItems = useMemo<NavItem[]>(
+    () =>
+      FEATURES.filter((f) => !f.commandOnly && (f.locked || isVisible(f.key))).map((f) => ({
+        title: labelFor(f.key, f.title),
+        href: f.href,
+        icon: f.icon,
+        children: f.subItems?.map((s) => ({
+          ...s,
+          title: labelFor(s.id, s.title),
+        })),
+      })),
+    [isVisible, labelFor]
+  );
 
   // Submenu state for flyout & accordion
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -241,17 +194,41 @@ export function DashboardSidebar() {
   const flyoutRef = useRef<HTMLDivElement | null>(null);
   const portalRef = useRef<HTMLDivElement | null>(null);
 
+  // The flyout is hover-driven, so closing is scheduled instead of instant:
+  // the pointer has to cross an 8px gap between rail and flyout, and leaving
+  // the trigger without ever entering the flyout must still dismiss it.
+  const flyoutCloseTimer = useRef<number | null>(null);
+  const cancelFlyoutClose = useCallback(() => {
+    if (flyoutCloseTimer.current !== null) {
+      window.clearTimeout(flyoutCloseTimer.current);
+      flyoutCloseTimer.current = null;
+    }
+  }, []);
+  const scheduleFlyoutClose = useCallback(() => {
+    cancelFlyoutClose();
+    flyoutCloseTimer.current = window.setTimeout(() => setOpenSubmenu(null), 180);
+  }, [cancelFlyoutClose]);
+
+  useEffect(
+    () => () => {
+      if (flyoutCloseTimer.current !== null) window.clearTimeout(flyoutCloseTimer.current);
+    },
+    []
+  );
+
   const currentSearchStr = searchParams?.toString() ? `?${searchParams.toString()}` : "";
   const fullCurrentPath = `${pathname}${currentSearchStr}`;
   const currentTab = searchParams?.get("tab") ?? "";
 
-  const isChildActive = (child: SubNavItem) => child.active(pathname, currentTab);
+  const isChildActive = (child: FeatureSubItem) => child.active(pathname, currentTab);
 
   // The collapsed flyout is portalled to <body> (the nav list's overflow-y-auto
   // would otherwise clip it), so its position is anchored from the button rect.
   const openSubmenuAt = (key: string, el: HTMLElement) => {
+    cancelFlyoutClose();
     const rect = el.getBoundingClientRect();
-    const estHeight = 210;
+    const count = navItems.find((n) => n.title === key)?.children?.length ?? 0;
+    const estHeight = count * 40 + 16;
     setFlyoutPos({
       left: rect.right + 8,
       top: Math.max(8, Math.min(rect.top, window.innerHeight - estHeight)),
@@ -283,9 +260,14 @@ export function DashboardSidebar() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Close flyout upon navigation
+  // Account menu under the user pill (both expanded and collapsed modes).
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close flyout & account menu upon navigation
   useEffect(() => {
     setOpenSubmenu(null);
+    setProfileMenuOpen(false);
   }, [pathname, searchParams]);
 
   // Close flyout on outside click (the portalled flyout lives outside flyoutRef)
@@ -312,6 +294,25 @@ export function DashboardSidebar() {
 
   const userName = mounted ? (user?.firstName || user?.fullName || "Freelancer") : "Freelancer";
   const userImageUrl = mounted ? user?.imageUrl : undefined;
+  const userEmail = mounted ? user?.primaryEmailAddress?.emailAddress : undefined;
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProfileMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [profileMenuOpen]);
 
   const submenuItem =
     navItems.find((n) => n.children?.length && n.title === openSubmenu) ?? null;
@@ -404,6 +405,7 @@ export function DashboardSidebar() {
                           openSubmenuAt(item.title, e.currentTarget);
                         }}
                         onMouseEnter={(e) => openSubmenuAt(item.title, e.currentTarget)}
+                        onMouseLeave={scheduleFlyoutClose}
                         className={`press relative flex items-center rounded-full text-sm w-11 h-11 mx-auto justify-center ${isActive
                             ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                             : "text-muted font-medium hover:bg-surface hover:text-fg"
@@ -507,21 +509,31 @@ export function DashboardSidebar() {
         <div className="p-3 border-t border-dashed border-line">
           {!isCollapsed ? (
             <div className="flex items-center justify-between gap-2">
-              <Link
-                href="/dashboard/settings"
-                className="flex-1 flex items-center gap-2.5 p-1.5 pr-3 rounded-full border border-dashed border-line-strong hover:border-accent/50 transition-colors group overflow-hidden"
-                title="View Profile Settings"
-                suppressHydrationWarning
-              >
-                <span className="w-7 h-7 rounded-full overflow-hidden border border-line bg-surface shrink-0 flex items-center justify-center text-xs" suppressHydrationWarning>
-                  {userImageUrl ? (
-                    <img src={userImageUrl} alt={userName} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-bold text-fg">{userName.charAt(0).toUpperCase()}</span>
+              <div className="relative flex-1 min-w-0" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setProfileMenuOpen((o) => !o)}
+                  className="w-full flex items-center gap-2.5 p-1.5 pr-3 rounded-full border border-dashed border-line-strong hover:border-accent/50 transition-colors group overflow-hidden"
+                  title="Account"
+                  aria-expanded={profileMenuOpen}
+                  suppressHydrationWarning
+                >
+                  <span className="w-7 h-7 rounded-full overflow-hidden border border-line bg-surface shrink-0 flex items-center justify-center text-xs" suppressHydrationWarning>
+                    {userImageUrl ? (
+                      <img src={userImageUrl} alt={userName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="font-bold text-fg">{userName.charAt(0).toUpperCase()}</span>
+                    )}
+                  </span>
+                  <span className="text-xs font-semibold text-fg truncate" suppressHydrationWarning>{userName}</span>
+                </button>
+
+                <AnimatePresence>
+                  {profileMenuOpen && (
+                    <ProfileMenuPanel email={userEmail} onClose={() => setProfileMenuOpen(false)} />
                   )}
-                </span>
-                <span className="text-xs font-semibold text-fg truncate" suppressHydrationWarning>{userName}</span>
-              </Link>
+                </AnimatePresence>
+              </div>
 
               <button
                 onClick={() => setIsCollapsed(true)}
@@ -533,18 +545,28 @@ export function DashboardSidebar() {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <Link
-                href="/dashboard/settings"
-                className="w-8 h-8 rounded-full border border-dashed border-line-strong flex items-center justify-center hover:border-accent/50 transition-colors overflow-hidden"
-                title={userName}
-                suppressHydrationWarning
-              >
-                {userImageUrl ? (
-                  <img src={userImageUrl} alt={userName} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-xs font-bold text-fg" suppressHydrationWarning>{userName.charAt(0).toUpperCase()}</span>
-                )}
-              </Link>
+              <div className="relative" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setProfileMenuOpen((o) => !o)}
+                  className="w-8 h-8 rounded-full border border-dashed border-line-strong flex items-center justify-center hover:border-accent/50 transition-colors overflow-hidden"
+                  title="Account"
+                  aria-expanded={profileMenuOpen}
+                  suppressHydrationWarning
+                >
+                  {userImageUrl ? (
+                    <img src={userImageUrl} alt={userName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-bold text-fg" suppressHydrationWarning>{userName.charAt(0).toUpperCase()}</span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {profileMenuOpen && (
+                    <ProfileMenuPanel email={userEmail} onClose={() => setProfileMenuOpen(false)} />
+                  )}
+                </AnimatePresence>
+              </div>
 
               <button
                 onClick={() => setIsCollapsed(false)}
@@ -566,48 +588,40 @@ export function DashboardSidebar() {
             {isCollapsed && submenuItem && flyoutPos && (
               <motion.div
                 ref={portalRef}
-                initial={{ opacity: 0, x: -10, scale: 0.94 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -10, scale: 0.94 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
-                onMouseLeave={() => setOpenSubmenu(null)}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                onMouseEnter={cancelFlyoutClose}
+                onMouseLeave={scheduleFlyoutClose}
                 style={{ position: "fixed", top: flyoutPos.top, left: flyoutPos.left, zIndex: 100 }}
-                className="min-w-[210px] p-2 rounded-2xl bg-card border border-line shadow-2xl space-y-1.5 backdrop-blur-md"
+                className="w-56 max-h-[60vh] overflow-y-auto scrollbar-none p-1.5 rounded-2xl bg-card border border-line shadow-2xl space-y-0.5 backdrop-blur-md"
               >
-                <div className="px-3 py-1.5 border-b border-line/60 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-fg uppercase tracking-wider">
-                    {submenuItem.title} Features
-                  </span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                </div>
+                {submenuItem.children?.map((child) => {
+                  const ChildIcon = child.icon;
+                  const isCurrent = isChildActive(child);
 
-                <div className="space-y-1">
-                  {submenuItem.children?.map((child) => {
-                    const ChildIcon = child.icon;
-                    const isCurrent = isChildActive(child);
-
-                    return (
-                      <Link
-                        key={child.title}
-                        href={child.href}
-                        data-nav-row
-                        onClick={() => setOpenSubmenu(null)}
-                        className={`press flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${isCurrent
-                            ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                            : "text-fg hover:bg-surface hover:text-accent"
-                          }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <NavIcon icon={ChildIcon} className={`w-4 h-4 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
-                          <span className="text-fg font-semibold">{child.title}</span>
-                        </div>
-                        {isCurrent && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
+                  return (
+                    <Link
+                      key={child.title}
+                      href={child.href}
+                      data-nav-row
+                      onClick={() => setOpenSubmenu(null)}
+                      className={`press flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${isCurrent
+                          ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                          : "text-fg hover:bg-surface hover:text-accent"
+                        }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <NavIcon icon={ChildIcon} className={`w-4 h-4 shrink-0 ${isCurrent ? "text-accent" : "text-muted"}`} />
+                        <span className="text-fg font-semibold truncate">{child.title}</span>
+                      </div>
+                      {isCurrent && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                      )}
+                    </Link>
+                  );
+                })}
               </motion.div>
             )}
           </AnimatePresence>,

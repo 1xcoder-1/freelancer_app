@@ -5,7 +5,8 @@ from app.models.base import Base, TimestampMixin
 
 
 class LinkPage(Base, TimestampMixin):
-    """A Linktree-style public profile page: up to 3 per workspace.
+    """A Linktree-style public profile page: one per workspace up to the plan's
+    link-page cap.
 
     The page owns a short handle (slug) that strangers open at /p/{slug},
     a ordered list of LinkItems, and lifetime counters. Publishing is an
@@ -13,9 +14,9 @@ class LinkPage(Base, TimestampMixin):
     never a "private" hint)."""
     __tablename__ = "link_pages"
 
-    # The workspace row is the tenant guard used by every other table; a
-    # workspace may hold up to 3 pages (enforced in the endpoint, not here,
-    # so a concurrent create just fails the count check cleanly).
+    # The workspace row is the tenant guard used by every other table; how many
+    # pages a workspace may hold is the plan's link_pages limit, enforced in the
+    # endpoint (app.core.quota) rather than with a database constraint.
     workspace_id: Mapped[str] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False, index=True,

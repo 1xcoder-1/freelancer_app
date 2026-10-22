@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TextMorph } from "torph/react";
 import {
   FolderKanban,
   FileCheck2,
@@ -77,17 +78,17 @@ export function ClientProductivityTabs({ clientId }: { clientId: string }) {
 
         <div className="my-3">
           <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg">
-            {totalProjects}
+            <TextMorph numbers className="tabular-nums">{totalProjects}</TextMorph>
           </div>
         </div>
 
         <div className="space-y-1 pt-1 text-xs text-muted/90 font-sans">
           <div className="flex items-center gap-1.5">
-            <span>{completedProjects} Completed</span>
+            <span><TextMorph numbers className="tabular-nums">{completedProjects}</TextMorph> Completed</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span>{openProjects} Pending</span>
+            <span><TextMorph numbers className="tabular-nums">{openProjects}</TextMorph> Pending</span>
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" />
           </div>
         </div>
@@ -107,17 +108,17 @@ export function ClientProductivityTabs({ clientId }: { clientId: string }) {
 
         <div className="my-3">
           <div className="font-display text-2xl sm:text-3xl font-normal tracking-tight text-fg truncate">
-            {formatMoney(totalRevenue, currency)}
+            <TextMorph numbers className="tabular-nums">{formatMoney(totalRevenue, currency)}</TextMorph>
           </div>
         </div>
 
         <div className="space-y-1 pt-1 text-xs text-muted/90 font-sans">
           <div className="flex items-center gap-1.5">
-            <span>{formatMoney(paidAmount, currency)} Paid</span>
+            <span><TextMorph numbers className="tabular-nums">{formatMoney(paidAmount, currency)}</TextMorph> Paid</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span>{formatMoney(pendingAmount, currency)} Unpaid</span>
+            <span><TextMorph numbers className="tabular-nums">{formatMoney(pendingAmount, currency)}</TextMorph> Unpaid</span>
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" />
           </div>
         </div>
@@ -137,17 +138,17 @@ export function ClientProductivityTabs({ clientId }: { clientId: string }) {
 
         <div className="my-3">
           <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg">
-            {totalContracts}
+            <TextMorph numbers className="tabular-nums">{totalContracts}</TextMorph>
           </div>
         </div>
 
         <div className="space-y-1 pt-1 text-xs text-muted/90 font-sans">
           <div className="flex items-center gap-1.5">
-            <span>{signedContracts} Signed</span>
+            <span><TextMorph numbers className="tabular-nums">{signedContracts}</TextMorph> Signed</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span>{pendingContracts} Pending</span>
+            <span><TextMorph numbers className="tabular-nums">{pendingContracts}</TextMorph> Pending</span>
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" />
           </div>
         </div>
@@ -167,17 +168,17 @@ export function ClientProductivityTabs({ clientId }: { clientId: string }) {
 
         <div className="my-3">
           <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg">
-            {totalInvoices}
+            <TextMorph numbers className="tabular-nums">{totalInvoices}</TextMorph>
           </div>
         </div>
 
         <div className="space-y-1 pt-1 text-xs text-muted/90 font-sans">
           <div className="flex items-center gap-1.5">
-            <span>{paidInvoices} Paid</span>
+            <span><TextMorph numbers className="tabular-nums">{paidInvoices}</TextMorph> Paid</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span>{pendingInvoices} Unpaid</span>
+            <span><TextMorph numbers className="tabular-nums">{pendingInvoices}</TextMorph> Unpaid</span>
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" />
           </div>
         </div>

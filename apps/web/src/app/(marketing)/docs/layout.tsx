@@ -24,14 +24,16 @@ export default function DocsRouteLayout({
       <div className="mk-docs dark flex-1">
         <NextProvider>
           {/* search/theme slots off: their empty boxes rendered at the
-              bottom of the sidebar */}
+              bottom of the sidebar.
+              No nav title: the site Navbar already shows it, and a
+              `slots.navTitle` component is a function — it cannot be passed
+              from this Server Component into the client tree. Leaving
+              `nav.title` undefined makes fumadocs render an empty <a>, which
+              globals.css hides. */}
           <DocsLayout
             tree={source.getPageTree()}
             searchToggle={{ enabled: false }}
             themeSwitch={{ enabled: false }}
-            slots={{
-              navTitle: () => null,
-            }}
           >
             {children}
           </DocsLayout>

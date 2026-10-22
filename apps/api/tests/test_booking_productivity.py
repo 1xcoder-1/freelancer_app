@@ -1,10 +1,8 @@
 """Phase 7 — Booking productivity (B1 conflict-free slots, B2 availability &
-days off, B3 self-reschedule + status machine, B4 real paid consultations,
-B6 no-show strikes) plus workspace isolation.
+days off, B3 self-reschedule + status machine, B6 no-show strikes) plus
+workspace isolation.
 
-Hermetic by convention: HTTP-driven against the throwaway SQLite schema; the
-B4 payment-confirmation sweep is exercised through its module-level helper
-exactly like the other job tests.
+Hermetic by convention: HTTP-driven against the throwaway SQLite schema.
 """
 
 from datetime import datetime, timedelta
@@ -21,7 +19,6 @@ PERMISSIVE = dict(
     max_advance_days=365,
     buffer_minutes=0,
     duration_minutes=30,
-    price=0.0,
 )
 
 
@@ -165,46 +162,17 @@ async def test_completed_call_creates_client_record(client):
 
 
 # ------------------------------------------------------------------------------
-# B4 — a paid consult is UNPAID until its invoice is actually settled
+# B6 — no-show strikes pause online rebooking
 # ------------------------------------------------------------------------------
-async def test_paid_consultation_is_not_fictitiously_paid(client):
-    c = await _make_consultation(client, price=100.0)
-    res = await _schedule(client, c["token"], _at(3, hour=10))
-    assert res.status_code == 201, res.text
-    appt = res.json()
-
-    # The core bug fix: price > 0 no longer means "paid".
-    assert appt["payment_status"] == "unpaid"
-    assert appt["status"] == "pending"
-    assert appt["invoice_id"], "a paid consult must raise a real invoice"
-    assert appt["invoice_token"]
-
-    # Until payment lands, the payment helper must not confirm anything.
-    from app.core.database import AsyncSessionLocal
-    from app.inngest_functions.booking_jobs import confirm_paid_appointment
-    async with AsyncSessionLocal() as session:
-        result = await confirm_paid_appointment(session, appt["invoice_id"])
-    assert result["updated"] is True
-    assert result["status"] == "confirmed"
-
-    check = await client.get("/api/v1/booking/appointments")
-    mine = next(a for a in check.json() if a["id"] == appt["id"])
-    assert mine["payment_status"] == "paid"
-    assert mine["status"] == "confirmed"
-
-
-# ------------------------------------------------------------------------------
-# B6 — no-show strikes force a repeat offender off free bookings
-# ------------------------------------------------------------------------------
-async def test_no_show_strikes_block_free_rebooking(client):
-    c = await _make_consultation(client, price=0.0, no_show_limit=1)
+async def test_no_show_strikes_block_rebooking(client):
+    c = await _make_consultation(client, no_show_limit=1)
     appt = (await _schedule(client, c["token"], _at(2, hour=13), email="flake@book.test")).json()
 
     ns = await client.post(f"/api/v1/booking/appointments/{appt['id']}/status", json={"status": "no_show"})
     assert ns.status_code == 200, ns.text
     assert ns.json()["no_show"] is True
 
-    # Same person, free slot, over the limit -> refused (must book paid instead).
+    # Same person, over the limit -> refused until the freelancer steps in.
     again = await _schedule(client, c["token"], _at(5, hour=13), email="flake@book.test")
     assert again.status_code == 409, again.text
 
@@ -255,7 +223,6 @@ async def test_list_starts_empty_and_carries_availability_defaults(client):
         "title": "Strategy Session",
         "description": "Deep dive on the scope.",
         "duration_minutes": 30,
-        "price": 100.0,
         "meeting_provider": "google_meet",
         "is_active": True,
     })

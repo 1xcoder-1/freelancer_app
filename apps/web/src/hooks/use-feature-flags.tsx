@@ -12,32 +12,26 @@ import {
 } from "@/lib/api";
 import { logHandledError } from "@/lib/log-error";
 
-interface FlagPatch {
-  visible?: boolean;
-  label_override?: string | null;
-}
-
 interface FeatureFlagsContextValue {
-  // True once the flags payload has loaded (or definitively failed — the
-  // failure path leaves defaults in place rather than blocking the app).
+  // True only once the flags payload has loaded. False means "unknown", so
+  // gated surfaces stay hidden instead of flashing before the real state.
   ready: boolean;
   isOwner: boolean;
+  // Owner bypass: the owner always keeps access to pages hidden from others.
+  canSee: (key: string) => boolean;
+  // Stored switch state — what the owner's management list displays.
   isVisible: (key: string) => boolean;
   labelFor: (id: string, fallback: string) => string;
-  setFlag: (key: string, patch: FlagPatch) => Promise<void>;
+  setVisible: (key: string, visible: boolean) => Promise<void>;
 }
 
 const FeatureFlagsContext = createContext<FeatureFlagsContextValue | null>(null);
 
-function applyPatch(flags: FeatureFlag[], key: string, patch: Partial<FeatureFlag>): FeatureFlag[] {
+function withVisibility(flags: FeatureFlag[], key: string, visible: boolean): FeatureFlag[] {
   const idx = flags.findIndex((f) => f.key === key);
-  const row: FeatureFlag =
-    idx === -1 ? { key, visible: true, label_override: null } : { ...flags[idx] };
-  if (patch.visible !== undefined) row.visible = patch.visible;
-  if (patch.label_override !== undefined) row.label_override = patch.label_override;
-  if (idx === -1) return [...flags, row];
+  if (idx === -1) return [...flags, { key, visible, label_override: null }];
   const next = [...flags];
-  next[idx] = row;
+  next[idx] = { ...next[idx], visible };
   return next;
 }
 
@@ -63,28 +57,25 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
     const write = (updater: (prev: FeatureFlagsPayload | null) => FeatureFlagsPayload) =>
       mutate((prev) => updater(prev), false);
 
-    const setFlag = async (key: string, patch: FlagPatch) => {
-      const prev = byKey.get(key);
-      write((p) => ({ is_owner: p?.is_owner ?? true, flags: applyPatch(p?.flags ?? [], key, patch) }));
+    const setVisible = async (key: string, visible: boolean) => {
+      const prevVisible = byKey.get(key)?.visible ?? true;
+      write((p) => ({
+        is_owner: p?.is_owner ?? false,
+        flags: withVisibility(p?.flags ?? [], key, visible),
+      }));
       try {
         const token = (await getToken()) || undefined;
-        const saved = await updateFeatureFlag({ key, ...patch }, token, email);
+        const saved = await updateFeatureFlag({ key, visible }, token, email);
         write((p) => ({
-          is_owner: p?.is_owner ?? true,
-          flags: applyPatch(p?.flags ?? [], key, {
-            visible: saved.visible,
-            label_override: saved.label_override,
-          }),
+          is_owner: p?.is_owner ?? false,
+          flags: withVisibility(p?.flags ?? [], key, saved.visible),
         }));
       } catch (err) {
         logHandledError("Failed to save feature flag:", err);
         toast.error("Could not save that change — reverting.");
         write((p) => ({
-          is_owner: p?.is_owner ?? true,
-          flags: applyPatch(p?.flags ?? [], key, {
-            visible: prev?.visible ?? true,
-            label_override: prev?.label_override ?? null,
-          }),
+          is_owner: p?.is_owner ?? false,
+          flags: withVisibility(p?.flags ?? [], key, prevVisible),
         }));
       }
     };
@@ -92,9 +83,10 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
     return {
       ready: data !== null,
       isOwner: data?.is_owner ?? false,
+      canSee: (key) => Boolean(data && (data.is_owner || (byKey.get(key)?.visible ?? true))),
       isVisible: (key) => byKey.get(key)?.visible ?? true,
       labelFor: (id, fallback) => byKey.get(id)?.label_override?.trim() || fallback,
-      setFlag,
+      setVisible,
     };
   }, [data, mutate, email, getToken]);
 

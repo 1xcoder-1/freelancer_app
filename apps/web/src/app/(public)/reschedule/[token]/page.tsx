@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Video,
   RefreshCw,
-  CreditCard,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,8 +38,8 @@ export default function ReschedulePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [slots, setSlots] = useState<string[]>([]);
-  const [selectedDay, setSelectedDay] = useState("");
-  const [selectedSlot, setSelectedSlot] = useState("");
+  const [pickedDay, setPickedDay] = useState("");
+  const [pickedSlot, setPickedSlot] = useState("");
   const [busy, setBusy] = useState(false);
   const [moved, setMoved] = useState(false);
 
@@ -51,8 +50,8 @@ export default function ReschedulePage() {
       try {
         const data = await getPublicAppointment(token);
         if (active) setAppt(data);
-      } catch (err: any) {
-        if (active) setError(err.message || "This appointment link is invalid.");
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "This appointment link is invalid.");
       } finally {
         if (active) setLoading(false);
       }
@@ -78,6 +77,7 @@ export default function ReschedulePage() {
 
   useEffect(() => {
     if (!canReschedule) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching slots is the purpose of this effect
     loadSlots();
     const id = setInterval(() => {
       if (document.visibilityState === "visible") void loadSlots();
@@ -86,14 +86,10 @@ export default function ReschedulePage() {
   }, [canReschedule, loadSlots]);
 
   const days = useMemo(() => Array.from(new Set(slots.map((s) => s.slice(0, 10)))).sort(), [slots]);
-  useEffect(() => {
-    if (days.length && !days.includes(selectedDay)) setSelectedDay(days[0]);
-  }, [days, selectedDay]);
+  // Derived selection self-heals when polling replaces slots that are no longer offered.
+  const selectedDay = days.includes(pickedDay) ? pickedDay : (days[0] ?? "");
   const daySlots = useMemo(() => slots.filter((s) => s.slice(0, 10) === selectedDay), [slots, selectedDay]);
-  useEffect(() => {
-    if (daySlots.length === 0) setSelectedSlot("");
-    else if (!daySlots.includes(selectedSlot)) setSelectedSlot(daySlots[0]);
-  }, [daySlots, selectedSlot]);
+  const selectedSlot = daySlots.includes(pickedSlot) ? pickedSlot : (daySlots[0] ?? "");
 
   const handleReschedule = async () => {
     if (!selectedSlot) return;
@@ -103,8 +99,8 @@ export default function ReschedulePage() {
       setAppt(updated);
       setMoved(true);
       toast.success("Appointment moved to the new time.");
-    } catch (err: any) {
-      toast.error(err?.message || "Could not move the appointment.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not move the appointment.");
       void loadSlots();
     } finally {
       setBusy(false);
@@ -148,10 +144,6 @@ export default function ReschedulePage() {
               <span className="text-faint flex items-center gap-1"><CalendarIcon className="w-4 h-4" /> When</span>
               <span className="font-mono font-semibold">{fmtDay(appt.appointment_time)} · {fmtTime(appt.appointment_time)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-faint">Payment</span>
-              <span className="uppercase font-semibold">{appt.payment_status}</span>
-            </div>
             {appt.meeting_link && (
               <div className="flex justify-between items-center pt-2 border-t border-line">
                 <span className="text-faint">Join</span>
@@ -161,14 +153,6 @@ export default function ReschedulePage() {
               </div>
             )}
           </div>
-
-          {appt.payment_status === "unpaid" && appt.invoice_token && (
-            <a href={`/pay/${appt.invoice_token}`}>
-              <Button variant="outline" className="w-full border-warn/40 text-warn">
-                <CreditCard className="w-4 h-4 mr-2" /> Payment outstanding — pay to confirm
-              </Button>
-            </a>
-          )}
         </Card>
 
         {moved && (
@@ -195,7 +179,7 @@ export default function ReschedulePage() {
               <>
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {days.map((d) => (
-                    <button key={d} onClick={() => setSelectedDay(d)}
+                    <button key={d} onClick={() => setPickedDay(d)}
                       className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium border ${
                         selectedDay === d ? "bg-accent text-accent-fg border-accent" : "bg-bg text-fg border-line hover:border-line-strong"
                       }`}>
@@ -205,7 +189,7 @@ export default function ReschedulePage() {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {daySlots.map((s) => (
-                    <button key={s} onClick={() => setSelectedSlot(s)}
+                    <button key={s} onClick={() => setPickedSlot(s)}
                       className={`px-3 py-2 rounded-xl text-xs font-mono border ${
                         selectedSlot === s ? "bg-accent text-accent-fg border-accent" : "bg-bg text-fg border-line hover:border-line-strong"
                       }`}>

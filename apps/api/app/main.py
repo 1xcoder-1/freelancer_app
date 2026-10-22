@@ -1,11 +1,15 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import init_db, engine
-from app.core.rate_limit import enforce_rate_limit
+from app.core.rate_limit import (
+    enforce_plan_rate_limit,
+    enforce_rate_limit,
+    rate_headers,
+)
 from app.core.startup import validate_settings
 from app.api.v1.router import api_router
 from app.core.auth import warm_jwks
@@ -57,6 +61,27 @@ async def lifespan(app: FastAPI):
             print(f"DB warm-up notice (queries will retry per request): {e}")
 
     await asyncio.gather(_wake_database(), warm_jwks())
+
+    # Dev-only reconcile: the hourly Inngest scan flips past-due invoices, but
+    # a dev machine restarts (and skips the Inngest dev server) often — without
+    # this, invoices that lapsed while the app was down never surface as
+    # 'overdue' or land an inbox row. Idempotent: already-flipped rows don't
+    # match the 'sent' filter. Prod relies on the cron, never startup writes.
+    if is_dev_env:
+        from app.core.database import AsyncSessionLocal
+        from app.inngest_functions.invoice_jobs import mark_overdue_invoices
+
+        async def _reconcile_overdue():
+            try:
+                async with AsyncSessionLocal() as session:
+                    result = await mark_overdue_invoices(session)
+                if result["marked_overdue"]:
+                    print(f"Startup reconcile: {result['marked_overdue']} invoice(s) marked overdue")
+            except Exception as e:
+                print(f"Overdue reconcile notice (cron will retry within the hour): {e}")
+
+        await _reconcile_overdue()
+
     yield
 
 app = FastAPI(
@@ -118,6 +143,9 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # 4. Budget visibility: clients can see what the limiter allowed them spend
+    #    on this request (see app/core/rate_limit.py).
+    response.headers.update(rate_headers(request))
     return response
 
 # Set up CORS middleware (Strict origin filtering)
@@ -129,7 +157,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(
+    api_router,
+    prefix="/api/v1",
+    # Layer 2 of the limiter: the plan's own read/write/AI budget, applied per
+    # tenant after the bearer token is verified. Kept here rather than in each
+    # endpoint so a new route can never forget to enforce it.
+    dependencies=[Depends(enforce_plan_rate_limit)],
+)
 
 # Background Jobs: Inngest serve endpoint (GET/PUT/POST /api/inngest, added
 # by the SDK). Deliberately outside /api/v1: Inngest Cloud / the local Dev

@@ -15,6 +15,7 @@ import { StatCard } from "@/components/dashboard/patterns";
 import { BookingCallsPanel } from "@/components/dashboard/panels/BookingCallsPanel";
 import { getBookingAppointments, getBookingAgenda } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
 /* Calls — every appointment a client booked, plus the clock around them.
    Services (what clients can book) is its own page. */
@@ -33,11 +34,12 @@ export default function BookingCallsPage() {
 
   const appointments = data?.appointments ?? [];
   const agenda = data?.agenda ?? null;
+  const capacity = usePlanCapacity("services");
 
   const isOpen = (s: string) => s === "pending" || s === "confirmed";
   const upcoming = appointments
     .filter((a) => isOpen(a.status))
-    .sort((a, b) => a.appointment_time.localeCompare(a.appointment_time));
+    .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time));
   const past = appointments
     .filter((a) => !isOpen(a.status))
     .sort((a, b) => b.appointment_time.localeCompare(a.appointment_time));
@@ -46,7 +48,6 @@ export default function BookingCallsPage() {
   const todayCount = agenda?.today_calls?.length ?? 0;
   const weekBooked = agenda?.week_booked ?? 0;
   const pendingCount = appointments.filter((a) => a.status === "pending").length;
-  const unpaidCount = appointments.filter((a) => a.payment_status === "unpaid" && isOpen(a.status)).length;
   const noShowCount = agenda?.no_show_count ?? appointments.filter((a) => a.status === "no_show").length;
   const cancelledCount = appointments.filter((a) => a.status === "cancelled").length;
 
@@ -93,11 +94,11 @@ export default function BookingCallsPage() {
             />
             <StatCard
               label="Needs you"
-              value={pendingCount + unpaidCount}
+              value={pendingCount}
               icon={CheckCircle2}
               rows={[
                 { text: `${pendingCount} to confirm`, dot: pendingCount ? "warn" : "ok" },
-                { text: `${unpaidCount} unpaid`, dot: unpaidCount ? "warn" : "ok" },
+                { text: `${upcoming.length} upcoming`, dot: "info" },
               ]}
             />
             <StatCard

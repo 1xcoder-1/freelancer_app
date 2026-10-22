@@ -8,7 +8,6 @@ import {
   Video,
   CheckCircle2,
   AlertCircle,
-  CreditCard,
 } from "@/components/animated-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -19,7 +18,6 @@ import {
   PublicBookingConsultation,
   BookingAppointment,
 } from "@/lib/api";
-import { formatMoney } from "@/lib/currency";
 
 const SLOTS_POLL_MS = 15_000;
 
@@ -44,8 +42,8 @@ export default function PublicBookingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [slots, setSlots] = useState<string[]>([]);
-  const [selectedDay, setSelectedDay] = useState<string>("");
-  const [selectedSlot, setSelectedSlot] = useState<string>("");
+  const [pickedDay, setPickedDay] = useState<string>("");
+  const [pickedSlot, setPickedSlot] = useState<string>("");
 
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
@@ -80,8 +78,8 @@ export default function PublicBookingPage() {
         const data = await getPublicBooking(token);
         if (!active) return;
         setConsultation(data);
-      } catch (err: any) {
-        if (active) setError(err.message || "Consultation not found.");
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Consultation not found.");
       } finally {
         if (active) setLoading(false);
       }
@@ -103,6 +101,7 @@ export default function PublicBookingPage() {
 
   useEffect(() => {
     if (!token || confirmedAppt) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching slots is the purpose of this effect
     loadSlots();
     const id = setInterval(() => {
       if (document.visibilityState === "visible") void loadSlots();
@@ -115,27 +114,16 @@ export default function PublicBookingPage() {
     return Array.from(set).sort();
   }, [slots]);
 
-  useEffect(() => {
-    if (days.length === 0) {
-      setSelectedDay("");
-      setSelectedSlot("");
-      return;
-    }
-    if (!days.includes(selectedDay)) setSelectedDay(days[0]);
-  }, [days, selectedDay]);
+  // Selection is derived so it self-heals when the 15s poll replaces the
+  // slot list and the previously picked day/slot is no longer offered.
+  const selectedDay = days.includes(pickedDay) ? pickedDay : (days[0] ?? "");
 
   const daySlots = useMemo(
     () => slots.filter((s) => s.slice(0, 10) === selectedDay),
     [slots, selectedDay]
   );
 
-  useEffect(() => {
-    if (daySlots.length === 0) {
-      setSelectedSlot("");
-    } else if (!daySlots.includes(selectedSlot)) {
-      setSelectedSlot(daySlots[0]);
-    }
-  }, [daySlots, selectedSlot]);
+  const selectedSlot = daySlots.includes(pickedSlot) ? pickedSlot : (daySlots[0] ?? "");
 
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,9 +141,8 @@ export default function PublicBookingPage() {
       });
       guard.markSaved();
       setConfirmedAppt(appt);
-    } catch (err: any) {
-      const msg = err?.message || "That slot was just taken. Please pick another.";
-      toast.error(msg);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "That slot was just taken. Please pick another.");
       void loadSlots();
     } finally {
       setScheduling(false);
@@ -191,25 +178,17 @@ export default function PublicBookingPage() {
     );
   }
 
-  const priceFormatted =
-    consultation.price > 0
-      ? formatMoney(consultation.price, consultation.currency, consultation.price % 1 === 0 ? 0 : 2)
-      : "Free";
-
   if (confirmedAppt) {
-    const needsPayment = confirmedAppt.payment_status === "unpaid" && confirmedAppt.invoice_token;
     return (
       <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4">
         <div className="w-full max-w-md mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 text-center space-y-5 shadow-sm">
           <div className="w-12 h-12 rounded-full bg-accent-soft text-accent flex items-center justify-center mx-auto">
-            {needsPayment ? <CreditCard className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
+            <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-fg">
-              {needsPayment ? "Almost booked" : "Booking Confirmed"}
-            </h2>
+            <h2 className="text-xl font-bold text-fg">Booking Confirmed</h2>
             <p className="text-xs sm:text-sm text-muted mt-1">
-              {needsPayment ? "Complete payment to secure your time slot." : consultation.title}
+              {consultation.title}
             </p>
           </div>
 
@@ -241,17 +220,6 @@ export default function PublicBookingPage() {
             )}
           </div>
 
-          {needsPayment && (
-            <a href={`/pay/${confirmedAppt.invoice_token}`} className="block">
-              <button
-                type="button"
-                className="w-full h-10 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-medium text-sm transition-colors cursor-pointer"
-              >
-                Pay {priceFormatted}
-              </button>
-            </a>
-          )}
-
           {confirmedAppt.token && (
             <a href={`/reschedule/${confirmedAppt.token}`} className="block text-xs text-muted hover:text-fg underline">
               Reschedule
@@ -280,10 +248,7 @@ export default function PublicBookingPage() {
             </div>
 
             <div className="text-right shrink-0">
-              <div className="text-xl sm:text-2xl font-bold font-mono text-accent">
-                {priceFormatted}
-              </div>
-              <div className="text-xs text-muted flex items-center justify-end gap-1 mt-0.5">
+              <div className="text-xs text-muted flex items-center justify-end gap-1">
                 <Clock className="w-3 h-3 text-muted" />
                 {consultation.duration_minutes} min
               </div>
@@ -302,7 +267,7 @@ export default function PublicBookingPage() {
                       <button
                         key={d}
                         type="button"
-                        onClick={() => setSelectedDay(d)}
+                        onClick={() => setPickedDay(d)}
                         className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
                           isSelected
                             ? "bg-accent text-accent-fg border-accent"
@@ -332,7 +297,7 @@ export default function PublicBookingPage() {
                       <button
                         key={s}
                         type="button"
-                        onClick={() => setSelectedSlot(s)}
+                        onClick={() => setPickedSlot(s)}
                         className={`py-2 px-2.5 rounded-xl text-xs font-mono font-medium transition-colors border text-center cursor-pointer ${
                           isSelected
                             ? "bg-accent text-accent-fg border-accent"
@@ -403,8 +368,6 @@ export default function PublicBookingPage() {
               >
                 {scheduling ? (
                   "Booking..."
-                ) : consultation.price > 0 ? (
-                  `Reserve & Pay ${priceFormatted}`
                 ) : (
                   "Confirm Booking"
                 )}

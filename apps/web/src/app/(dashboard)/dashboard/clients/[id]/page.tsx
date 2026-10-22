@@ -8,17 +8,7 @@ import {
   ArrowLeft,
   Users,
   Building2,
-  Mail,
-  Phone,
-  Globe,
-  Briefcase,
-  Sparkles,
-  MessageSquare,
-  Crown,
-  Layers,
   Loader2,
-  CreditCard,
-  CheckCircle2,
   FileText,
   ExternalLink,
   Trash2,
@@ -28,29 +18,15 @@ import {
   FolderKanban,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import {
-  getClient,
-  deleteClient,
-  getProjects,
-  type Client,
-  type Project,
-} from "@/lib/api";
+import { getClient, deleteClient, type Client } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
-import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 import { ClientProductivityTabs } from "@/components/dashboard/panels/ClientProductivityTabs";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 import { logHandledError } from "@/lib/log-error";
-
-function getInitials(name: string) {
-  if (!name) return "CL";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 export default function ClientDetailPage() {
   const router = useRouter();
@@ -59,10 +35,10 @@ export default function ClientDetailPage() {
   const { getToken } = useAuth();
 
   const [client, setClient] = useState<Client | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
   const currency = useWorkspaceCurrency().currency || "USD";
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const capacity = usePlanCapacity("clients");
 
   useEffect(() => {
     let mounted = true;
@@ -71,14 +47,10 @@ export default function ClientDetailPage() {
       if (!clientId) return;
       try {
         const token = (await getToken()) || undefined;
-        const [clientData, projectsData] = await Promise.all([
-          getClient(clientId, token),
-          getProjects(token).catch(() => [] as Project[]),
-        ]);
+        const clientData = await getClient(clientId, token);
 
         if (!mounted) return;
         setClient(clientData);
-        setProjects(projectsData || []);
       } catch (err) {
         logHandledError("Error loading client details:", err);
         toast.error("Could not load client profile");
@@ -238,12 +210,6 @@ export default function ClientDetailPage() {
   }
 
   const isVip = client.status === "vip";
-  const initials = getInitials(client.name);
-
-  // Filter client's projects in real-time
-  const clientProjects = projects.filter(
-    (p) => p.client_id === clientId || (client.name && p.client_name === client.name)
-  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">

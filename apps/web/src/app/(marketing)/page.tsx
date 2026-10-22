@@ -6,6 +6,7 @@ import { FaqSection } from "@/components/landing/sections/faq-section";
 import { FeatureRows } from "@/components/landing/sections/feature-rows";
 import { LaptopShowcase } from "@/components/landing/sections/laptop-showcase";
 import { PhoneShowcase } from "@/components/landing/sections/phone-showcase";
+import { PricingSection } from "@/components/landing/sections/pricing-section";
 import { SecuritySection } from "@/components/landing/sections/security-section";
 import { Testimonials } from "@/components/landing/sections/testimonials";
 import { WhyBand } from "@/components/landing/sections/why-band";
@@ -23,6 +24,7 @@ export default function Home() {
         <LaptopShowcase />
         <PhoneShowcase />
         <AiSpotlight />
+        <PricingSection />
         <Testimonials />
         <SecuritySection />
         <FaqSection />

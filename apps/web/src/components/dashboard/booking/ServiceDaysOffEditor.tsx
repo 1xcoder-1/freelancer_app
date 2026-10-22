@@ -60,14 +60,14 @@ export function ServiceDaysOffEditor({ consultationId }: { consultationId: strin
           value={newDay}
           min={new Date().toISOString().slice(0, 10)}
           onChange={(e) => setNewDay(e.target.value)}
-          className="h-9 px-3 rounded-xl bg-surface/50 border border-line text-fg text-sm focus:border-accent focus:bg-card focus:outline-none transition-all"
+          className="h-9 px-3 rounded-xl bg-surface/50 border border-line text-fg text-sm focus:border-accent/60 focus:bg-card focus:outline-none focus:ring-1 focus:ring-accent/30 transition-all font-mono"
         />
         <Button
           type="button"
           size="sm"
           onClick={addDay}
           disabled={!newDay}
-          className="h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg text-xs font-medium cursor-pointer shadow-xs active:scale-95 transition-all"
+          className="h-9 px-3.5 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent text-xs font-semibold cursor-pointer shadow-[0_0_12px_rgba(212,107,40,0.1)] active:scale-95 transition-all disabled:opacity-50"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> Add Day Off
         </Button>
@@ -82,7 +82,7 @@ export function ServiceDaysOffEditor({ consultationId }: { consultationId: strin
           {daysOff.map((d) => (
             <span
               key={d}
-              className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface/70 border border-line text-xs text-fg font-mono shadow-2xs hover:border-line-strong transition-all"
+              className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface/80 border border-line/70 text-xs text-fg font-mono shadow-2xs hover:border-line-strong transition-all"
             >
               {d}
               <button

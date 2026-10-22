@@ -118,7 +118,7 @@ async def list_calendar_events(
             end_time=appt.appointment_time + timedelta(minutes=duration or 30),
             is_all_day=False, source="booking",
             client_name=appt.client_name, meeting_link=appt.meeting_link,
-            status=appt.payment_status,
+            status=appt.status,
         ))
 
     # 3) Invoice due dates → deadline chips (all-day)

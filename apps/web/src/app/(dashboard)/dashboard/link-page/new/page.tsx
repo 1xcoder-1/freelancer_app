@@ -6,27 +6,27 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getMyLinkPages, type LinkPage } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
 import { LinkPageBuilder } from "@/components/link-page/LinkPageBuilder";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
-const MAX_PAGES = 3;
-
-/* Create a new tree — allowed only while under the 3-per-workspace limit
-   (the API rejects a fourth with 409, this redirect keeps the UI honest). */
+/* Create a new tree — allowed only while the plan has room. The API refuses an
+   over-cap create with 402; this redirect keeps the UI honest about it. */
 export default function NewLinkPageRoute() {
   const router = useRouter();
 
-  const { data: pages, loading } = useApiData<LinkPage[]>(
+  const { loading } = useApiData<LinkPage[]>(
     "linkpage:my",
     async (token) => getMyLinkPages(token),
     { reportContext: "link-page-new" }
   );
+  const capacity = usePlanCapacity("link_pages");
 
   useEffect(() => {
-    if (!loading && (pages?.length ?? 0) >= MAX_PAGES) {
+    if (capacity.atLimit) {
       router.replace("/dashboard/link-page");
     }
-  }, [loading, pages, router]);
+  }, [capacity.atLimit, router]);
 
-  if (loading || (pages?.length ?? 0) >= MAX_PAGES) {
+  if (loading || capacity.atLimit) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-10 w-64 rounded-xl" />

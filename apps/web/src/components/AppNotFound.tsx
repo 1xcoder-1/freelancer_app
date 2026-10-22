@@ -37,20 +37,6 @@ export function AppNotFound() {
           Return to Home
         </Link>
       </div>
-
-      <div className="mt-8 flex items-center gap-3 text-xs text-muted">
-        <Link href="/dashboard/clients" className="hover:text-fg transition-colors">
-          Clients
-        </Link>
-        <span className="text-line-strong">·</span>
-        <Link href="/dashboard/projects" className="hover:text-fg transition-colors">
-          Projects
-        </Link>
-        <span className="text-line-strong">·</span>
-        <Link href="/dashboard/booking" className="hover:text-fg transition-colors">
-          Booking
-        </Link>
-      </div>
     </div>
   );
 }

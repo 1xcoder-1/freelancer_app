@@ -7,11 +7,11 @@ from datetime import datetime, timedelta, time
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
 from app.core.inngest_client import emit
+from app.core.quota import enforce_capacity, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.booking import BookingConsultation, BookingAppointment, BookingBlockedDay
 from app.models.calendar import GoogleCalendarConnection
 from app.models.client import Client
-from app.models.finance import Invoice, InvoiceItem
 from app.models.intake import IntakeForm
 from app.models.workspace import Workspace
 from app.schemas.domain import (
@@ -115,9 +115,8 @@ async def _assert_no_overlap(db: AsyncSession, consultation: BookingConsultation
 
 
 async def _ensure_client(db: AsyncSession, workspace_id: str, name: str, email: str) -> Client:
-    """Find-or-create a Client by email in this workspace (B3/B4). A paid
-    consult needs a Client to own its invoice; a completed call needs one to
-    carry the outcome forward."""
+    """Find-or-create a Client by email in this workspace (B3). A completed
+    call needs one to carry the outcome forward."""
     existing = (await db.execute(
         select(Client).where(Client.workspace_id == workspace_id, func.lower(Client.email) == email.lower())
     )).scalar_one_or_none()
@@ -141,7 +140,7 @@ async def _no_show_count(db: AsyncSession, workspace_id: str, email: str) -> int
     )).scalar_one() or 0
 
 
-def _appt_dict(appt: BookingAppointment, consultation_title: Optional[str], invoice_token: Optional[str]) -> Dict[str, Any]:
+def _appt_dict(appt: BookingAppointment, consultation_title: Optional[str]) -> Dict[str, Any]:
     return {
         "id": appt.id,
         "consultation_id": appt.consultation_id,
@@ -150,14 +149,11 @@ def _appt_dict(appt: BookingAppointment, consultation_title: Optional[str], invo
         "client_email": appt.client_email,
         "appointment_time": appt.appointment_time,
         "meeting_link": appt.meeting_link,
-        "payment_status": appt.payment_status,
         "notes": appt.notes,
         "status": appt.status,
         "token": appt.token,
         "reschedule_count": appt.reschedule_count,
         "no_show": appt.no_show,
-        "invoice_id": appt.invoice_id,
-        "invoice_token": invoice_token,
         "client_id": appt.client_id,
         "created_at": appt.created_at,
     }
@@ -165,10 +161,7 @@ def _appt_dict(appt: BookingAppointment, consultation_title: Optional[str], invo
 
 async def _serialize_appt(db: AsyncSession, appt: BookingAppointment) -> Dict[str, Any]:
     c = (await db.execute(select(BookingConsultation).where(BookingConsultation.id == appt.consultation_id))).scalar_one_or_none()
-    inv_token = None
-    if appt.invoice_id:
-        inv_token = (await db.execute(select(Invoice.token).where(Invoice.id == appt.invoice_id))).scalar_one_or_none()
-    return _appt_dict(appt, c.title if c else None, inv_token)
+    return _appt_dict(appt, c.title if c else None)
 
 
 async def _consultation_by_token(db: AsyncSession, token: str) -> BookingConsultation:
@@ -204,7 +197,7 @@ async def list_consultations(
         {
             "id": c.id, "workspace_id": c.workspace_id, "title": c.title,
             "description": c.description, "duration_minutes": c.duration_minutes,
-            "price": c.price, "meeting_provider": c.meeting_provider,
+            "meeting_provider": c.meeting_provider,
             "is_active": c.is_active, "token": c.token,
             "appointments_count": counts.get(c.id, 0),
             "weekday_mask": c.weekday_mask, "start_minute": c.start_minute,
@@ -224,6 +217,9 @@ async def create_consultation(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    await enforce_capacity(
+        db, await plan_context(db, current_user), "services", workspace_id=workspace.id
+    )
 
     if payload.intake_form_id:
         form = (await db.execute(
@@ -237,7 +233,6 @@ async def create_consultation(
         title=payload.title,
         description=payload.description,
         duration_minutes=payload.duration_minutes,
-        price=payload.price,
         meeting_provider=payload.meeting_provider,
         is_active=payload.is_active,
         weekday_mask=payload.weekday_mask,
@@ -257,7 +252,7 @@ async def create_consultation(
     return {
         "id": consultation.id, "workspace_id": consultation.workspace_id,
         "title": consultation.title, "description": consultation.description,
-        "duration_minutes": consultation.duration_minutes, "price": consultation.price,
+        "duration_minutes": consultation.duration_minutes,
         "meeting_provider": consultation.meeting_provider, "is_active": consultation.is_active,
         "token": consultation.token, "appointments_count": 0,
         "weekday_mask": consultation.weekday_mask, "start_minute": consultation.start_minute,
@@ -293,7 +288,7 @@ async def update_consultation(
             raise HTTPException(status_code=400, detail="Specified intake form does not exist in your workspace")
 
     for field in (
-        "title", "description", "duration_minutes", "price", "meeting_provider",
+        "title", "description", "duration_minutes", "meeting_provider",
         "is_active", "weekday_mask", "start_minute", "end_minute", "timezone",
         "min_lead_hours", "max_advance_days", "buffer_minutes", "intake_form_id",
         "no_show_limit",
@@ -308,7 +303,7 @@ async def update_consultation(
     return {
         "id": consultation.id, "workspace_id": consultation.workspace_id,
         "title": consultation.title, "description": consultation.description,
-        "duration_minutes": consultation.duration_minutes, "price": consultation.price,
+        "duration_minutes": consultation.duration_minutes,
         "meeting_provider": consultation.meeting_provider, "is_active": consultation.is_active,
         "token": consultation.token, "appointments_count": count,
         "weekday_mask": consultation.weekday_mask, "start_minute": consultation.start_minute,
@@ -444,15 +439,7 @@ async def list_appointments(
         stmt = stmt.where(BookingAppointment.status == status_filter)
     rows = (await db.execute(stmt)).all()
 
-    invoice_ids = [a.invoice_id for a, _ in rows if a.invoice_id]
-    tokens: Dict[str, str] = {}
-    if invoice_ids:
-        inv_rows = (await db.execute(
-            select(Invoice.id, Invoice.token).where(Invoice.id.in_(invoice_ids))
-        )).all()
-        tokens = {r[0]: r[1] for r in inv_rows}
-
-    return [_appt_dict(a, title, tokens.get(a.invoice_id)) for a, title in rows]
+    return [_appt_dict(a, title) for a, title in rows]
 
 
 @router.get("/agenda", response_model=BookingAgendaOut)
@@ -482,19 +469,11 @@ async def get_agenda(
         .limit(1)
     )).all()
 
-    invoice_ids = [a.invoice_id for a, _ in upcoming if a.invoice_id]
-    tokens: Dict[str, str] = {}
-    if invoice_ids:
-        inv_rows = (await db.execute(
-            select(Invoice.id, Invoice.token).where(Invoice.id.in_(invoice_ids))
-        )).all()
-        tokens = {r[0]: r[1] for r in inv_rows}
-
     next_call = None
     hours_to_next = None
     if upcoming:
         appt, title = upcoming[0]
-        next_call = BookingAppointmentOut(**_appt_dict(appt, title, tokens.get(appt.invoice_id)))
+        next_call = BookingAppointmentOut(**_appt_dict(appt, title))
         hours_to_next = round((appt.appointment_time - now).total_seconds() / 3600.0, 1)
 
     today_rows = (await db.execute(
@@ -508,7 +487,7 @@ async def get_agenda(
         )
         .order_by(BookingAppointment.appointment_time.asc())
     )).all()
-    today_calls = [BookingAppointmentOut(**_appt_dict(a, title, None)) for a, title in today_rows]
+    today_calls = [BookingAppointmentOut(**_appt_dict(a, title)) for a, title in today_rows]
 
     week_booked = (await db.execute(
         select(func.count(BookingAppointment.id))
@@ -522,6 +501,8 @@ async def get_agenda(
 
     # Available capacity this week = open slots still on offer across active
     # consultations (bounded by the same generator the public page uses).
+    # Booked times and blocked days are batched into two queries instead of
+    # 2×N round-trips, since this endpoint is polled every 20s.
     week_available = 0
     consultations = (await db.execute(
         select(BookingConsultation).where(
@@ -529,9 +510,35 @@ async def get_agenda(
             BookingConsultation.is_active.is_(True),
         )
     )).scalars().all()
-    for c in consultations:
-        slots = await _compute_slots(db, c, now, days=min(7, c.max_advance_days))
-        week_available += len(slots)
+    if consultations:
+        c_ids = [c.id for c in consultations]
+        busy_rows = (await db.execute(
+            select(BookingAppointment.consultation_id, BookingAppointment.appointment_time)
+            .where(
+                BookingAppointment.consultation_id.in_(c_ids),
+                BookingAppointment.status.in_(_ACTIVE_STATUSES),
+                BookingAppointment.appointment_time >= now - timedelta(days=1),
+                BookingAppointment.appointment_time < now + timedelta(days=9),
+            )
+        )).all()
+        busy_by_consultation: Dict[str, List[datetime]] = {}
+        for cid, appt_time in busy_rows:
+            busy_by_consultation.setdefault(cid, []).append(appt_time)
+
+        blocked_rows = (await db.execute(
+            select(BookingBlockedDay.consultation_id, BookingBlockedDay.date)
+            .where(BookingBlockedDay.consultation_id.in_(c_ids))
+        )).all()
+        blocked_by_consultation: Dict[str, set] = {}
+        for cid, blocked_day in blocked_rows:
+            blocked_by_consultation.setdefault(cid, set()).add(blocked_day)
+
+        for c in consultations:
+            week_available += len(_generate_slots(
+                c, now, 7,
+                busy_by_consultation.get(c.id, []),
+                blocked_by_consultation.get(c.id, set()),
+            ))
 
     no_show_count = (await db.execute(
         select(func.count(BookingAppointment.id))
@@ -545,7 +552,6 @@ async def get_agenda(
         week_booked=week_booked,
         week_available=min(week_available, 999),
         no_show_count=no_show_count,
-        prepayment_required=False,
     )
 
 
@@ -613,7 +619,6 @@ async def get_public_consultation(
         "title": consultation.title,
         "description": consultation.description,
         "duration_minutes": consultation.duration_minutes,
-        "price": consultation.price,
         "freelancer_name": workspace.name if workspace else "",
         "token": consultation.token,
         "created_at": consultation.created_at,
@@ -624,22 +629,24 @@ async def get_public_consultation(
         "min_lead_hours": consultation.min_lead_hours,
         "max_advance_days": consultation.max_advance_days,
         "buffer_minutes": consultation.buffer_minutes,
-        "requires_payment": consultation.price > 0,
-        "currency": workspace.currency if workspace else "USD",
         "intake_form_id": consultation.intake_form_id,
         "intake_token": intake_token,
     }
 
 
-async def _compute_slots(db: AsyncSession, consultation: BookingConsultation, now: datetime, days: int) -> List[datetime]:
+def _generate_slots(
+    consultation: BookingConsultation,
+    now: datetime,
+    days: int,
+    busy: List[datetime],
+    blocked: set,
+) -> List[datetime]:
     """B1/B2: derive conflict-free open slots for the next `days` days from the
     weekday window minus blocked days and already-booked times, honouring the
-    min-lead guard."""
+    min-lead guard. Callers preload `busy`/`blocked` so batched callers (the
+    agenda) avoid per-consultation queries."""
     horizon = max(1, min(days, _SLOT_HORIZON_CAP, consultation.max_advance_days))
-    blocked = await _blocked_dates(db, consultation.id)
-    lo = now
     hi = now + timedelta(days=horizon + 1)
-    busy = await _active_times(db, consultation.id, lo - timedelta(days=1), hi + timedelta(days=1))
 
     step = consultation.duration_minutes + consultation.buffer_minutes
     if step <= 0:
@@ -665,6 +672,14 @@ async def _compute_slots(db: AsyncSession, consultation: BookingConsultation, no
     return slots
 
 
+async def _compute_slots(db: AsyncSession, consultation: BookingConsultation, now: datetime, days: int) -> List[datetime]:
+    horizon = max(1, min(days, _SLOT_HORIZON_CAP, consultation.max_advance_days))
+    blocked = await _blocked_dates(db, consultation.id)
+    hi = now + timedelta(days=horizon + 1)
+    busy = await _active_times(db, consultation.id, now - timedelta(days=1), hi + timedelta(days=1))
+    return _generate_slots(consultation, now, days, busy, blocked)
+
+
 @router.get("/public/{token}/slots", response_model=BookingSlotsOut)
 async def get_public_slots(
     token: str,
@@ -687,8 +702,7 @@ async def schedule_public_appointment(
 ):
     """B1: every slot is re-validated server-side inside this transaction, and
     overlap is re-checked against live data so a bot or a stale tab cannot
-    double-book or book a past/absurd date. B4: a paid slot stays unpaid until
-    its invoice is actually settled."""
+    double-book or book a past/absurd date."""
     consultation = await _consultation_by_token(db, token)
     if not consultation.is_active:
         raise HTTPException(status_code=409, detail="This consultation is not accepting bookings.")
@@ -701,16 +715,14 @@ async def schedule_public_appointment(
     if when.date() in blocked:
         raise HTTPException(status_code=422, detail="That day is unavailable.")
 
-    # B6 no-show strikes: once a person is at/over the limit, a *free* slot is
-    # refused so their next booking must be a paid one (prepayment enforced via
-    # B4). A paid consultation always takes payment regardless.
-    if consultation.price <= 0:
-        strikes = await _no_show_count(db, consultation.workspace_id, payload.client_email)
-        if strikes >= consultation.no_show_limit:
-            raise HTTPException(
-                status_code=409,
-                detail="Too many missed calls. Please book a paid consultation to continue.",
-            )
+    # B6 no-show strikes: once a person is at/over the limit, online booking is
+    # paused for them and the freelancer has to re-enable the conversation.
+    strikes = await _no_show_count(db, consultation.workspace_id, payload.client_email)
+    if strikes >= consultation.no_show_limit:
+        raise HTTPException(
+            status_code=409,
+            detail="Too many missed calls. Please contact the freelancer to book again.",
+        )
 
     # Overlap re-check inside the transaction (single source of truth for the
     # just-taken race).
@@ -728,7 +740,6 @@ async def schedule_public_appointment(
         meeting_link = f"https://meet.google.com/{consultation.token[:3]}-{consultation.token[3:7]}-{consultation.token[7:10]}"
     else:
         meeting_link = None
-    is_paid = consultation.price > 0
 
     appointment = BookingAppointment(
         consultation_id=consultation.id,
@@ -739,42 +750,14 @@ async def schedule_public_appointment(
         notes=payload.notes,
         # token drives the self-reschedule / view route (B3)
         token=uuid.uuid4().hex,
-        status="pending" if is_paid else "confirmed",
-        payment_status="unpaid" if is_paid else "free",
+        status="confirmed",
+        payment_status="free",
     )
     db.add(appointment)
-    await db.flush()
-
-    invoice_token = None
-    if is_paid:
-        client = await _ensure_client(db, consultation.workspace_id, payload.client_name, payload.client_email)
-        appointment.client_id = client.id
-        number = f"CONSULT-{datetime.utcnow():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
-        invoice = Invoice(
-            workspace_id=consultation.workspace_id,
-            client_id=client.id,
-            invoice_number=number,
-            status="sent",
-            issue_date=now,
-            due_date=when,
-            total_amount=consultation.price,
-            notes=f"Consultation: {consultation.title}",
-            items=[InvoiceItem(
-                description=f"{consultation.title} ({consultation.duration_minutes} min)",
-                quantity=1,
-                unit_price=consultation.price,
-                amount=consultation.price,
-            )],
-        )
-        db.add(invoice)
-        await db.flush()
-        appointment.invoice_id = invoice.id
-        invoice_token = invoice.token
     await db.commit()
     await db.refresh(appointment)
 
-    # Durable "reminder 24h before" + a new 1h nudge (B6). The payment-confirmed
-    # flow (B4) is driven by the invoice.paid event, handled in booking_jobs.
+    # Durable "reminder 24h before" + a 1h nudge (B6).
     await emit("booking.scheduled", {
         "appointment_id": appointment.id,
         "consultation_id": consultation.id,
@@ -786,7 +769,7 @@ async def schedule_public_appointment(
         "consultation_title": consultation.title,
     })
 
-    return _appt_dict(appointment, consultation.title, invoice_token)
+    return _appt_dict(appointment, consultation.title)
 
 
 @router.get("/public/appointments/{appt_token}", response_model=PublicAppointmentOut)
@@ -803,22 +786,15 @@ async def get_public_appointment(
     consultation = (await db.execute(
         select(BookingConsultation).where(BookingConsultation.id == appt.consultation_id)
     )).scalar_one_or_none()
-    invoice_token = None
-    if appt.invoice_id:
-        invoice_token = (await db.execute(
-            select(Invoice.token).where(Invoice.id == appt.invoice_id)
-        )).scalar_one_or_none()
     return PublicAppointmentOut(
         consultation_title=consultation.title if consultation else None,
         consultation_token=consultation.token if consultation else None,
         client_name=appt.client_name,
         appointment_time=appt.appointment_time,
         status=appt.status,
-        payment_status=appt.payment_status,
         meeting_link=appt.meeting_link,
         reschedule_count=appt.reschedule_count,
         max_reschedules=MAX_RESCHEDULES,
-        invoice_token=invoice_token,
     )
 
 
@@ -874,20 +850,13 @@ async def reschedule_public_appointment(
         "consultation_title": consultation.title,
     })
 
-    invoice_token = None
-    if appt.invoice_id:
-        invoice_token = (await db.execute(
-            select(Invoice.token).where(Invoice.id == appt.invoice_id)
-        )).scalar_one_or_none()
     return PublicAppointmentOut(
         consultation_title=consultation.title,
         consultation_token=consultation.token,
         client_name=appt.client_name,
         appointment_time=appt.appointment_time,
         status=appt.status,
-        payment_status=appt.payment_status,
         meeting_link=appt.meeting_link,
         reschedule_count=appt.reschedule_count,
         max_reschedules=MAX_RESCHEDULES,
-        invoice_token=invoice_token,
     )

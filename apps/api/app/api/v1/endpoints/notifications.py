@@ -4,18 +4,25 @@ Producers append rows via ``app.services.notify.push_notification``; this
 router is the read/mark-read side. Every query is workspace-scoped (foreign
 ids 404, never leak), and the unread-count endpoint is a single indexed
 count so the sidebar badge can poll it cheaply.
+
+``GET /stream`` is the realtime half: a Server-Sent-Events channel that
+pings the moment a producer writes for the workspace, so the inbox and the
+sidebar badge update without polling cadence.
 """
 
-from typing import Any, Dict, List, Optional
+import asyncio
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import require_authenticated_user
-from app.core.database import get_db
+from app.core.auth import require_authenticated_user, verify_clerk_token
+from app.core.database import AsyncSessionLocal, get_db
 from app.core.workspace import get_or_create_user_workspace
 from app.models.notification import Notification
+from app.services.realtime import subscribe, unsubscribe
 
 router = APIRouter(prefix="/notifications", tags=["Notifications (inbox)"])
 
@@ -123,3 +130,40 @@ async def delete_notification(
     await db.delete(notification)
     await db.commit()
     return None
+
+
+@router.get("/stream")
+async def stream_notifications(token: str = Query(...)):
+    """SSE channel: one ``changed`` ping per producer write, ``: ping`` every
+    15s to keep intermediaries from idling the connection out.
+
+    EventSource cannot send headers, so the Clerk token rides in the query
+    string and is verified with the exact same cryptographic check as every
+    other endpoint. The DB session is used only to resolve the workspace and
+    closed before streaming — a long-lived connection must not hold a pool
+    slot open.
+    """
+    user = await verify_clerk_token(token)
+    async with AsyncSessionLocal() as db:
+        _, workspace = await get_or_create_user_workspace(db, user)
+        workspace_id = workspace.id
+
+    queue = subscribe(workspace_id)
+
+    async def event_stream():
+        try:
+            yield "event: ready\ndata: {}\n\n"
+            while True:
+                try:
+                    await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield "event: changed\ndata: {}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            unsubscribe(workspace_id, queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

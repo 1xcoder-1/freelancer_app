@@ -1068,7 +1068,6 @@ class BookingConsultationCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     description: Optional[str] = Field(None, max_length=10_000)
     duration_minutes: int = Field(30, ge=5, le=480)
-    price: float = Field(0.0, ge=0, le=_MAX_MONEY)
     meeting_provider: Literal["google_meet", "zoom", "teams"] = "google_meet"
     is_active: bool = True
     # B2 real opening hours + B1 booking guards. weekday_mask is a 7-char
@@ -1130,14 +1129,11 @@ class BookingAppointmentOut(BaseModel):
     client_email: str
     appointment_time: datetime
     meeting_link: Optional[str] = None
-    payment_status: str
     notes: Optional[str] = None
     status: str = "pending"
     token: Optional[str] = None
     reschedule_count: int = 0
     no_show: bool = False
-    invoice_id: Optional[str] = None
-    invoice_token: Optional[str] = None
     client_id: Optional[str] = None
     created_at: datetime
 
@@ -1152,11 +1148,9 @@ class PublicAppointmentOut(BaseModel):
     client_name: str
     appointment_time: datetime
     status: str
-    payment_status: str
     meeting_link: Optional[str] = None
     reschedule_count: int = 0
     max_reschedules: int = 3
-    invoice_token: Optional[str] = None
 
 class BookingAgendaOut(BaseModel):
     """Live Today agenda (B6): ages and counts are derived server-side so the
@@ -1167,7 +1161,6 @@ class BookingAgendaOut(BaseModel):
     week_booked: int = 0
     week_available: int = 0
     no_show_count: int = 0
-    prepayment_required: bool = False
 
 class BookingConsultationOut(BaseModel):
     id: str
@@ -1175,7 +1168,6 @@ class BookingConsultationOut(BaseModel):
     title: str
     description: Optional[str] = None
     duration_minutes: int
-    price: float
     meeting_provider: str
     is_active: bool
     token: str
@@ -1199,7 +1191,6 @@ class PublicBookingConsultationOut(BaseModel):
     title: str
     description: Optional[str] = None
     duration_minutes: int
-    price: float
     freelancer_name: str
     token: str
     created_at: datetime
@@ -1211,10 +1202,6 @@ class PublicBookingConsultationOut(BaseModel):
     min_lead_hours: int = 2
     max_advance_days: int = 60
     buffer_minutes: int = 0
-    # B4 a paid consult is not confirmed until its invoice is paid
-    requires_payment: bool = False
-    # Display currency (the workspace's billing currency from Settings)
-    currency: str = "USD"
     # B5 link an intake form so answers arrive before the call
     intake_form_id: Optional[str] = None
     intake_token: Optional[str] = None
@@ -1338,7 +1325,7 @@ _Date = date
 class PlannerTodoCreate(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
     # PL1/PL2/PL3: when, for whom, and how often a to-do lands.
-    due_date: Optional[date] = None
+    due_date: Optional[_Date] = None
     priority: Literal["low", "medium", "high", "urgent"] = "medium"
     project_id: Optional[str] = Field(None, max_length=36)
     recurrence: Optional[Literal["daily", "weekly"]] = None
@@ -1360,7 +1347,7 @@ class PlannerTodoUpdate(BaseModel):
     project/timebox. A field left null is left untouched."""
     text: Optional[str] = Field(None, min_length=1, max_length=500)
     is_done: Optional[bool] = None
-    due_date: Optional[date] = None
+    due_date: Optional[_Date] = None
     priority: Optional[Literal["low", "medium", "high", "urgent"]] = None
     project_id: Optional[str] = Field(None, max_length=36)
     recurrence: Optional[Literal["daily", "weekly"]] = None
@@ -1373,7 +1360,7 @@ class PlannerTodoOut(BaseModel):
     board_id: str
     text: str
     is_done: bool
-    due_date: Optional[date] = None
+    due_date: Optional[_Date] = None
     priority: str = "medium"
     project_id: Optional[str] = None
     recurrence: Optional[str] = None

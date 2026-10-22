@@ -1,24 +1,38 @@
 "use client";
 
-import React from "react";
 import {
   ProfileField,
   UnderlineInput,
+  UnderlineSelect,
   UnderlineTextarea,
   ProfileSectionTitle,
 } from "./profile-fields";
 import type { ProfilePersonal } from "@/lib/api";
+import { CURRENCY_CODES, CURRENCY_NAMES, currencySymbol } from "@/lib/currency";
+
+const CURRENCY_OPTIONS = CURRENCY_CODES.map((code) => ({
+  value: code,
+  label: `${code} (${currencySymbol(code)}) - ${CURRENCY_NAMES[code]}`,
+}));
 
 export function PersonalTab({
   fullName,
   onFullNameChange,
   personal,
   onChange,
+  currency,
+  currencyReady,
+  currencySaving,
+  onCurrencyChange,
 }: {
   fullName: string;
   onFullNameChange: (next: string) => void;
   personal: ProfilePersonal;
   onChange: (patch: Partial<ProfilePersonal>) => void;
+  currency: string;
+  currencyReady: boolean;
+  currencySaving: boolean;
+  onCurrencyChange: (next: string) => void;
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
@@ -46,11 +60,11 @@ export function PersonalTab({
         />
       </ProfileField>
 
-      <ProfileField label="Company">
+      <ProfileField label="Company / Institution">
         <UnderlineInput
-          value={personal.company}
-          onChange={(e) => onChange({ company: e.target.value })}
-          placeholder="Enter your company"
+          value={personal.company || personal.institution || ""}
+          onChange={(e) => onChange({ company: e.target.value, institution: e.target.value })}
+          placeholder="Enter your company or college/university"
         />
       </ProfileField>
 
@@ -70,11 +84,13 @@ export function PersonalTab({
         />
       </ProfileField>
 
-      <ProfileField label="Institution">
-        <UnderlineInput
-          value={personal.institution}
-          onChange={(e) => onChange({ institution: e.target.value })}
-          placeholder="Enter your college/university"
+      <ProfileField label="App Currency">
+        <UnderlineSelect
+          options={CURRENCY_OPTIONS}
+          placeholder="Select currency"
+          value={currency}
+          disabled={!currencyReady || currencySaving}
+          onChange={(e) => onCurrencyChange(e.target.value)}
         />
       </ProfileField>
 

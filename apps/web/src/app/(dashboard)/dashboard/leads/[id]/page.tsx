@@ -7,8 +7,6 @@ import { useAuth } from "@clerk/nextjs";
 import {
   ArrowLeft,
   Building2,
-  Mail,
-  Phone,
   CalendarClock,
   FileText,
   Rocket,
@@ -18,9 +16,6 @@ import {
   UserPlus,
   Loader2,
   ArrowUpRight,
-  ExternalLink,
-  DollarSign,
-  TrendingUp,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -36,6 +31,7 @@ import {
 } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
 import { logHandledError } from "@/lib/log-error";
@@ -69,6 +65,7 @@ export default function LeadDetailPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
+  const clientCapacity = usePlanCapacity("clients");
 
   // Start-Work cascade + structured loss
   const [startBusy, setStartBusy] = useState(false);
@@ -106,6 +103,20 @@ export default function LeadDetailPage() {
     };
   }, [leadId, getToken]);
 
+  // Conversion can add a roster card, so it honours the same plan cap as the
+  // Clients create page. Merging into an existing client stays allowed.
+  const confirmClientCapacity = async (): Promise<boolean> => {
+    if (!clientCapacity.atLimit) return true;
+    const upgrade = await confirmDialog({
+      title: "Client limit reached",
+      message: `Your ${clientCapacity.planName} plan allows ${clientCapacity.limit} ${clientCapacity.label}. Existing clients stay editable — upgrade to add more.`,
+      confirmLabel: "View plans",
+      cancelLabel: "Cancel",
+    });
+    if (upgrade) router.push(clientCapacity.upgradeHref);
+    return false;
+  };
+
   const handleConvert = async () => {
     if (!lead || busyAction) return;
     setBusyAction(true);
@@ -116,6 +127,7 @@ export default function LeadDetailPage() {
       // "Make this client" never hides a duplicate or surprises with a reuse.
       const preview = await getLeadConvertPreview(lead.id, token).catch(() => null);
       let mergeInto: string | undefined;
+      let creatingNew = !preview || preview.match === "none" || !preview.client_id;
       if (preview && preview.match !== "none" && preview.client_id) {
         if (preview.match === "email") {
           const go = await confirmDialog({
@@ -148,8 +160,14 @@ export default function LeadDetailPage() {
               setBusyAction(false);
               return;
             }
+            creatingNew = true;
           }
         }
+      }
+
+      if (creatingNew && !(await confirmClientCapacity())) {
+        setBusyAction(false);
+        return;
       }
 
       const client = await convertLeadToClient(lead.id, token, mergeInto);

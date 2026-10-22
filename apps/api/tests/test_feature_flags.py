@@ -13,9 +13,10 @@ from app.api.v1.endpoints import feature_flags
 
 @pytest.fixture
 def non_owner(monkeypatch):
-    """Simulate a real deployment: dev-auth no longer implies owner, so the
-    dev test token resolves to a plain non-owner account."""
-    monkeypatch.setattr(feature_flags, "_dev_session_is_owner", lambda: False)
+    """Simulate a real deployment: a mock token is still a plain account when
+    it was not issued by the dev-auth path, and real sessions are never owners
+    just because ALLOW_DEV_AUTH is on."""
+    monkeypatch.setattr(feature_flags, "_is_dev_session", lambda _user: False)
     monkeypatch.setattr(settings, "OWNER_EMAILS", "tsjoker14311211@gmail.com")
 
 
@@ -53,6 +54,19 @@ async def test_empty_label_override_resets_to_default(client):
     assert res.json()["label_override"] is None
 
 
+async def test_explicit_null_label_override_resets_to_default(client):
+    res = await client.put(
+        "/api/v1/feature-flags", json={"key": "money", "label_override": "Cash"}
+    )
+    assert res.json()["label_override"] == "Cash"
+
+    res = await client.put(
+        "/api/v1/feature-flags", json={"key": "money", "label_override": None}
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["label_override"] is None
+
+
 async def test_unknown_keys_rejected(client):
     for key in ("not-a-feature", "nope.leads", "Money", ""):
         res = await client.put("/api/v1/feature-flags", json={"key": key, "visible": False})
@@ -64,14 +78,34 @@ async def test_non_owner_cannot_write(client_b, non_owner):
     assert res.status_code == 403, res.text
 
 
-async def test_owner_email_param_unlocks_write(client_b, non_owner):
-    # Some Clerk session tokens omit the email claim; the web app sends the
-    # profile email as a query param and it must unlock owner writes.
+async def test_client_supplied_owner_email_is_not_trusted(client_b, non_owner):
+    # A query param alone must never unlock owner controls.
     res = await client_b.put(
         "/api/v1/feature-flags?email=TSJOKER14311211@gmail.com",
         json={"key": "planner", "visible": False},
     )
-    assert res.status_code == 200, res.text
+    assert res.status_code == 403, res.text
 
     listing = await client_b.get("/api/v1/feature-flags?email=tsjoker14311211@gmail.com")
-    assert listing.json()["is_owner"] is True
+    assert listing.json()["is_owner"] is False
+
+
+async def test_verified_clerk_email_unlocks_write(client_b, non_owner, monkeypatch):
+    # When the session token omits the email claim, the param is only honored
+    # after Clerk resolves the authenticated user's real address.
+    async def fake_clerk_email(user_id: str) -> str:
+        assert user_id == "mock_token_tester_b"
+        return "tsjoker14311211@gmail.com"
+
+    monkeypatch.setattr(feature_flags, "_clerk_email", fake_clerk_email)
+    res = await client_b.put(
+        "/api/v1/feature-flags?email=tsjoker14311211@gmail.com",
+        json={"key": "planner", "visible": False},
+    )
+    assert res.status_code == 200, res.text
+
+
+async def test_verified_session_email_is_owner(non_owner):
+    assert await feature_flags._is_owner(
+        {"user_id": "user_real", "email": "TSJOKER14311211@gmail.com"}, None
+    ) is True

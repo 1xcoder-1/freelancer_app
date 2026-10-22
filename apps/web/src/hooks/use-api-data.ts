@@ -93,6 +93,27 @@ export function useApiData<T>(
   // so the closure captures them cleanly.
   const attemptsRef = useRef(0);
 
+  // The hook instance outlives an account switch (Clerk swaps the email-scoped
+  // key in place). Never render the previous key's payload while the new one
+  // loads: seed state from the new key's cache synchronously instead.
+  const keyRef = useRef(key);
+  const [stateKey, setStateKey] = useState(key);
+  if (stateKey !== key) {
+    const nextCached = key ? getCachedData<T>(key) : null;
+    setStateKey(key);
+    setData(nextCached ? nextCached.data : initialData !== undefined ? initialData : null);
+    setLoading(Boolean(key) && enabled && !nextCached && initialData === undefined);
+    setIsValidating(Boolean(key) && enabled && (!nextCached || nextCached.isStale));
+    setError(null);
+  }
+
+  // Runs before the fetch effect below, so any in-flight response from the
+  // previous key sees the new key and is discarded by the guards in loadData.
+  useEffect(() => {
+    keyRef.current = key;
+    attemptsRef.current = 0;
+  }, [key]);
+
   const loadData = useCallback(
     async (isManualRefresh: boolean = false): Promise<T | null> => {
       if (!key || !enabled) return null;
@@ -118,7 +139,10 @@ export function useApiData<T>(
           const status = (innerErr as { status?: number })?.status;
           if (status === 401) {
             try {
-              token = (await (getTokenRef.current as any)({ skipCache: true })) || (await getTokenRef.current()) || undefined;
+              const getTokenFresh = getTokenRef.current as (options?: {
+                skipCache?: boolean;
+              }) => Promise<string | null>;
+              token = (await getTokenFresh({ skipCache: true })) || (await getTokenRef.current()) || undefined;
               if (token) {
                 freshData = await fetchWithDeduplication(
                   key,
@@ -136,11 +160,15 @@ export function useApiData<T>(
           }
         }
 
+        // A response for a key that is no longer active (account switch) must
+        // not overwrite the new key's state.
+        if (keyRef.current !== key) return null;
         setData(freshData);
         attemptsRef.current = 0; // Reset backoff on success.
         if (onSuccessRef.current) onSuccessRef.current(freshData);
         return freshData;
       } catch (err) {
+        if (keyRef.current !== key) return null;
         const errorObj = err instanceof Error ? err : new Error(String(err));
         setError(errorObj);
         if (reportContext) {
@@ -149,8 +177,10 @@ export function useApiData<T>(
         if (onErrorRef.current) onErrorRef.current(err);
         return null;
       } finally {
-        setLoading(false);
-        setIsValidating(false);
+        if (keyRef.current === key) {
+          setLoading(false);
+          setIsValidating(false);
+        }
       }
     },
     [key, enabled, ttlMs, reportContext]
@@ -176,6 +206,7 @@ export function useApiData<T>(
 
     const currentCached = getCachedData<T>(key);
     if (!currentCached || currentCached.isStale) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching is the purpose of this effect
       void loadData(false);
     }
   }, [key, enabled, loadData]);
@@ -231,7 +262,7 @@ export function useApiData<T>(
       newData: T | ((prev: T | null) => T),
       shouldRevalidate: boolean = false
     ) => {
-      if (!key) return;
+      if (!key || keyRef.current !== key) return;
       setData((prev) => {
         const resolved =
           typeof newData === "function"

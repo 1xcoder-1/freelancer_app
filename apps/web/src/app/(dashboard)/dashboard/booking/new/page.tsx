@@ -10,9 +10,22 @@ import {
   emptyFormState,
 } from "@/components/dashboard/booking/ConsultationForm";
 import { invalidateBookingCaches } from "@/components/dashboard/booking/utils";
+import {
+  PlanLimitBlock,
+  usePlanCapacity,
+} from "@/components/dashboard/PlanLimit";
 
 export default function NewBookingServicePage() {
   const { getToken } = useAuth();
+  const capacity = usePlanCapacity("services");
+
+  if (capacity.atLimit) {
+    return (
+      <div className="max-w-5xl mx-auto pb-20 pt-2 px-3 sm:px-6">
+        <PlanLimitBlock capacity={capacity} />
+      </div>
+    );
+  }
 
   return (
     <ConsultationForm

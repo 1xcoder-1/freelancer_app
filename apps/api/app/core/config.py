@@ -35,12 +35,31 @@ class Settings(BaseSettings):
 
     # Feature-gate owner accounts (comma-separated). These emails always see
     # every dashboard feature and are the only ones allowed to toggle what
-    # everyone else can see (Settings → Features).
+    # everyone else can see (Settings → Features). They also get the top plan
+    # without a subscription — see app/core/plans.py resolve_tier().
     OWNER_EMAILS: str = "tsjoker14311211@gmail.com"
+
+    # Same accounts matched on Clerk user id, because the email claim only
+    # appears in a token if the session JWT template asks for it. Either list
+    # recognising the caller grants the top plan.
+    OWNER_CLERK_IDS: str = "user_2jxnO5ZxLMxcO8Kp4Aikqw95N5z"
+
+    # Shared secret between the Next.js server (which can read Clerk's
+    # subscription) and this API (which enforces the tier). Requests to
+    # PUT /billing/sync and POST /billing/webhook without it are refused, so a
+    # browser can never claim a paid tier by calling the API directly.
+    BILLING_SYNC_SECRET: str = ""
 
     # Explicit opt-in for mock/dev auth bypass. Only takes effect when
     # APP_ENV is a development value; rejected at startup otherwise.
     ALLOW_DEV_AUTH: bool = False
+
+    # The plan a mock/dev-authenticated session resolves to. Local runs and the
+    # test suite have no Clerk subscription, so this is the knob that walks the
+    # paywall: set it to "free" to see the locked state, "pro" to demo the top
+    # tier. Ignored entirely unless ALLOW_DEV_AUTH is on, and owner emails
+    # always win (app/core/plans.py resolve_tier).
+    DEV_TIER: str = "pro"
 
     # Signing secret for short-lived link-page preview tokens (live preview
     # WebSocket). Empty = derived from CLERK_SECRET_KEY/DATABASE_URL so tokens

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.quota import enforce_insight, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.booking import BookingConsultation
 from app.models.client import Client
@@ -50,6 +51,7 @@ async def list_share_links(
 ):
     """One row per live public link across modules, newest first per group."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    enforce_insight(await plan_context(db, current_user), "shared_links")
     links: List[Dict[str, Any]] = []
 
     client_names = {

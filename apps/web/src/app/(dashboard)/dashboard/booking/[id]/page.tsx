@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
+import { TextMorph } from "torph/react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -11,7 +12,6 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  CreditCard,
   ExternalLink,
   Pause,
   Pencil,
@@ -19,6 +19,7 @@ import {
   Trash2,
   Video,
 } from "@/components/animated-icons";
+import { ChevronRight, Calendar, Timer, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -32,19 +33,17 @@ import {
   type BookingAppointment,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
-import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
-import { formatMoney } from "@/lib/currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { DAY_LABELS } from "@/components/dashboard/booking/ConsultationForm";
 import { fmtWhen, invalidateBookingCaches, STATUS_TONE } from "@/components/dashboard/booking/utils";
 import { logHandledError } from "@/lib/log-error";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
 export default function ServiceDetailPage() {
   const router = useRouter();
   const params = useParams();
   const serviceId = String(params?.id || "");
   const { getToken } = useAuth();
-  const { currency } = useWorkspaceCurrency();
 
   const [copied, setCopied] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -66,6 +65,7 @@ export default function ServiceDetailPage() {
 
   const serviceList = Array.isArray(consultations) ? consultations : [];
   const service = serviceList.find((s) => s.id === serviceId);
+  const capacity = usePlanCapacity("services");
 
   // Guarantee an array under all conditions
   const getSafeAppointments = (data: unknown): BookingAppointment[] => {
@@ -82,6 +82,15 @@ export default function ServiceDetailPage() {
   };
 
   const allAppointments = getSafeAppointments(appointmentsData);
+
+  // If this ID is an appointment rather than a service, smoothly redirect to the call detail page
+  React.useEffect(() => {
+    if (!loading && consultations && consultations.length >= 0 && !service) {
+      if (allAppointments.some((a) => a.id === serviceId)) {
+        router.replace(`/dashboard/booking/calls/${serviceId}`);
+      }
+    }
+  }, [loading, consultations, service, allAppointments, serviceId, router]);
 
   // Filter appointments for this service
   const serviceAppointments = allAppointments.filter(
@@ -112,7 +121,6 @@ export default function ServiceDetailPage() {
           title: service.title,
           description: service.description,
           duration_minutes: service.duration_minutes,
-          price: service.price,
           meeting_provider: service.meeting_provider || "google_meet",
           is_active: !service.is_active,
           weekday_mask: service.weekday_mask,
@@ -208,276 +216,292 @@ export default function ServiceDetailPage() {
 
   const linkKey = service.token || service.id;
   const activeDays = DAY_LABELS.filter((_, i) => service.weekday_mask?.[i] === "1");
-  const formattedPrice =
-    service.price > 0
-      ? formatMoney(service.price, currency, service.price % 1 === 0 ? 0 : 2)
-      : "Free";
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
-      {/* Top Navigation & Header Row */}
-      <div className="space-y-4 pb-4 border-b border-line">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between">
         <Link
           href="/dashboard/booking/services"
-          className="group inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-all duration-200 active:scale-95 cursor-pointer w-fit"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-200 group-hover:-translate-x-1 text-muted group-hover:text-fg" />
-          <span>Back to Services</span>
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Services</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{service.title}</span>
         </Link>
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg capitalize mr-1">
+      {/* Main Header Card: Title, Status, Description & Sleek Action Toolbar */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
                 {service.title}
               </h1>
 
-              {/* Status Pill */}
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors duration-200 ${
-                  service.is_active
-                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                    : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10"
-                }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    service.is_active ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                  }`}
-                />
-                {service.is_active ? "Live" : "Paused"}
-              </span>
+              {/* Status Pill with Ambient Glow */}
+              {service.is_active ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Live</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                  <span>Paused</span>
+                </span>
+              )}
             </div>
 
             {service.description && (
-              <p className="text-xs sm:text-sm text-muted font-normal max-w-2xl leading-relaxed">
+              <p className="text-xs sm:text-sm text-muted/90 font-normal max-w-2xl leading-relaxed">
                 {service.description}
               </p>
             )}
           </div>
 
-          {/* Action Buttons Toolbar: 1st Pause/Resume, 2nd Copy, 3rd Preview, 4th Edit, 5th Delete */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* 1. Pause / Resume */}
+          {/* Unified Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0">
+            {/* Primary Action: Copy Link */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyBookingUrl}
+              className="h-9 px-3.5 rounded-xl border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] group cursor-pointer"
+              title="Copy public booking link"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-accent animate-in zoom-in-50 duration-200" />
+                  <span className="font-semibold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
+                  <span>Copy Link</span>
+                </>
+              )}
+            </Button>
+
+            {/* Preview Public Page */}
+            <a
+              href={`/booking/${linkKey}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group shrink-0"
+              title="Preview public booking page"
+            >
+              <ExternalLink className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110 text-muted group-hover:text-fg" />
+              <span>Preview</span>
+            </a>
+
+            {/* Edit */}
+            <Link href={`/dashboard/booking/${service.id}/edit`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
+              >
+                <Pencil className="w-3.5 h-3.5 text-muted group-hover:text-fg transition-colors" />
+                <span>Edit</span>
+              </Button>
+            </Link>
+
+            {/* Pause / Resume */}
             <Button
               variant="outline"
               size="sm"
               onClick={handleToggleActive}
               disabled={toggling}
-              className={`text-xs rounded-xl h-9 px-3 border border-line bg-card hover:bg-surface cursor-pointer transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.97] hover:shadow-xs group ${
+              className={`h-9 px-3 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer ${
                 service.is_active
-                  ? "text-amber-600 dark:text-amber-400 hover:border-amber-500/40 hover:bg-amber-500/10"
-                  : "text-emerald-600 dark:text-emerald-400 hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                  ? "border-line bg-surface/50 hover:bg-amber-500/10 hover:border-amber-500/30 text-muted hover:text-amber-500"
+                  : "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-400"
               }`}
               title={service.is_active ? "Pause bookings" : "Resume bookings"}
             >
               {service.is_active ? (
                 <>
-                  <Pause className="w-3.5 h-3.5 mr-1.5 transition-transform duration-200 group-hover:scale-110" />
+                  <Pause className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
                   <span>Pause</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-3.5 h-3.5 mr-1.5 transition-transform duration-200 group-hover:scale-110" />
+                  <Play className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
                   <span>Resume</span>
                 </>
               )}
             </Button>
 
-            {/* 2. Copy */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={copyBookingUrl}
-              className="text-xs rounded-xl h-9 px-3 border border-line bg-card hover:bg-surface hover:border-accent/40 text-fg hover:text-accent cursor-pointer transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.97] hover:shadow-xs group"
-              title="Copy public booking link"
-            >
-              {copied ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-accent animate-in zoom-in-50 duration-200" />
-                  <span className="text-accent font-medium">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 mr-1.5 text-muted group-hover:text-accent transition-colors duration-200 group-hover:scale-110" />
-                  <span>Copy</span>
-                </>
-              )}
-            </Button>
-
-            {/* 3. Preview public link */}
-            <a
-              href={`/booking/${linkKey}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center h-9 w-9 rounded-xl border border-line bg-card hover:bg-surface hover:border-accent/40 text-muted hover:text-accent transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.97] hover:shadow-xs shrink-0 group"
-              title="Preview public booking page"
-            >
-              <ExternalLink className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
-            </a>
-
-            {/* 4. Edit */}
-            <Link href={`/dashboard/booking/${service.id}/edit`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs rounded-xl h-9 px-3.5 border border-line bg-card hover:bg-surface hover:border-accent/40 text-fg hover:text-accent cursor-pointer transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.97] hover:shadow-xs group"
-              >
-                <Pencil className="w-3.5 h-3.5 mr-1.5 transition-transform duration-200 group-hover:rotate-12 group-hover:text-accent" />
-                <span>Edit</span>
-              </Button>
-            </Link>
-
-            {/* 5. Delete */}
+            {/* Delete */}
             <Button
               variant="ghost"
               size="sm"
               onClick={handleDelete}
               disabled={deleting}
-              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 cursor-pointer transition-all duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.97] hover:shadow-xs group"
+              className="h-9 w-9 p-0 rounded-xl text-muted/60 hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 transition-all active:scale-[0.96] cursor-pointer"
               title="Delete Service"
             >
-              <Trash2 className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110 text-muted group-hover:text-danger" />
+              <Trash2 className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
             </Button>
           </div>
         </div>
       </div>
 
-      {/* 3 Metric Cards: Bookings, Rate (No Decimals), Duration */}
+      {/* 3 Metric Cards: Bookings, Upcoming, Duration */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
         {/* Card 1: Bookings */}
-        <div className="group relative p-5 rounded-2xl border border-line bg-card hover:border-line-strong hover:bg-surface/30 hover:shadow-md motion-safe:hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none">
-          <div className="absolute inset-0 bg-gradient-to-br from-accent/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
 
-          <div className="relative z-10 flex items-start justify-between gap-2">
-            <h3 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg leading-tight">
-              Bookings
-            </h3>
-            <div className="p-1.5 rounded-xl bg-surface/70 border border-line/60 group-hover:border-accent/30 group-hover:bg-accent/10 transition-all duration-300">
-              <CalendarDays className="w-4 h-4 text-muted group-hover:text-accent group-hover:scale-110 transition-all duration-300" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+              Total Bookings
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+              <CalendarDays className="w-4 h-4" />
             </div>
           </div>
 
-          <div className="relative z-10 my-2.5">
+          <div className="relative z-10 my-3">
             <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
-              {service.appointments_count ?? serviceAppointments.length}
+              <TextMorph numbers className="tabular-nums">
+                {service.appointments_count ?? serviceAppointments.length}
+              </TextMorph>
             </div>
           </div>
 
-          <div className="relative z-10 flex items-center gap-3 pt-1 text-xs text-muted/90 font-sans">
-            <div className="flex items-center gap-1.5">
-              <span>{upcomingCount} Upcoming</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span>{completedCount} Completed</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 inline-block shrink-0" />
-            </div>
+          <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 inline-block shrink-0" />
+            <span>{completedCount} Completed</span>
           </div>
         </div>
 
-        {/* Card 2: Rate (clean integer, e.g. Rs 100) */}
-        <div className="group relative p-5 rounded-2xl border border-line bg-card hover:border-line-strong hover:bg-surface/30 hover:shadow-md motion-safe:hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none">
-          <div className="absolute inset-0 bg-gradient-to-br from-accent/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        {/* Card 2: Upcoming */}
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
 
-          <div className="relative z-10 flex items-start justify-between gap-2">
-            <h3 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg leading-tight">
-              Rate
-            </h3>
-            <div className="p-1.5 rounded-xl bg-surface/70 border border-line/60 group-hover:border-accent/30 group-hover:bg-accent/10 transition-all duration-300">
-              <CreditCard className="w-4 h-4 text-muted group-hover:text-accent group-hover:scale-110 transition-all duration-300" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+              Upcoming
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+              <Clock className="w-4 h-4" />
             </div>
           </div>
 
-          <div className="relative z-10 my-2.5">
-            <div className="font-display text-2xl sm:text-3xl font-mono font-medium tracking-tight text-fg truncate transition-transform duration-300 group-hover:translate-x-0.5">
-              {formattedPrice}
+          <div className="relative z-10 my-3">
+            <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+              <TextMorph numbers className="tabular-nums">{upcomingCount}</TextMorph>
             </div>
           </div>
 
-          <div className="relative z-10 pt-1 text-xs text-muted/90 font-sans">
-            <span>Per booked consultation</span>
+          <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" />
+            <span>Confirmed ahead</span>
           </div>
         </div>
 
         {/* Card 3: Duration */}
-        <div className="group relative p-5 rounded-2xl border border-line bg-card hover:border-line-strong hover:bg-surface/30 hover:shadow-md motion-safe:hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none">
-          <div className="absolute inset-0 bg-gradient-to-br from-accent/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
 
-          <div className="relative z-10 flex items-start justify-between gap-2">
-            <h3 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg leading-tight">
-              Duration
-            </h3>
-            <div className="p-1.5 rounded-xl bg-surface/70 border border-line/60 group-hover:border-accent/30 group-hover:bg-accent/10 transition-all duration-300">
-              <Clock className="w-4 h-4 text-muted group-hover:text-accent group-hover:scale-110 transition-all duration-300" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+              Call Duration
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+              <Timer className="w-4 h-4" />
             </div>
           </div>
 
-          <div className="relative z-10 my-2.5">
+          <div className="relative z-10 my-3">
             <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
-              {service.duration_minutes}m
+              <TextMorph numbers className="tabular-nums">{`${service.duration_minutes}m`}</TextMorph>
             </div>
           </div>
 
-          <div className="relative z-10 pt-1 text-xs text-muted/90 font-sans">
-            <span>+{service.buffer_minutes ?? 0}m buffer time</span>
+          <div className="relative z-10 pt-1 text-xs text-muted font-mono">
+            <span>+{service.buffer_minutes ?? 0}m buffer padding</span>
           </div>
         </div>
       </div>
 
-      {/* Main Details Grid (8 cols Main Appointments, 4 cols Clean Availability Sidebar) */}
+      {/* Main Details Grid (8 cols Appointments, 4 cols Availability & Rules) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column (8 cols): Booked Appointments */}
         <div className="lg:col-span-8 space-y-4">
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4 shadow-xs transition-shadow duration-300 hover:shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-line">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-accent" />
-                <h2 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg">
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <div className="flex items-center justify-between pb-3.5 border-b border-line/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-surface flex items-center justify-center border border-line/60 text-accent">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+                <h2 className="font-display text-base font-medium tracking-wide text-fg">
                   Booked Appointments
                 </h2>
               </div>
-              <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
+              <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-surface border border-line text-muted font-medium">
                 {serviceAppointments.length} Total
-              </Badge>
+              </span>
             </div>
 
             {serviceAppointments.length === 0 ? (
-              <div className="py-12 text-center space-y-2">
-                <p className="text-sm text-muted">No appointments booked for this service yet.</p>
-                <p className="text-xs text-faint">
-                  Click &ldquo;Copy&rdquo; in the top bar to share your booking page with clients.
-                </p>
+              <div className="py-12 px-4 text-center rounded-xl border border-dashed border-line/60 bg-surface/20 space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-surface border border-line/80 mx-auto flex items-center justify-center text-faint">
+                  <CalendarDays className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-fg">No appointments yet</p>
+                  <p className="text-xs text-muted max-w-sm mx-auto">
+                    Share your booking link with clients to start receiving calls.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyBookingUrl}
+                  className="text-xs rounded-xl h-8 px-3 border border-line hover:border-accent/40 text-fg hover:text-accent font-medium cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 mr-1.5" />
+                  <span>Copy Public Link</span>
+                </Button>
               </div>
             ) : (
               <div className="space-y-2.5">
                 {serviceAppointments.map((appt) => (
                   <div
                     key={appt.id}
-                    className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-line/70 bg-surface/30 hover:bg-surface/80 hover:border-line-strong hover:shadow-xs motion-safe:hover:-translate-y-0.5 transition-all duration-200"
+                    className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-4 rounded-xl border border-line/60 bg-surface/30 hover:bg-surface/70 hover:border-line-strong hover:shadow-2xs transition-all duration-200"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-fg group-hover:text-accent transition-colors duration-200">{appt.client_name}</span>
-                        <Badge
-                          className={`${
-                            STATUS_TONE[appt.status] || "bg-surface text-muted"
-                          } text-[10px] uppercase transition-transform duration-200 group-hover:scale-105`}
-                        >
-                          {appt.status}
-                        </Badge>
-                        <Badge
-                          className={`text-[10px] uppercase transition-transform duration-200 group-hover:scale-105 ${
-                            appt.payment_status === "paid"
-                              ? "bg-ok/10 text-ok border-ok/30"
-                              : "bg-surface text-muted border-line"
-                          }`}
-                        >
-                          {appt.payment_status}
-                        </Badge>
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      {/* Client Initials Badge */}
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-surface-elevated to-surface border border-line/80 flex items-center justify-center text-xs font-semibold text-fg tracking-wide shrink-0 shadow-2xs group-hover:border-accent/30 transition-colors">
+                        {appt.client_name ? appt.client_name.slice(0, 2).toUpperCase() : "??"}
                       </div>
-                      <div className="text-xs text-muted font-mono">
-                        {fmtWhen(appt.appointment_time)} · {appt.client_email}
+
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-fg group-hover:text-accent transition-colors truncate">
+                            {appt.client_name}
+                          </span>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono uppercase font-semibold tracking-wider border ${
+                              STATUS_TONE[appt.status] || "bg-surface text-muted border-line"
+                            }`}
+                          >
+                            {appt.status}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted font-mono">
+                          <span>{fmtWhen(appt.appointment_time)}</span>
+                          <span className="text-faint">·</span>
+                          <span className="truncate max-w-[220px] sm:max-w-none text-muted/80">{appt.client_email}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -486,9 +510,9 @@ export default function ServiceDetailPage() {
                         href={appt.meeting_link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-lg border border-line bg-card hover:bg-accent hover:border-accent hover:text-accent-fg font-medium active:scale-95 transition-all duration-200 group/btn shadow-xs self-start sm:self-auto shrink-0"
+                        className="inline-flex items-center justify-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl border border-accent/40 bg-accent/10 hover:bg-accent hover:text-white text-accent font-medium active:scale-95 transition-all shadow-2xs shrink-0 self-start sm:self-auto"
                       >
-                        <Video className="w-3.5 h-3.5 text-accent group-hover/btn:text-accent-fg group-hover/btn:scale-110 transition-all duration-200" />
+                        <Video className="w-3.5 h-3.5" />
                         <span>Join Call</span>
                       </a>
                     )}
@@ -496,77 +520,126 @@ export default function ServiceDetailPage() {
                 ))}
               </div>
             )}
-          </Card>
+          </div>
         </div>
 
-        {/* Right Column (4 cols): Single, Simple, Clean Availability Card */}
+        {/* Right Column (4 cols): Availability & Rules Specification */}
         <div className="lg:col-span-4 space-y-4">
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4 shadow-xs transition-shadow duration-300 hover:shadow-sm">
-            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line">
-              Availability & Details
-            </h2>
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-line/60">
+              <div className="w-7 h-7 rounded-lg bg-surface flex items-center justify-center border border-line/60 text-muted">
+                <Clock className="w-4 h-4" />
+              </div>
+              <h2 className="font-display text-base font-medium tracking-wide text-fg">
+                Availability & Rules
+              </h2>
+            </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-surface/60 transition-colors duration-150">
-                <span className="text-muted">Working Hours</span>
+            <div className="space-y-3">
+              {/* Working Hours */}
+              <div className="flex items-center justify-between py-1.5 border-b border-line/40 text-xs">
+                <span className="text-muted flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-muted/70" />
+                  <span>Working Hours</span>
+                </span>
                 <span className="font-mono font-medium text-fg">
                   {formatMinutesToTime(service.start_minute)} – {formatMinutesToTime(service.end_minute)}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-surface/60 transition-colors duration-150">
-                <span className="text-muted">Active Days</span>
-                <span className="font-medium text-fg">
-                  {activeDays.length > 0 ? activeDays.join(", ") : "None configured"}
-                </span>
+              {/* Active Days (Visual 7-Day Mini Pills) */}
+              <div className="py-2 border-b border-line/40 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5 text-muted/70" />
+                    <span>Active Days</span>
+                  </span>
+                  <span className="text-[11px] font-mono text-muted">
+                    {activeDays.length} / 7 days
+                  </span>
+                </div>
+                <div className="grid grid-cols-7 gap-1 pt-0.5">
+                  {DAY_LABELS.map((day, i) => {
+                    const isActive = service.weekday_mask?.[i] === "1";
+                    return (
+                      <div
+                        key={day}
+                        title={`${day}: ${isActive ? "Bookable" : "Off"}`}
+                        className={`py-1 text-center rounded-lg text-[10px] font-mono transition-all select-none ${
+                          isActive
+                            ? "bg-accent/15 text-accent border border-accent/30 font-semibold shadow-2xs"
+                            : "bg-surface/40 text-faint border border-line/30"
+                        }`}
+                      >
+                        {day.slice(0, 2)}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-surface/60 transition-colors duration-150">
-                <span className="text-muted">Minimum Notice</span>
-                <span className="text-fg font-medium">
+              {/* Minimum Notice */}
+              <div className="flex items-center justify-between py-1.5 border-b border-line/40 text-xs">
+                <span className="text-muted flex items-center gap-2">
+                  <Timer className="w-3.5 h-3.5 text-muted/70" />
+                  <span>Minimum Notice</span>
+                </span>
+                <span className="text-fg font-medium font-mono">
                   {service.min_lead_hours ?? 1} hours before
                 </span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-surface/60 transition-colors duration-150">
-                <span className="text-muted">Advance Booking</span>
-                <span className="text-fg font-medium">
+              {/* Advance Booking */}
+              <div className="flex items-center justify-between py-1.5 border-b border-line/40 text-xs">
+                <span className="text-muted flex items-center gap-2">
+                  <CalendarDays className="w-3.5 h-3.5 text-muted/70" />
+                  <span>Advance Booking</span>
+                </span>
+                <span className="text-fg font-medium font-mono">
                   Up to {service.max_advance_days ?? 30} days
                 </span>
               </div>
 
+              {/* Strike Limit (if configured) */}
               {service.no_show_limit ? (
-                <div className="flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-surface/60 transition-colors duration-150">
+                <div className="flex items-center justify-between py-1.5 border-b border-line/40 text-xs">
                   <span className="text-muted">Strike Limit</span>
-                  <span className="text-fg font-medium">
+                  <span className="text-fg font-medium font-mono">
                     {service.no_show_limit} missed calls
                   </span>
                 </div>
               ) : null}
 
-              <div className="pt-2.5 border-t border-line flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-surface/60 transition-colors duration-150">
-                <span className="text-muted">Platform</span>
-                <span className="text-fg font-medium capitalize">
+              {/* Meeting Platform */}
+              <div className="flex items-center justify-between py-1.5 text-xs">
+                <span className="text-muted flex items-center gap-2">
+                  <Video className="w-3.5 h-3.5 text-muted/70" />
+                  <span>Platform</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface border border-line text-fg">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   {service.meeting_provider === "google_meet"
                     ? "Google Meet"
-                    : service.meeting_provider || "Video"}
+                    : service.meeting_provider || "Video Call"}
                 </span>
               </div>
             </div>
 
+            {/* Edit Schedule CTA Button */}
             <div className="pt-2">
               <Link href={`/dashboard/booking/${service.id}/edit`} className="block">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group w-full text-xs rounded-xl h-9 border border-line bg-surface/50 hover:bg-accent hover:border-accent hover:text-accent-fg font-medium active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-xs"
+                  className="w-full h-9 rounded-xl border border-line bg-surface/60 hover:bg-surface-elevated hover:border-line-strong text-fg text-xs font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-2xs group cursor-pointer"
                 >
-                  <Pencil className="w-3.5 h-3.5 mr-1.5 transition-transform duration-200 group-hover:rotate-12" />
-                  <span>Edit Schedule & Days Off</span>
+                  <Pencil className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors" />
+                  <span>Edit Schedule & Rules</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted/60 group-hover:text-fg group-hover:translate-x-0.5 transition-all ml-auto" />
                 </Button>
               </Link>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>

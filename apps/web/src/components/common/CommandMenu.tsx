@@ -4,27 +4,32 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, ArrowRight } from "@/components/animated-icons";
-import { COMMAND_ITEMS } from "@/lib/features";
+import { COMMAND_ITEMS, FEATURES } from "@/lib/features";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
+
+const LOCKED_FEATURES = new Set(FEATURES.filter((f) => f.locked).map((f) => f.key));
 
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const router = useRouter();
-  const { isVisible, labelFor } = useFeatureFlags();
+  const { ready, canSee, labelFor } = useFeatureFlags();
 
   // Quick jumps to the app's own sections, derived from the shared feature
   // registry: hidden features drop out and owner renames flow through, so the
   // palette can never route someone into a feature their sidebar doesn't show.
+  // Until the flags load only always-on surfaces are listed.
   const searchableItems = useMemo(
     () =>
-      COMMAND_ITEMS.filter((item) => isVisible(item.feature)).map((item) => ({
+      COMMAND_ITEMS.filter(
+        (item) => LOCKED_FEATURES.has(item.feature) || (ready && canSee(item.feature))
+      ).map((item) => ({
         title: item.sub ? labelFor(item.sub, item.title) : labelFor(item.feature, item.title),
         href: item.href,
         category: "Go to",
         icon: item.icon,
       })),
-    [isVisible, labelFor]
+    [ready, canSee, labelFor]
   );
 
   // Toggle on Ctrl+K / Cmd+K

@@ -10,6 +10,7 @@ import {
   UnderlineTextarea,
 } from "./profile-fields";
 import { ListHeader, EmptyList, ItemCard, Chip, ListDialog } from "./profile-list";
+import { GraduationCap } from "lucide-react";
 import type { ProfileEducation } from "@/lib/api";
 
 const EMPTY: ProfileEducation = {
@@ -78,29 +79,9 @@ export function EducationTab({
     <div>
       <ListHeader count={items.length} addLabel="Add Education" onAdd={openNew} />
 
-      {items.length === 0 ? (
-        <EmptyList hint="Add your degrees, schools and study periods." />
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <ItemCard
-              key={item.id || item.institution}
-              title={item.degree + (item.field_of_study ? `, ${item.field_of_study}` : "")}
-              subtitle={[
-                item.institution,
-                [item.start_year, item.end_year].filter(Boolean).join(" — "),
-              ].filter(Boolean).join(" · ")}
-              badges={item.grade ? <Chip>{item.grade}</Chip> : undefined}
-              onEdit={() => openEdit(item)}
-              onDelete={() => void remove(item)}
-            />
-          ))}
-        </div>
-      )}
-
       <ListDialog
         open={open}
-        title="Education"
+        title={draft.id && items.some((i) => i.id === draft.id) ? "Edit Education" : "Add Education"}
         saving={saving}
         onClose={() => setOpen(false)}
         onSave={() => void save()}
@@ -161,6 +142,34 @@ export function EducationTab({
           />
         </ProfileField>
       </ListDialog>
+
+      {items.length === 0 ? (
+        <EmptyList hint="Add your degrees, schools and study periods." />
+      ) : (
+        <div className="space-y-2.5">
+          {items.map((item) => (
+            <ItemCard
+              key={item.id || item.institution}
+              icon={
+                <div className="w-9 h-9 rounded-xl bg-surface-elevated/90 border border-line flex items-center justify-center text-muted group-hover:text-indigo-400 transition-colors shrink-0">
+                  <GraduationCap className="w-4 h-4" />
+                </div>
+              }
+              title={item.degree + (item.field_of_study ? ` in ${item.field_of_study}` : "")}
+              subtitle={item.institution}
+              meta={[item.start_year, item.end_year].filter(Boolean).join(" — ")}
+              description={item.description}
+              badges={
+                item.grade ? (
+                  <Chip variant="success">Grade: {item.grade}</Chip>
+                ) : undefined
+              }
+              onEdit={() => openEdit(item)}
+              onDelete={() => void remove(item)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

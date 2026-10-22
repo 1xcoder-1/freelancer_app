@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Save,
   CalendarDays,
@@ -21,52 +21,27 @@ import {
   setGoogleMeetEnabled,
   type GoogleConnectionStatus,
 } from "@/lib/api";
-import { invalidateCache } from "@/hooks/use-api-data";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
-import { CURRENCY_CODES } from "@/lib/currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
-import { z } from "zod";
-import { validateOrToast, nameSchema } from "@/lib/validation";
 import { logHandledError } from "@/lib/log-error";
 import { FeatureVisibilityTab } from "@/components/dashboard/FeatureVisibilityTab";
 
-const workspaceSchema = z.object({
-  businessName: nameSchema("Business name", 150),
-});
-
 interface WorkspaceConfig {
-  businessName: string;
-  professionalTitle: string;
-  taxId: string;
-  currency: string;
   defaultHourlyRate: number;
 }
 
 const DEFAULT_CONFIG: WorkspaceConfig = {
-  businessName: "",
-  professionalTitle: "",
-  taxId: "",
-  currency: "USD",
   defaultHourlyRate: 0,
 };
 
-const CURRENCY_LABELS: Record<string, string> = {
-  USD: "USD ($) - US Dollar",
-  EUR: "EUR (€) - Euro",
-  GBP: "GBP (£) - British Pound",
-  CAD: "CAD (CA$) - Canadian Dollar",
-  AUD: "AUD (A$) - Australian Dollar",
-  PKR: "PKR (Rs) - Pakistani Rupee",
-  INR: "INR (₹) - Indian Rupee",
-};
-
-/** Workspace-level settings (business identity, currency, integrations,
- * feature visibility) — the original settings page, reborn as one tab. */
-export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
+/** Owner-only workspace settings: billing defaults, integrations and page
+ * access. Currency lives in the Personal tab so every account can set it;
+ * business name and professional title live in the profile tabs. */
+export function WorkspaceTab() {
   const { getToken } = useAuth();
-  const { setCurrency } = useWorkspaceCurrency();
+  const { currency } = useWorkspaceCurrency();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<WorkspaceConfig>(DEFAULT_CONFIG);
@@ -80,11 +55,10 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
     draftKey: "workspace-settings",
     onRestoreDraft: useCallback((draft: Record<string, unknown>) => {
       setConfig((prev) => ({
-        businessName: typeof draft.businessName === "string" ? draft.businessName : prev.businessName,
-        professionalTitle: typeof draft.professionalTitle === "string" ? draft.professionalTitle : prev.professionalTitle,
-        taxId: typeof draft.taxId === "string" ? draft.taxId : prev.taxId,
-        currency: typeof draft.currency === "string" ? draft.currency : prev.currency,
-        defaultHourlyRate: typeof draft.defaultHourlyRate === "number" ? draft.defaultHourlyRate : prev.defaultHourlyRate,
+        defaultHourlyRate:
+          typeof draft.defaultHourlyRate === "number"
+            ? draft.defaultHourlyRate
+            : prev.defaultHourlyRate,
       }));
     }, []),
   });
@@ -97,25 +71,17 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
         const ws = await getWorkspaceSettings(token);
         if (!mounted) return;
         setConfig({
-          businessName: ws.business_name ?? "",
-          professionalTitle: ws.professional_title ?? "",
-          taxId: ws.tax_id ?? "",
-          currency: ws.currency ?? "USD",
           defaultHourlyRate: ws.default_hourly_rate ?? 0,
         });
       } catch (err) {
         logHandledError("Failed to load workspace settings:", err);
       } finally {
-        if (mounted) {
-          setLoading(false);
-          onLoaded?.();
-        }
+        if (mounted) setLoading(false);
       }
     })();
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getToken]);
 
   useEffect(() => {
@@ -135,25 +101,15 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
   }, [getToken]);
 
   const handleSave = async () => {
-    if (!validateOrToast(workspaceSchema, {
-      businessName: config.businessName,
-    })) return;
     setSaving(true);
     try {
       const token = (await getToken()) || undefined;
       await updateWorkspaceSettings(
         {
-          business_name: config.businessName,
-          professional_title: config.professionalTitle,
-          tax_id: config.taxId,
-          currency: config.currency,
           default_hourly_rate: config.defaultHourlyRate,
         },
         token
       );
-      setCurrency(config.currency);
-      invalidateCache("dashboard:data");
-      invalidateCache("dashboard:overview");
       guard.markSaved();
       toast.success("Workspace settings saved");
     } catch (err) {
@@ -240,9 +196,6 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6 animate-pulse">
         <div className="h-10 rounded-xl bg-surface" />
-        <div className="h-10 rounded-xl bg-surface" />
-        <div className="h-10 rounded-xl bg-surface" />
-        <div className="h-10 rounded-xl bg-surface" />
         <div className="sm:col-span-2 h-32 rounded-2xl bg-surface" />
       </div>
     );
@@ -253,63 +206,7 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
         <div>
           <label className="text-xs font-semibold text-fg block mb-0.5">
-            Business / Display Name
-          </label>
-          <input
-            type="text"
-            value={config.businessName}
-            onChange={(e) => setConfig({ ...config, businessName: e.target.value })}
-            className="w-full bg-transparent border-0 border-b border-line py-2 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
-            placeholder="e.g. Nexus Design Studio"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-fg block mb-0.5">
-            Professional Title
-          </label>
-          <input
-            type="text"
-            value={config.professionalTitle}
-            onChange={(e) => setConfig({ ...config, professionalTitle: e.target.value })}
-            className="w-full bg-transparent border-0 border-b border-line py-2 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
-            placeholder="e.g. Senior Full-Stack Engineer"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-fg block mb-0.5">
-            Tax ID / VAT Registration
-          </label>
-          <input
-            type="text"
-            value={config.taxId}
-            onChange={(e) => setConfig({ ...config, taxId: e.target.value })}
-            className="w-full bg-transparent border-0 border-b border-line py-2 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
-            placeholder="e.g. US-EIN-948201"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-fg block mb-0.5">
-            Primary Currency
-          </label>
-          <select
-            value={config.currency}
-            onChange={(e) => setConfig({ ...config, currency: e.target.value })}
-            className="w-full bg-transparent border-0 border-b border-line py-2 text-sm text-fg focus:outline-none focus:border-accent transition-colors cursor-pointer"
-          >
-            {CURRENCY_CODES.map((code) => (
-              <option key={code} value={code} className="bg-card text-fg">
-                {CURRENCY_LABELS[code]}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-fg block mb-0.5">
-            Default Rate ({config.currency})
+            Default Rate ({currency})
           </label>
           <input
             type="number"
@@ -343,7 +240,7 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
                 {google === null
                   ? "Checking connection…"
                   : !google.configured
-                    ? "Not configured on this server (needs GOOGLE_CLIENT_ID / SECRET)."
+                    ? "Not configured on this server."
                     : google.connected
                       ? (google.google_email || "Google account")
                       : "Sync events and bookings with your Google account."}
@@ -406,10 +303,10 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
               </div>
               <div className="text-xs text-muted">
                 {!google?.connected
-                  ? "Connect Google Calendar to add automatic Meet links to bookings."
+                  ? "Connect Google Calendar to add Meet links to bookings."
                   : google.meet_enabled
-                    ? "New bookings get a real Google Meet link automatically."
-                    : "New bookings won't get a Meet link. Calendar events still sync."}
+                    ? "New bookings automatically get a Google Meet link."
+                    : "New bookings won't get a Meet link."}
               </div>
             </div>
           </div>
@@ -432,8 +329,9 @@ export function WorkspaceTab({ onLoaded }: { onLoaded?: () => void }) {
         </div>
       </div>
 
-      {/* Feature visibility — rendered only for the owner account */}
-      <FeatureVisibilityTab />
+      <div className="pt-6 border-t border-dashed border-line">
+        <FeatureVisibilityTab />
+      </div>
 
       <div className="flex justify-end pt-2 border-t border-dashed border-line">
         <Button

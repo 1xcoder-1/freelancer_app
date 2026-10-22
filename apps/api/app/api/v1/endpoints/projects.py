@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
+from app.core.quota import enforce_capacity, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.project import Project, Task, Milestone, ChangeRequest, ProjectFile, generate_share_token
 from app.models.contract import Contract
@@ -293,6 +294,9 @@ async def create_project(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    await enforce_capacity(
+        db, await plan_context(db, current_user), "projects", workspace_id=workspace.id
+    )
     # A project can only ever point at a client that lives in this workspace —
     # without this check any authenticated user could attach arbitrary client_ids
     # (IDOR write) and expose another tenant's client on a shared project.

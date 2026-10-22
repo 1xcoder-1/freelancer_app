@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "billing_period": "month",
+  "dimensions": {
+    "clients": {
+      "label": "client cards",
+      "singular": "client",
+      "feature": "clients",
+      "href": "/dashboard/clients"
+    },
+    "projects": {
+      "label": "projects",
+      "singular": "project",
+      "feature": "projects",
+      "href": "/dashboard/projects"
+    },
+    "services": {
+      "label": "bookable services",
+      "singular": "service",
+      "feature": "booking",
+      "href": "/dashboard/booking/services"
+    },
+    "link_pages": {
+      "label": "public link pages",
+      "singular": "link page",
+      "feature": "link-page",
+      "href": "/dashboard/link-page"
+    },
+    "portfolios": {
+      "label": "portfolio entries",
+      "singular": "portfolio entry",
+      "feature": "profile",
+      "href": "/dashboard/report-card"
+    }
+  },
+  "meters": {
+    "proposals": {
+      "label": "proposals",
+      "singular": "proposal",
+      "feature": "proposals",
+      "href": "/dashboard/proposals"
+    },
+    "ai_asks": {
+      "label": "Book AI questions",
+      "singular": "AI question",
+      "feature": "book-ai",
+      "href": "/dashboard/proposals?tab=ai"
+    }
+  },
+  "insight_modules": {
+    "reports": "Reports",
+    "testimonials": "Testimonials",
+    "shared_links": "Shared Links"
+  },
+  "plans": [
+    {
+      "key": "free",
+      "name": "Free",
+      "price": 0,
+      "tagline": "Try the whole book, no card required.",
+      "limits": {
+        "clients": 3,
+        "projects": 3,
+        "services": 2,
+        "link_pages": 1,
+        "portfolios": 1
+      },
+      "meters": {
+        "proposals": 0,
+        "ai_asks": 5
+      },
+      "features": {
+        "proposals": false,
+        "insights": false,
+        "insight_modules": {
+          "reports": false,
+          "testimonials": false,
+          "shared_links": false
+        }
+      },
+      "rate": {
+        "reads_per_min": 60,
+        "writes_per_min": 20,
+        "ai_per_min": 10,
+        "burst": 20
+      }
+    },
+    {
+      "key": "starter",
+      "name": "Starter",
+      "price": 1,
+      "tagline": "Room for your first real roster.",
+      "limits": {
+        "clients": 10,
+        "projects": 8,
+        "services": 6,
+        "link_pages": 2,
+        "portfolios": 2
+      },
+      "meters": {
+        "proposals": 10,
+        "ai_asks": 50
+      },
+      "features": {
+        "proposals": true,
+        "insights": true,
+        "insight_modules": {
+          "reports": true,
+          "testimonials": false,
+          "shared_links": false
+        }
+      },
+      "rate": {
+        "reads_per_min": 120,
+        "writes_per_min": 40,
+        "ai_per_min": 20,
+        "burst": 40
+      }
+    },
+    {
+      "key": "growth",
+      "name": "Growth",
+      "price": 5,
+      "tagline": "The busy freelancer's everyday plan.",
+      "limits": {
+        "clients": 20,
+        "projects": 20,
+        "services": 12,
+        "link_pages": 3,
+        "portfolios": 2
+      },
+      "meters": {
+        "proposals": 30,
+        "ai_asks": 200
+      },
+      "features": {
+        "proposals": true,
+        "insights": true,
+        "insight_modules": {
+          "reports": true,
+          "testimonials": true,
+          "shared_links": true
+        }
+      },
+      "rate": {
+        "reads_per_min": 300,
+        "writes_per_min": 80,
+        "ai_per_min": 40,
+        "burst": 80
+      },
+      "highlighted": true
+    },
+    {
+      "key": "pro",
+      "name": "Pro",
+      "price": 9,
+      "tagline": "Maximum headroom for a full studio.",
+      "limits": {
+        "clients": 50,
+        "projects": 50,
+        "services": 25,
+        "link_pages": 5,
+        "portfolios": 3
+      },
+      "meters": {
+        "proposals": 75,
+        "ai_asks": 600
+      },
+      "features": {
+        "proposals": true,
+        "insights": true,
+        "insight_modules": {
+          "reports": true,
+          "testimonials": true,
+          "shared_links": true
+        }
+      },
+      "rate": {
+        "reads_per_min": 600,
+        "writes_per_min": 150,
+        "ai_per_min": 60,
+        "burst": 150
+      }
+    }
+  ]
+}

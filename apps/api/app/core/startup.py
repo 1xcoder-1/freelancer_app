@@ -49,3 +49,14 @@ def validate_settings() -> None:
             "Startup guard: DEBUG forced to False outside development "
             "(/docs and /openapi.json disabled)."
         )
+
+    # Billing: without the shared secret, PUT /billing/sync and
+    # POST /billing/webhook refuse every write, so no subscription can ever
+    # reach this API and all accounts stay Free. That fails closed (nobody gets
+    # paid features for free), so it is a loud notice rather than a boot error.
+    if not settings.BILLING_SYNC_SECRET:
+        print(
+            "Startup notice: BILLING_SYNC_SECRET is unset — plan sync is "
+            "disabled and every account resolves to the Free tier. Set the same "
+            "value in apps/api/.env and apps/web/.env.local to turn billing on."
+        )

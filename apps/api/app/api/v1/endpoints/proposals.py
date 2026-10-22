@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.core.auth import require_authenticated_user
+from app.core.quota import bump_meter, enforce_feature, enforce_meter, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.core.inngest_client import emit
 from app.models.proposal import Proposal
@@ -63,6 +64,9 @@ async def create_proposal(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    ctx = await plan_context(db, current_user)
+    enforce_feature(ctx, "proposals", label="Proposals")
+    await enforce_meter(db, ctx, "proposals")
 
     client_name = None
     if payload.client_id:
@@ -95,6 +99,9 @@ async def create_proposal(
         expires_at=payload.expires_at or (datetime.utcnow() + timedelta(days=payload.valid_days)),
     )
     db.add(proposal)
+    # The monthly allowance burns with the row, in the same transaction: an
+    # upgrade or a delete can't hand the month back.
+    await bump_meter(db, ctx, "proposals")
     await db.commit()
     await db.refresh(proposal)
 
@@ -201,8 +208,13 @@ async def delete_proposal(
 @router.post("/ai-generate", response_model=ProposalAIGenerateResponse)
 async def generate_ai_proposal(
     payload: ProposalAIGenerateRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
+    # The pitch generator lives inside the Proposals module, so it is sold with
+    # it. It is deterministic (no model call), so it costs no AI meter.
+    enforce_feature(await plan_context(db, current_user), "proposals", label="Proposals")
+
     scope = payload.client_scope.strip()
     budget = payload.target_budget
 

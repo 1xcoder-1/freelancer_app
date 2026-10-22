@@ -13,6 +13,16 @@ const SYMBOLS: Record<string, string> = {
   INR: "₹",
 };
 
+export const CURRENCY_NAMES: Record<string, string> = {
+  USD: "US Dollar",
+  EUR: "Euro",
+  GBP: "British Pound",
+  CAD: "Canadian Dollar",
+  AUD: "Australian Dollar",
+  PKR: "Pakistani Rupee",
+  INR: "Indian Rupee",
+};
+
 export function currencySymbol(code: string): string {
   return SYMBOLS[code] ?? code;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { toast } from "sonner";
 import {
@@ -26,6 +27,8 @@ import {
   type BookAIStatusResponse,
 } from "@/lib/book-ai-api";
 import { logHandledError } from "@/lib/log-error";
+import { PlanMeterChip, usePlanMeter } from "@/components/dashboard/PlanLimit";
+import { invalidatePlanSnapshot } from "@/hooks/use-plan";
 
 interface ChatMessage {
   id: string;
@@ -48,6 +51,7 @@ function newId(): string {
 
 export function BookAIPanel() {
   const { getToken } = useAuth();
+  const router = useRouter();
 
   // ---- Section A: Draft a proposal -------------------------------------
   const [clientScope, setClientScope] = useState("");
@@ -87,6 +91,7 @@ export function BookAIPanel() {
   };
 
   // ---- Section B: Ask about your business ------------------------------
+  const aiMeter = usePlanMeter("ai_asks");
   const [status, setStatus] = useState<BookAIStatusResponse | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -124,6 +129,15 @@ export function BookAIPanel() {
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || isThinking) return;
+      // The API counts every question against the plan's monthly allowance, so a
+      // spent meter never sends a request that can only come back as a 402.
+      if (aiMeter.atLimit) {
+        toast.error(
+          `All ${aiMeter.limit} Book AI questions used this ${aiMeter.period}`
+        );
+        router.push(aiMeter.upgradeHref);
+        return;
+      }
 
       setQuestion("");
       setMessages((prev) => [...prev, { id: newId(), role: "user", text: trimmed }]);
@@ -143,6 +157,7 @@ export function BookAIPanel() {
             citations: res.citations,
           },
         ]);
+        invalidatePlanSnapshot();
       } catch (err) {
         logHandledError("Book AI ask failed:", err);
         setMessages((prev) => [
@@ -159,7 +174,7 @@ export function BookAIPanel() {
         scrollToBottom();
       }
     },
-    [getToken, isThinking, scrollToBottom]
+    [aiMeter, getToken, isThinking, router, scrollToBottom]
   );
 
   const handleSend = (e: React.FormEvent) => {
@@ -180,6 +195,7 @@ export function BookAIPanel() {
               <Sparkles className="w-3 h-3" />
               Assistant
             </span>
+            <PlanMeterChip meter={aiMeter} />
           </div>
           <p className="text-muted text-sm mt-1">
             Draft a winning proposal and ask your book direct — billed totals, rates, unbilled

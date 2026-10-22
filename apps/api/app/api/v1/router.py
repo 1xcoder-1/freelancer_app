@@ -30,7 +30,8 @@ from app.api.v1.endpoints import (
     link_page_preview,
     stock,
     book_ai,
-    profile
+    profile,
+    billing
 )
 
 api_router = APIRouter()
@@ -65,6 +66,7 @@ api_router.include_router(link_page_preview.router)
 api_router.include_router(stock.router)
 api_router.include_router(book_ai.router)
 api_router.include_router(profile.router, prefix="/profile", tags=["Profile"])
+api_router.include_router(billing.router)
 
 
 

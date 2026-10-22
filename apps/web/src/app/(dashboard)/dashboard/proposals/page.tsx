@@ -26,6 +26,12 @@ import {
   type Proposal,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import {
+  PlanFeatureLock,
+  PlanMeterChip,
+  usePlanFeature,
+  usePlanMeter,
+} from "@/components/dashboard/PlanLimit";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { formatMoney } from "@/lib/currency";
 import { logHandledError } from "@/lib/log-error";
@@ -34,6 +40,8 @@ function ProposalsList() {
   const { getToken } = useAuth();
   const currency = useWorkspaceCurrency().currency;
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const proposalsFeature = usePlanFeature("proposals");
+  const meter = usePlanMeter("proposals");
 
   const { data: proposalsData, loading, refresh: loadData } = useApiData<Proposal[]>(
     "proposals:data",
@@ -77,6 +85,18 @@ function ProposalsList() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  if (proposalsFeature.loaded && !proposalsFeature.allowed) {
+    return (
+      <PlanFeatureLock
+        title="Proposals ship on a paid plan"
+        body="Draft a pitch, send it as a link, and track it from draft to won. Every module works the same once a tier sells it."
+        feature="proposals"
+        backHref="/dashboard"
+        backLabel="Back to dashboard"
+      />
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -84,6 +104,7 @@ function ProposalsList() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">Proposals</h1>
+            <PlanMeterChip meter={meter} />
           </div>
           <p className="text-muted text-sm mt-1">
             Write winning proposals for new clients, save them, and mark deals as won.
@@ -102,7 +123,12 @@ function ProposalsList() {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
           <Link
-            href="/dashboard/proposals/new"
+            href={meter.atLimit ? meter.upgradeHref : "/dashboard/proposals/new"}
+            title={
+              meter.atLimit
+                ? `Proposal limit reached (${meter.used}/${meter.limit} this ${meter.period})`
+                : undefined
+            }
             className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs shadow-xs hover:shadow-sm active:scale-95 transition-all h-9"
           >
             <Plus className="w-3.5 h-3.5 mr-1.5" />

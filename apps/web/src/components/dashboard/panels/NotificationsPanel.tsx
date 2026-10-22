@@ -14,6 +14,7 @@ import {
   FileSignature,
   Ban,
   Quote,
+  Send,
   Trash2,
   RefreshCw,
 } from "@/components/animated-icons";
@@ -37,6 +38,7 @@ import { confirmDialog } from "@/components/common/ConfirmDialog";
 const KIND_META: Record<string, { icon: React.ElementType; tint: string; label: string }> = {
   "invoice.paid": { icon: DollarSign, tint: "text-ok", label: "Payment" },
   "invoice.overdue": { icon: AlertTriangle, tint: "text-danger", label: "Invoice" },
+  "invoice.reminder": { icon: Send, tint: "text-warn", label: "Reminder" },
   "contract.viewed": { icon: Eye, tint: "text-info", label: "Contract" },
   "contract.signed": { icon: FileSignature, tint: "text-ok", label: "Contract" },
   "contract.declined": { icon: Ban, tint: "text-danger", label: "Contract" },
@@ -91,12 +93,13 @@ export function NotificationsPanel() {
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Polled so a client signing a contract in another browser shows up here
-  // without a refresh — same cadence the sidebar badge uses.
+  // The SSE stream (use-live-notifications) invalidates this cache key the
+  // moment a producer writes, so updates arrive instantly; the poll is just
+  // the safety net for a dropped connection, hence the lazy cadence.
   const { data: feedData, loading, refresh: loadData } = useApiData<NotificationItem[]>(
     "notifications:feed",
     async (token) => getNotifications(false, token),
-    { reportContext: "inbox", pollMs: 20_000 }
+    { reportContext: "inbox", pollMs: 60_000 }
   );
 
   const notifications = useMemo(() => feedData ?? [], [feedData]);
@@ -262,10 +265,13 @@ export function NotificationsPanel() {
                             {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />}
                             <p className="text-sm font-medium text-fg truncate">{n.title}</p>
                           </div>
+                          {n.body && (
+                            <p className="text-xs text-muted truncate pl-3.5 mt-0.5">{n.body}</p>
+                          )}
                         </div>
 
                         <span className="text-[10px] font-mono uppercase tracking-wider text-faint shrink-0">
-                          {timeAgo(n.occurred_at)}
+                          {meta.label} · {timeAgo(n.occurred_at)}
                         </span>
 
                         <button

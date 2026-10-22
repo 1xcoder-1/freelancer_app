@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -24,6 +24,11 @@ import {
 } from "@/lib/api";
 import { validateOrToast, nameSchema, moneySchema } from "@/lib/validation";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { invalidatePlanSnapshot } from "@/hooks/use-plan";
+import {
+  usePlanFeature,
+  usePlanMeter,
+} from "@/components/dashboard/PlanLimit";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { formatMoney } from "@/lib/currency";
 import { celebrate } from "@/components/common/Celebration";
@@ -45,6 +50,14 @@ export default function NewProposalPage() {
   const currency = useWorkspaceCurrency().currency;
   const router = useRouter();
   const { getToken } = useAuth();
+  const feature = usePlanFeature("proposals");
+  const meter = usePlanMeter("proposals");
+
+  useEffect(() => {
+    if (feature.loaded && (!feature.allowed || meter.atLimit)) {
+      router.replace(feature.upgradeHref);
+    }
+  }, [feature.loaded, feature.allowed, feature.upgradeHref, meter.atLimit, router]);
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [clientScope, setClientScope] = useState("");
@@ -124,6 +137,7 @@ export default function NewProposalPage() {
         token
       );
       invalidateCache("proposals:data");
+      invalidatePlanSnapshot();
       justSavedRef.current = true;
       toast.success("Proposal saved");
       celebrate("Proposal sent");

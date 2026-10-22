@@ -8,6 +8,7 @@ import { useOwnerReportCard } from "./hooks";
 import { CARD_TABS, CardTab } from "./constants";
 import { LinkPageStatsPanel } from "@/components/link-page/LinkPageStatsPanel";
 import { ArrowLeft, ExternalLink } from "@/components/animated-icons";
+import { PlanLimitBanner, usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
 /**
  * Owner (dashboard) surface of the report card. Shared by /dashboard/report-card
@@ -16,6 +17,7 @@ import { ArrowLeft, ExternalLink } from "@/components/animated-icons";
 export function OwnerReportCardScreen({ tab }: { tab?: string }) {
   const { data, loading, error, refresh, saveContent, saveSettings } =
     useOwnerReportCard();
+  const capacity = usePlanCapacity("portfolios");
   const match = CARD_TABS.find((entry) => entry.id === tab);
 
   if (tab && !match) {
@@ -53,6 +55,7 @@ export function OwnerReportCardScreen({ tab }: { tab?: string }) {
           </Link>
         </div>
       )}
+      <PlanLimitBanner capacity={capacity} className="max-w-4xl mx-auto w-full" />
       <ReportCard
         data={data}
         variant="owner"

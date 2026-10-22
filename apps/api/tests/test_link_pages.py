@@ -1,4 +1,4 @@
-"""Link pages: owner lifecycle (up to 3 per workspace), public render +
+"""Link pages: owner lifecycle (page count capped by the plan), public render +
 beacon, stats, isolation.
 
 Hermetic: public API only against the throwaway SQLite schema from conftest.
@@ -59,17 +59,28 @@ async def test_list_empty_then_create_and_update(client):
     assert updated["headline"] == "APIs & React"
 
 
-async def test_three_page_limit_and_delete_frees_a_slot(client):
-    for i in range(3):
+async def test_plan_capacity_limit_and_delete_frees_a_slot(client):
+    """The ceiling is the plan's link_pages limit, not a hardcoded 3: dev-auth
+    sessions resolve to the top tier, so the suite fills to that and expects a
+    structured 402 rather than the old 409."""
+    from app.core.plans import limit_for
+
+    ceiling = limit_for("pro", "link_pages")
+    for i in range(ceiling):
         await _create_page(client, slug=f"page-{i}")
-    full = await client.post("/api/v1/link-pages/my", json={**PAGE, "slug": "page-4"})
-    assert full.status_code == 409 and "up to 3" in full.json()["detail"]
+
+    full = await client.post("/api/v1/link-pages/my", json={**PAGE, "slug": "page-over"})
+    assert full.status_code == 402, full.text
+    denial = full.json()["detail"]
+    assert denial["code"] == "plan_limit_reached" and denial["kind"] == "link_pages"
+    assert denial["used"] == denial["limit"] == ceiling
+    assert denial["upgrade_href"] == "/pricing"
 
     victim = (await client.get("/api/v1/link-pages/my")).json()[0]
     res = await client.delete(f"/api/v1/link-pages/my/{victim['id']}")
     assert res.status_code == 200 and res.json() == {"deleted": True}
 
-    again = await client.post("/api/v1/link-pages/my", json={**PAGE, "slug": "page-4"})
+    again = await client.post("/api/v1/link-pages/my", json={**PAGE, "slug": "page-over"})
     assert again.status_code == 200, again.text
 
 

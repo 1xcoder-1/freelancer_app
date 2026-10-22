@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Phone,
   MessageSquare,
+  CreditCard,
 } from "@/components/animated-icons";
 
 // Single source of truth for dashboard navigation and feature gating.
@@ -83,14 +84,16 @@ export const FEATURES: FeatureDef[] = [
         title: "Calls",
         href: "/dashboard/booking",
         icon: Phone,
-        active: (p) => p === "/dashboard/booking",
+        active: (p) => p === "/dashboard/booking" || p.startsWith("/dashboard/booking/calls"),
       },
       {
         id: "booking.services",
         title: "Services",
         href: "/dashboard/booking/services",
         icon: CalendarDays,
-        active: (p) => p.startsWith("/dashboard/booking/"),
+        active: (p) =>
+          p.startsWith("/dashboard/booking/services") ||
+          (p.startsWith("/dashboard/booking/") && !p.startsWith("/dashboard/booking/calls")),
       },
     ],
   },
@@ -276,7 +279,7 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "inbox",
     title: "Inbox",
-    description: "Notifications inbox (opened from the command menu).",
+    description: "Payments, overdue invoices, contract activity and quotes — the live signal feed.",
     icon: MessageSquare,
     href: "/dashboard/inbox",
     routes: ["/dashboard/inbox"],
@@ -289,6 +292,16 @@ export const FEATURES: FeatureDef[] = [
     icon: Calendar,
     href: "/dashboard/calendar",
     routes: ["/dashboard/calendar"],
+    commandOnly: true,
+  },
+  {
+    key: "billing",
+    title: "Billing",
+    description: "Plan, capacity usage and checkout (account menu).",
+    icon: CreditCard,
+    href: "/dashboard/billing",
+    routes: [],
+    locked: true,
     commandOnly: true,
   },
   {
@@ -332,6 +345,7 @@ export const COMMAND_ITEMS: CommandItem[] = [
   { title: "Shared Links", href: "/dashboard/links", icon: Link2, feature: "insights", sub: "insights.links" },
   { title: "Calendar", href: "/dashboard/calendar", icon: Calendar, feature: "calendar" },
   { title: "Profile", href: "/dashboard/report-card", icon: IdCard, feature: "profile", sub: "profile.report-card" },
+  { title: "Billing", href: "/dashboard/billing", icon: CreditCard, feature: "billing" },
   { title: "Settings", href: "/dashboard/settings", icon: Settings, feature: "settings" },
 ];
 
@@ -344,8 +358,4 @@ export function featureForPath(pathname: string | null | undefined): FeatureDef 
     if (feature.routes.some((prefix) => onPath(pathname, prefix))) return feature;
   }
   return null;
-}
-
-export function getFeature(key: string): FeatureDef | undefined {
-  return FEATURES.find((f) => f.key === key);
 }

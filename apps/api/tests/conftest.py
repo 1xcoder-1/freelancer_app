@@ -22,6 +22,9 @@ os.environ["INNGEST_ENABLED"] = "false"
 os.environ["CLERK_SECRET_KEY"] = ""
 os.environ["CLERK_PUBLISHABLE_KEY"] = ""
 os.environ["CLERK_ISSUER"] = ""
+# Existing feature suites must not be capped, so a dev session keeps the top
+# plan by default; tests/test_plan_enforcement.py lowers it per test.
+os.environ["DEV_TIER"] = "pro"
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -46,13 +49,20 @@ async def _fresh_schema():
     state leaks between tests."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    _ws_cache_clear()
-    rate_limit._BUCKETS.clear()
+    _reset_caches()
     yield
-    _ws_cache_clear()
-    rate_limit._BUCKETS.clear()
+    _reset_caches()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+
+def _reset_caches() -> None:
+    from app.core import quota
+
+    _ws_cache_clear()
+    rate_limit._BUCKETS.clear()
+    # A cached tier would otherwise outlive the user_plans row it was read from.
+    quota.invalidate_tier_cache()
 
 
 @pytest_asyncio.fixture

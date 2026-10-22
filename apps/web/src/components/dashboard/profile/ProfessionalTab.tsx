@@ -1,13 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   ProfileField,
   UnderlineInput,
   UnderlineSelect,
   UnderlineTextarea,
   ProfileSectionTitle,
-  ToggleRow,
   TagInput,
 } from "./profile-fields";
 import type { ProfileProfessional } from "@/lib/api";
@@ -31,6 +30,37 @@ export function ProfessionalTab({
   onChange: (patch: Partial<ProfileProfessional>) => void;
 }) {
   const num = (v: string) => (v === "" ? 0 : Number(v));
+
+  const initialSalary = useMemo(() => {
+    const min = professional.min_salary_lpa;
+    const max = professional.max_salary_lpa;
+    if (!min && !max) return "";
+    if (min === max) return String(min);
+    if (min && max) return `${min} - ${max}`;
+    return String(min || max);
+  }, [professional.min_salary_lpa, professional.max_salary_lpa]);
+
+  const [salaryInput, setSalaryInput] = useState<string | null>(null);
+
+  const displaySalary = salaryInput !== null ? salaryInput : initialSalary;
+
+  const handleSalaryChange = (val: string) => {
+    setSalaryInput(val);
+    const cleaned = val.trim();
+    if (!cleaned) {
+      onChange({ min_salary_lpa: 0, max_salary_lpa: 0 });
+      return;
+    }
+    if (cleaned.includes("-")) {
+      const parts = cleaned.split("-");
+      const minVal = parseFloat(parts[0]?.trim() || "") || 0;
+      const maxVal = parseFloat(parts[1]?.trim() || "") || minVal;
+      onChange({ min_salary_lpa: minVal, max_salary_lpa: maxVal });
+    } else {
+      const parsed = parseFloat(cleaned) || 0;
+      onChange({ min_salary_lpa: parsed, max_salary_lpa: parsed });
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
@@ -85,15 +115,25 @@ export function ProfessionalTab({
         />
       </ProfileField>
 
+      <ProfileField label="Preferred Work Type">
+        <UnderlineSelect
+          options={WORK_TYPES}
+          placeholder="Select type"
+          value={professional.preferred_work_type}
+          onChange={(e) => onChange({ preferred_work_type: e.target.value })}
+        />
+      </ProfileField>
+
       <div className="sm:col-span-2">
         <ProfileSectionTitle>Preferences & Targets</ProfileSectionTitle>
       </div>
 
       <ProfileField label="Preferred Roles (Target)">
         <TagInput
+          withLogos
           values={professional.preferred_roles}
           onChange={(preferred_roles) => onChange({ preferred_roles })}
-          placeholder="Select roles"
+          placeholder="e.g. Frontend Developer, AI Engineer, Cyber Security..."
         />
       </ProfileField>
 
@@ -105,55 +145,13 @@ export function ProfessionalTab({
         />
       </ProfileField>
 
-      <ProfileField label="Min Salary Expectation (LPA)">
+      <ProfileField label="Salary Expectation (LPA)" className="sm:col-span-2">
         <UnderlineInput
-          type="number"
-          min={0}
-          value={professional.min_salary_lpa}
-          onChange={(e) => onChange({ min_salary_lpa: num(e.target.value) })}
+          value={displaySalary}
+          onChange={(e) => handleSalaryChange(e.target.value)}
+          placeholder="e.g. 12 or 10 - 15"
         />
       </ProfileField>
-
-      <ProfileField label="Max Salary Expectation (LPA)">
-        <UnderlineInput
-          type="number"
-          min={0}
-          value={professional.max_salary_lpa}
-          onChange={(e) => onChange({ max_salary_lpa: num(e.target.value) })}
-        />
-      </ProfileField>
-
-      <ProfileField label="Preferred Work Type">
-        <UnderlineSelect
-          options={WORK_TYPES}
-          placeholder="Select type"
-          value={professional.preferred_work_type}
-          onChange={(e) => onChange({ preferred_work_type: e.target.value })}
-        />
-      </ProfileField>
-
-      <ProfileField label="Notice Period (Days)">
-        <UnderlineInput
-          type="number"
-          min={0}
-          max={365}
-          value={professional.notice_period_days}
-          onChange={(e) => onChange({ notice_period_days: num(e.target.value) })}
-        />
-      </ProfileField>
-
-      <div className="sm:col-span-2 flex flex-wrap items-center gap-8 pt-1">
-        <ToggleRow
-          checked={professional.immediate_joiner}
-          onChange={(immediate_joiner) => onChange({ immediate_joiner })}
-          label="Immediate Joiner"
-        />
-        <ToggleRow
-          checked={professional.ready_to_relocate}
-          onChange={(ready_to_relocate) => onChange({ ready_to_relocate })}
-          label="Ready to Relocate"
-        />
-      </div>
 
       <div className="sm:col-span-2">
         <ProfileSectionTitle>Core Skills</ProfileSectionTitle>
@@ -161,9 +159,10 @@ export function ProfessionalTab({
 
       <ProfileField label="Technical Skills" className="sm:col-span-2">
         <TagInput
+          withLogos
           values={professional.technical_skills}
           onChange={(technical_skills) => onChange({ technical_skills })}
-          placeholder="Select skills"
+          placeholder="e.g. React, Python, Docker, PostgreSQL..."
         />
       </ProfileField>
     </div>

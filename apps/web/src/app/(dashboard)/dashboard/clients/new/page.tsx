@@ -7,7 +7,6 @@ import { useAuth } from "@clerk/nextjs";
 import {
   ArrowLeft,
   Loader2,
-  ChevronDown,
   AlertCircle,
   Crown,
 } from "@/components/animated-icons";
@@ -19,10 +18,16 @@ import { resolveDuplicateConflict } from "@/lib/duplicate-conflict";
 import { celebrate } from "@/components/common/Celebration";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { invalidatePlanSnapshot } from "@/hooks/use-plan";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import {
+  PlanLimitBlock,
+  PlanUsageChip,
+  usePlanCapacity,
+} from "@/components/dashboard/PlanLimit";
 
 const clientFormSchema = z.object({
   name: z
@@ -130,6 +135,7 @@ export default function NewClientPage() {
   const router = useRouter();
   const { getToken } = useAuth();
   const wsCurrency = useWorkspaceCurrency().currency;
+  const capacity = usePlanCapacity("clients");
 
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -254,6 +260,7 @@ export default function NewClientPage() {
       invalidateCache("clients:data");
       invalidateCache("dashboard:data");
       invalidateCache("invoices:data");
+      invalidatePlanSnapshot();
       toast.success("Client created successfully");
       // Small "new card in the roster" pop that survives the redirect.
       celebrate("Client added");
@@ -308,6 +315,8 @@ export default function NewClientPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <PlanUsageChip capacity={capacity} />
+
           <Button
             type="button"
             variant="outline"
@@ -318,25 +327,30 @@ export default function NewClientPage() {
             Cancel
           </Button>
 
-          <Button
-            type="submit"
-            form="client-form"
-            disabled={saving || !name.trim()}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:pointer-events-none h-9"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                <span>Saving...</span>
-              </>
-            ) : (
-              <span>Save Client</span>
-            )}
-          </Button>
+          {!capacity.atLimit && (
+            <Button
+              type="submit"
+              form="client-form"
+              disabled={saving || !name.trim()}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:pointer-events-none h-9"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>Save Client</span>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Main Form Layout */}
+      {capacity.atLimit ? (
+        <PlanLimitBlock capacity={capacity} />
+      ) : (
+      /* Main Form Layout */
       <form id="client-form" onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Form Fields (7 cols) */}
         <div className="lg:col-span-7 space-y-5">
@@ -597,6 +611,7 @@ export default function NewClientPage() {
           />
         </div>
       </form>
+      )}
     </div>
   );
 }

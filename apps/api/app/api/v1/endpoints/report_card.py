@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.quota import enforce_capacity, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.project import Project
 from app.models.finance import TimeEntry
@@ -328,6 +329,16 @@ async def save_my_content(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     card, user, workspace_id = await _get_or_create_card(db, current_user)
+    # The report card's project list IS the public portfolio, so its length is
+    # what the plan's portfolios dimension caps. Deleting entries is never
+    # blocked — only showing more than the plan allows.
+    await enforce_capacity(
+        db,
+        await plan_context(db, current_user),
+        "portfolios",
+        workspace_id=workspace_id,
+        used=len(req.content.projects),
+    )
     card.content = req.content.model_dump()
     await db.commit()
     stats = await _compute_live_stats(db, workspace_id)

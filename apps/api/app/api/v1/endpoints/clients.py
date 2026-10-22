@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
 from app.core.dedup import ensure_no_duplicate
+from app.core.quota import enforce_capacity, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.contract import Contract
@@ -149,6 +150,9 @@ async def create_client(
     invoices never split); a shared phone is a 409 the UI can retry past with
     ``allow_duplicate`` after the user confirms they differ."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    await enforce_capacity(
+        db, await plan_context(db, current_user), "clients", workspace_id=workspace.id
+    )
     await ensure_no_duplicate(
         db, Client, workspace.id, "client",
         email=payload.email, phone=payload.phone,

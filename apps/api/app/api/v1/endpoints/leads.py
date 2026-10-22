@@ -26,6 +26,7 @@ from app.core.auth import require_authenticated_user
 from app.core.database import get_db
 from app.core.dedup import ensure_no_duplicate, find_duplicate
 from app.core.inngest_client import emit
+from app.core.quota import enforce_capacity, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.contract import Contract
@@ -202,6 +203,9 @@ async def close_lead(
         lead.stage = "won"
         existing = await _existing_client_by_email(db, workspace.id, lead.email or "")
         if existing is None:
+            await enforce_capacity(
+                db, await plan_context(db, current_user), "clients", workspace_id=workspace.id
+            )
             db.add(Client(
                 workspace_id=workspace.id,
                 name=lead.company or lead.name,
@@ -371,6 +375,12 @@ async def convert_lead_to_client(
             "company_name": fields.get("company_name"),
         })
     else:
+        # Only a NEW roster row costs capacity — merging into an existing
+        # client always stays allowed, otherwise the upgrade prompt would block
+        # a cleanup action.
+        await enforce_capacity(
+            db, await plan_context(db, current_user), "clients", workspace_id=workspace.id
+        )
         client = Client(workspace_id=workspace.id, **fields)
         db.add(client)
 
@@ -401,6 +411,13 @@ async def start_work(
     reminder/scan jobs pick the new rows up."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
     lead = await _get_workspace_lead(db, workspace.id, lead_id)
+
+    # The cascade creates a roster client AND a project, so both shelves are
+    # checked up front — the whole action is one transaction and must fail
+    # before writing half a deal rather than after.
+    ctx = await plan_context(db, current_user)
+    await enforce_capacity(db, ctx, "clients", workspace_id=workspace.id)
+    await enforce_capacity(db, ctx, "projects", workspace_id=workspace.id)
 
     fields = await _uplift_client_fields(lead, workspace)
     existing = await _existing_client_by_email(db, workspace.id, fields["email"])

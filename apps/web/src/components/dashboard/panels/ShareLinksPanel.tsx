@@ -22,6 +22,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard, FilterPill } from "@/components/dashboard/patterns";
 import { getShareLinks, type ShareLink } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { usePlan } from "@/hooks/use-plan";
+import { PlanFeatureLock } from "@/components/dashboard/PlanLimit";
 
 const MODULE_META: Record<string, { label: string; icon: React.ElementType }> = {
   invoices: { label: "Pay links", icon: Receipt },
@@ -48,6 +50,7 @@ const MANAGE_HREF: Record<string, string> = {
 export function ShareLinksPanel() {
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [moduleFilter, setModuleFilter] = useState<string>("all");
+  const { snapshot, insight } = usePlan();
 
   const { data: linkData, loading, refresh } = useApiData<ShareLink[]>(
     "share-links:all",
@@ -78,6 +81,18 @@ export function ShareLinksPanel() {
       window.open(absolute, "_blank");
     }
   };
+
+  if (snapshot && !insight("shared_links")) {
+    return (
+      <PlanFeatureLock
+        title="Shared links ship on a paid plan"
+        body="One audit view of every public token the book issues — pay links, signature links, intake forms and client portals. It unlocks on the tier that sells insights."
+        feature="insights"
+        backHref="/dashboard"
+        backLabel="Back to dashboard"
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">

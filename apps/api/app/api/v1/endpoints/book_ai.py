@@ -13,6 +13,7 @@ Intents:
 """
 
 from datetime import datetime
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.quota import bump_meter, enforce_meter, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.finance import Invoice, TimeEntry
@@ -92,12 +94,18 @@ def _period_bounds(q: str, now: datetime) -> Tuple[Optional[datetime], Optional[
 
 def _match_entities(q: str, rows: List[Any], name_of) -> Optional[Tuple[Any, List[str]]]:
     """Case-insensitive matching of a record name inside the question.
-    Exact (full-name) matches win; otherwise the first substring hit. Returns
-    (row, other_matched_names) so the answer can disclose ambiguity."""
+    A full-name mention wins; otherwise any distinctive word of the name
+    ("acme" for "Acme Corp") matches as a whole word, so partial mentions
+    still surface every ambiguous record. Returns (row, other_matched_names)
+    so the answer can disclose ambiguity."""
+    q_words = set(re.findall(r"[a-z0-9]+", q))
     matches: List[Any] = []
     for row in rows:
         name = (name_of(row) or "").lower()
-        if name and name in q:
+        if not name:
+            continue
+        name_words = {w for w in re.findall(r"[a-z0-9]+", name) if len(w) >= 3}
+        if name in q or (name_words & q_words):
             matches.append(row)
     if not matches:
         return None
@@ -157,6 +165,14 @@ async def ask(
 ):
     q = payload.question.strip().lower()
     _, workspace = await get_or_create_user_workspace(db, current_user)
+
+    # Ask counted before the answer is computed: this route has many return
+    # paths and a meter that only burns on some of them is a meter that can be
+    # farmed. Commit immediately — the counter is independent of the answer.
+    ctx = await plan_context(db, current_user)
+    await enforce_meter(db, ctx, "ai_asks")
+    await bump_meter(db, ctx, "ai_asks")
+    await db.commit()
 
     clients = list((await db.execute(
         select(Client).where(Client.workspace_id == workspace.id).order_by(Client.created_at.desc())

@@ -17,8 +17,8 @@ import {
   TrendingDown,
   Users,
   AlertTriangle,
-  ShieldAlert,
   MessageSquare,
+  Video,
 } from "@/components/animated-icons";
 
 import { Button } from "@/components/ui/button";
@@ -35,12 +35,11 @@ import {
   getContracts,
   getBookings,
   getBookingAppointments,
-  getRevenueAtStake,
-  getUnreadNotificationCount,
   type TimerSession,
   type CalendarFeedItem,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { useLiveNotifications } from "@/hooks/use-live-notifications";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { formatMoney } from "@/lib/currency";
 
@@ -71,8 +70,6 @@ export default function DashboardPage() {
         contractsRes,
         bookingsRes,
         appointmentsRes,
-        atStakeRes,
-        unreadRes,
       ] = await Promise.all([
         getDashboardStats(token),
         getDashboardOverview(token),
@@ -82,8 +79,6 @@ export default function DashboardPage() {
         getContracts(undefined, token).catch(() => []),
         getBookings(token).catch(() => []),
         getBookingAppointments(undefined, token).catch(() => []),
-        getRevenueAtStake(token).catch(() => null),
-        getUnreadNotificationCount(token).catch(() => 0),
       ]);
       return {
         stats: statsRes,
@@ -94,8 +89,6 @@ export default function DashboardPage() {
         contracts: contractsRes,
         bookings: bookingsRes,
         appointments: appointmentsRes,
-        atStake: atStakeRes,
-        unreadCount: unreadRes,
       };
     },
     { reportContext: "dashboard" }
@@ -124,9 +117,9 @@ export default function DashboardPage() {
     ? appointments.filter((a) => a.status !== "completed" && a.status !== "cancelled").length
     : (dashboardData?.bookings?.length ?? 0);
 
-  // Money the freelancer has already earned or invoiced but not collected.
-  const atStake = dashboardData?.atStake ?? null;
-  const unreadCount = dashboardData?.unreadCount ?? 0;
+  // Live via the shared SSE stream — no longer part of the dashboard fetch,
+  // so the header badge and chip update the moment a signal lands.
+  const unreadCount = useLiveNotifications();
 
   // Today's schedule — same feed the calendar uses, window = today only.
   const { data: todayEvents, loading: todayLoading } = useApiData<CalendarFeedItem[]>(
@@ -249,41 +242,50 @@ export default function DashboardPage() {
               label="Earned"
               value={usd(stats?.monthly_revenue)}
               icon={DollarSign}
+              href="/dashboard/cashflow"
               rows={[
                 {
                   text: stats?.revenue_growth_pct != null
                     ? `${stats.revenue_growth_pct >= 0 ? "+" : ""}${Math.round(stats.revenue_growth_pct)}% vs last month`
                     : "Cleared this month",
                   dot: "ok",
+                  href: "/dashboard/cashflow",
                 },
-                { text: `${usd(stats?.pending_invoices_amount)} Pending`, dot: "danger" },
+                {
+                  text: `${usd(stats?.pending_invoices_amount)} Pending`,
+                  dot: "danger",
+                  href: "/dashboard/projects?tab=invoices",
+                },
               ]}
             />
             <StatCard
               label="Expenses"
               value={usd(totalExpenses)}
               icon={TrendingDown}
+              href="/dashboard/cashflow?tab=expenses"
               rows={[
-                { text: `${expensesCount} Recorded`, dot: "ok" },
-                { text: `${usd(recurringExpenses)} Recurring`, dot: "danger" },
+                { text: `${expensesCount} Recorded`, dot: "ok", href: "/dashboard/cashflow?tab=expenses" },
+                { text: `${usd(recurringExpenses)} Recurring`, dot: "danger", href: "/dashboard/cashflow?tab=expenses" },
               ]}
             />
             <StatCard
               label="Projects"
               value={stats?.active_projects_count ?? 0}
               icon={LayoutGrid}
+              href="/dashboard/projects"
               rows={[
-                { text: `${stats?.active_projects_count ?? 0} Total`, dot: "ok" },
-                { text: `${stats?.active_projects_count ?? 0} In Progress`, dot: "danger" },
+                { text: `${stats?.active_projects_count ?? 0} Total`, dot: "ok", href: "/dashboard/projects" },
+                { text: `${stats?.active_projects_count ?? 0} In Progress`, dot: "danger", href: "/dashboard/projects" },
               ]}
             />
             <StatCard
               label="Active Clients"
               value={stats?.active_clients_count ?? 0}
               icon={Users}
+              href="/dashboard/clients"
               rows={[
-                { text: `${stats?.active_clients_count ?? 0} Retainers`, check: true },
-                { text: `${stats?.active_clients_count ?? 0} Ongoing`, dot: "danger" },
+                { text: `${stats?.active_clients_count ?? 0} Retainers`, check: true, href: "/dashboard/clients" },
+                { text: `${stats?.active_clients_count ?? 0} Ongoing`, dot: "danger", href: "/dashboard/clients" },
               ]}
             />
           </>
@@ -292,76 +294,34 @@ export default function DashboardPage() {
 
       {/* The Capsule Rating & Context Badges — Reference Design with App Domain Content */}
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 pt-1">
-        <StatChip tone="green">
+        <StatChip tone="green" href="/dashboard/projects?tab=invoices">
           <span className="font-semibold">{String(stats?.pending_invoices_count || 0)}</span>
           <span>Invoices waiting</span>
         </StatChip>
-        <StatChip tone="blue">
+        <StatChip tone="blue" href="/dashboard/clients?tab=leads">
           <span className="font-semibold">{String(pendingLeadsCount)}</span>
           <span>Pending leads</span>
         </StatChip>
-        <StatChip tone="purple">
+        <StatChip tone="purple" href="/dashboard/clients?tab=forms">
           <span className="font-semibold">{String(pendingIntakeCount)}</span>
           <span>Pending intake forms</span>
         </StatChip>
-        <StatChip tone="red">
+        <StatChip tone="red" href="/dashboard/contracts">
           <span className="font-semibold">{String(waitingContractsCount)}</span>
           <span>Contracts waiting</span>
         </StatChip>
-        <StatChip tone="violet">
+        <StatChip tone="violet" href="/dashboard/booking">
           <span className="font-semibold">{String(pendingBookingsCount)}</span>
           <span>Pending bookings</span>
         </StatChip>
         {unreadCount > 0 && (
-          <Link href="/dashboard/inbox" className="inline-flex">
-            <StatChip tone="amber">
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span className="font-semibold">{String(unreadCount)}</span>
-              <span>New signals</span>
-            </StatChip>
-          </Link>
+          <StatChip tone="amber" href="/dashboard/inbox">
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span className="font-semibold">{String(unreadCount)}</span>
+            <span>New signals</span>
+          </StatChip>
         )}
       </div>
-
-      {/* Revenue at stake — the one number that says what the book is owed. */}
-      {!loading && atStake && atStake.totals.total_at_stake > 0 && (
-        <Link href="/dashboard/reports" className="block group">
-          <div className="bg-card border border-line hover:border-line-strong rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 transition-colors">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="w-10 h-10 rounded-xl bg-danger/10 text-danger border border-danger/20 flex items-center justify-center shrink-0">
-                <ShieldAlert className="w-5 h-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-mono uppercase tracking-wider text-muted">Revenue at stake</p>
-                <p className="font-display text-xl font-medium text-fg leading-tight">
-                  {usd(atStake.totals.total_at_stake)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              {atStake.totals.unpaid_invoices_value > 0 && (
-                <span className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-danger/10 text-danger">
-                  {usd(atStake.totals.unpaid_invoices_value)} unpaid · {atStake.totals.unpaid_invoices_count}
-                </span>
-              )}
-              {atStake.totals.unbilled_value > 0 && (
-                <span className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-warn/10 text-warn">
-                  {usd(atStake.totals.unbilled_value)} unbilled · {atStake.totals.unbilled_hours.toFixed(1)}h
-                </span>
-              )}
-              {atStake.totals.unsigned_contracts_value > 0 && (
-                <span className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-info/10 text-info">
-                  {usd(atStake.totals.unsigned_contracts_value)} unsigned · {atStake.totals.unsigned_contracts_count}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1 text-xs text-muted group-hover:text-fg transition-colors">
-                Open report <ChevronRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-          </div>
-        </Link>
-      )}
 
       {/* One small tabbed area — pick a label, see a short list */}
       <div className="bg-card border border-line rounded-xl p-5">
@@ -398,20 +358,37 @@ export default function DashboardPage() {
             </div>
           ) : todayEvents && todayEvents.length > 0 ? (
             <div className="divide-y divide-line">
-              {todayEvents.map((ev) => (
-                <div key={ev.id} className="flex items-center gap-3 py-2.5">
-                  <span className="text-xs font-mono text-muted w-16 shrink-0">
-                    {new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                  </span>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${
-                    ev.event_type === "deadline" ? "bg-danger"
-                      : ev.event_type === "meeting" ? "bg-info"
-                      : ev.event_type === "client_work" ? "bg-accent" : "bg-faint"
-                  }`} />
-                  <span className="text-sm text-fg truncate">{ev.title}</span>
-                  <span className="text-[10px] uppercase tracking-wide text-faint ml-auto shrink-0">{ev.event_type.replace("_", " ")}</span>
-                </div>
-              ))}
+              {todayEvents.map((ev) => {
+                const eventHref =
+                  ev.source === "booking"
+                    ? `/dashboard/booking/calls/${ev.id}`
+                    : ev.source === "invoice"
+                    ? "/dashboard/projects?tab=invoices"
+                    : "/dashboard/calendar";
+
+                return (
+                  <Link
+                    key={ev.id}
+                    href={eventHref}
+                    className="flex items-center gap-3 py-2.5 px-2 -mx-2 hover:bg-surface/70 rounded-xl transition-all cursor-pointer group select-none"
+                    title={`Open ${ev.title}`}
+                  >
+                    <span className="text-xs font-mono text-muted w-16 shrink-0 group-hover:text-fg transition-colors">
+                      {new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${
+                      ev.event_type === "deadline" ? "bg-danger"
+                        : ev.event_type === "meeting" ? "bg-info"
+                        : ev.event_type === "client_work" ? "bg-accent" : "bg-faint"
+                    }`} />
+                    <span className="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ev.title}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-faint ml-auto shrink-0 font-mono">
+                      {ev.event_type.replace("_", " ")}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </Link>
+                );
+              })}
             </div>
           ) : (
             <SimpleEmpty
@@ -543,13 +520,21 @@ export default function DashboardPage() {
               {overview?.recent_time_entries && overview.recent_time_entries.length > 0 ? (
                 <div className="divide-y divide-line">
                   {overview.recent_time_entries.slice(0, 4).map((t) => (
-                    <div key={t.id} className="flex items-center justify-between py-2.5">
+                    <Link
+                      key={t.id}
+                      href="/dashboard/time-tracker"
+                      className="flex items-center justify-between py-2.5 px-2 -mx-2 hover:bg-surface/60 rounded-lg transition-colors cursor-pointer group"
+                      title="Open in Time Tracker"
+                    >
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-fg truncate">{t.task}</p>
+                        <p className="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{t.task}</p>
                         <p className="text-xs text-muted">{t.project} • {t.date}</p>
                       </div>
-                      <span className="font-mono text-sm text-fg font-semibold shrink-0 ml-3">{t.duration}</span>
-                    </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <span className="font-mono text-sm text-fg font-semibold">{t.duration}</span>
+                        <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+                      </div>
+                    </Link>
                   ))}
                 </div>
               ) : (

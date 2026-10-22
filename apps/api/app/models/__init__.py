@@ -17,6 +17,7 @@ from app.models.testimonial import Testimonial
 from app.models.link_page import LinkPage, LinkItem, LinkEvent
 from app.models.feature_flag import FeatureFlag
 from app.models.user_profile import UserProfile
+from app.models.user_plan import UserPlan, PlanUsage
 
 __all__ = [
     "Base",
@@ -62,5 +63,7 @@ __all__ = [
     "LinkEvent",
     "FeatureFlag",
     "UserProfile",
+    "UserPlan",
+    "PlanUsage",
 ]
 

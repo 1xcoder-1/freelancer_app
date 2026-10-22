@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  CreditCard,
   User,
 } from "@/components/animated-icons";
 import { LogOut } from "lucide-react";
@@ -16,6 +17,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { FEATURES, type FeatureSubItem } from "@/lib/features";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useLiveNotifications } from "@/hooks/use-live-notifications";
 
 // Precise active detection: handles both the ?tab= URL style used by the
 // panels/command menu and the legacy standalone routes (/dashboard/leads…).
@@ -46,6 +48,7 @@ function NavIcon({ icon: Icon, className }: { icon: React.ElementType; className
 }
 
 interface NavItem {
+  key: string;
   title: string;
   href: string;
   icon: React.ElementType;
@@ -95,6 +98,15 @@ function ProfileMenuPanel({
       </div>
 
       <div className="border-t border-dashed border-line my-1" />
+
+      <Link
+        href="/dashboard/billing"
+        onClick={onClose}
+        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg hover:bg-surface transition-colors"
+      >
+        <CreditCard className="w-4 h-4 text-muted shrink-0" />
+        Billing &amp; plan
+      </Link>
 
       <Link
         href="/dashboard/settings"
@@ -167,16 +179,20 @@ export function DashboardSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useUser();
-  const { isVisible, labelFor } = useFeatureFlags();
+  const { ready, canSee, labelFor } = useFeatureFlags();
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
   // Nav is derived from the shared feature registry so the owner's Settings →
-  // Features toggles and label overrides apply here automatically. Hidden
-  // features drop out of the rail entirely (children inherit the gate).
+  // Features toggles and label overrides apply here automatically. Before the
+  // flags load nothing gated is rendered — a hidden page must never appear
+  // first and then disappear. The owner bypass keeps every page in their rail.
   const navItems = useMemo<NavItem[]>(
     () =>
-      FEATURES.filter((f) => !f.commandOnly && (f.locked || isVisible(f.key))).map((f) => ({
+      FEATURES.filter(
+        (f) => !f.commandOnly && (f.locked || (ready && canSee(f.key)))
+      ).map((f) => ({
+        key: f.key,
         title: labelFor(f.key, f.title),
         href: f.href,
         icon: f.icon,
@@ -185,8 +201,11 @@ export function DashboardSidebar() {
           title: labelFor(s.id, s.title),
         })),
       })),
-    [isVisible, labelFor]
+    [ready, canSee, labelFor]
   );
+
+  // Live unread badge for the Inbox rail row (the "1 / 2 / 3" pill).
+  const unreadCount = useLiveNotifications();
 
   // Submenu state for flyout & accordion
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -266,6 +285,7 @@ export function DashboardSidebar() {
 
   // Close flyout & account menu upon navigation
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting transient menus on route change is the intent
     setOpenSubmenu(null);
     setProfileMenuOpen(false);
   }, [pathname, searchParams]);
@@ -289,6 +309,7 @@ export function DashboardSidebar() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydration guard for Clerk user data
     setMounted(true);
   }, []);
 
@@ -350,8 +371,20 @@ export function DashboardSidebar() {
             }`}
         >
           <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden group">
-            <span className="w-8 h-8 rounded-xl bg-accent-soft border border-accent/40 text-fg font-bold group-hover:border-accent transition-all flex items-center justify-center text-xs font-mono shrink-0 shadow-xs">
-              fb
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-gradient-to-b from-brand-light to-brand-dark text-white shadow-[0_2px_12px_rgba(210,86,17,0.4)] group-hover:scale-105 transition-transform">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-[18px]"
+                aria-hidden
+              >
+                <path d="M12 6.6C10.4 5.1 8.4 4.5 5.9 4.5c-1 0-2 .1-2.9.4v13.5c.9-.3 1.9-.4 2.9-.4 2.5 0 4.5.6 6.1 2.1 1.6-1.5 3.6-2.1 6.1-2.1 1 0 2 .1 2.9.4V4.9c-.9-.3-1.9-.4-2.9-.4-2.5 0-4.5.6-6.1 2.1z" />
+                <path d="M12 6.6v13.5" />
+              </svg>
             </span>
 
             {!isCollapsed && (
@@ -360,9 +393,9 @@ export function DashboardSidebar() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -6 }}
                 transition={{ duration: 0.2 }}
-                className="font-display font-bold text-[15px] tracking-tight text-fg whitespace-nowrap"
+                className="text-base font-semibold tracking-tight text-fg whitespace-nowrap"
               >
-                Freelance<span className="text-accent font-bold">Book</span>
+                Freelance<span className="text-brand"> Book</span>
               </motion.span>
             )}
           </Link>
@@ -486,7 +519,7 @@ export function DashboardSidebar() {
               <Link key={item.title} href={item.href} className="block">
                 <div
                   data-nav-row
-                  className={`press flex items-center gap-3 rounded-full text-sm ${isActive
+                  className={`press relative flex items-center gap-3 rounded-full text-sm ${isActive
                       ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
                       : "text-muted font-medium hover:bg-surface hover:text-fg"
                     } ${isCollapsed ? "w-11 h-11 mx-auto justify-center px-0" : "px-4 py-2.5"}`}
@@ -497,12 +530,38 @@ export function DashboardSidebar() {
                   {!isCollapsed && (
                     <div className="flex items-center justify-between flex-1 overflow-hidden">
                       <span className="truncate text-fg font-semibold">{item.title}</span>
+                      {item.key === "inbox" && unreadCount > 0 && (
+                        <span className="ml-2 shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-accent text-accent-fg text-[10px] font-bold flex items-center justify-center">
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
                     </div>
+                  )}
+
+                  {isCollapsed && item.key === "inbox" && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-accent text-accent-fg text-[10px] font-bold flex items-center justify-center border-2 border-bg">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
                   )}
                 </div>
               </Link>
             );
           })}
+
+          {/* Placeholder rows while flags load: keeps the rail from jumping
+              when the gated entries arrive, without revealing their names. */}
+          {!ready &&
+            Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={`nav-skeleton-${i}`}
+                aria-hidden
+                className={
+                  isCollapsed
+                    ? "w-11 h-11 mx-auto rounded-full bg-surface animate-pulse"
+                    : "h-[42px] rounded-full bg-surface animate-pulse"
+                }
+              />
+            ))}
         </div>
 
         {/* Bottom User Pill + Expand / Collapse Switcher */}

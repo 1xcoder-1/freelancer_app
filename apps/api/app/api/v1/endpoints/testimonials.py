@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.quota import enforce_insight, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.testimonial import Testimonial
@@ -108,6 +109,7 @@ async def list_testimonials(
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    enforce_insight(await plan_context(db, current_user), "testimonials")
     conditions = [Testimonial.workspace_id == workspace.id]
     if status_filter in ("pending", "approved", "rejected"):
         conditions.append(Testimonial.status == status_filter)
@@ -126,6 +128,7 @@ async def create_testimonial_request(
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    enforce_insight(await plan_context(db, current_user), "testimonials")
 
     if payload.client_id is not None:
         client = (await db.execute(

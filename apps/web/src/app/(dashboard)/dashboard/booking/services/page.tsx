@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, Pause, Phone, Plus, RefreshCw } from "@/components/animated-icons";
+import { TextMorph } from "torph/react";
+import { CalendarDays, Lock, Pause, Phone, Plus, RefreshCw } from "@/components/animated-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatCard } from "@/components/dashboard/patterns";
 import { BookingServicesPanel } from "@/components/dashboard/panels/BookingServicesPanel";
 import { getBookings, getBookingAppointments, type BookingAppointment } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
 /* Services — the things a client can book. Each one owns its own link,
    opening hours and days off, so they all live on this page. */
@@ -37,6 +38,7 @@ export default function BookingServicesPage() {
 
   const services = data?.services ?? [];
   const appointments = data?.appointments ?? [];
+  const capacity = usePlanCapacity("services");
 
   // Card 1: Services setup breakdown
   const googleMeetCount = services.filter((s) => !s.meeting_provider || s.meeting_provider === "google_meet").length;
@@ -45,8 +47,6 @@ export default function BookingServicesPage() {
   // Card 2: Live services breakdown
   const activeServices = services.filter((s) => s.is_active);
   const active = activeServices.length;
-  const activePaid = activeServices.filter((s) => s.price > 0).length;
-  const activeFree = activeServices.filter((s) => s.price === 0).length;
 
   // Card 3: Calls booked breakdown (real-time from appointments)
   const bookedTotal = services.reduce((sum, s) => sum + (s.appointments_count ?? 0), 0);
@@ -57,57 +57,105 @@ export default function BookingServicesPage() {
   const completedCalls = appointments.filter((a) => a.status === "completed").length;
 
   // Card 4: Paused services breakdown
-  const pausedServices = services.filter((s) => !s.is_active);
-  const paused = pausedServices.length;
-  const pausedPaid = pausedServices.filter((s) => s.price > 0).length;
-  const pausedFree = pausedServices.filter((s) => s.price === 0).length;
+  const paused = services.filter((s) => !s.is_active).length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* 4 Headline Metric Cards at the top — concise, non-duplicative, real-time */}
+      {/* 4 Headline Metric Cards at the top — concise, vibrant, real-time */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
         {loading && !data ? (
           [1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
+            <Skeleton key={i} className="h-36 w-full rounded-2xl bg-card border border-line" />
           ))
         ) : (
           <>
-            <StatCard
-              label="Services"
-              value={services.length}
-              icon={CalendarDays}
-              rows={[
-                { text: `${googleMeetCount} Google Meet`, dot: "info" },
-                { text: `${withIntakeCount} with intake`, dot: "ok" },
-              ]}
-            />
-            <StatCard
-              label="Live now"
-              value={active}
-              icon={Phone}
-              rows={[
-                { text: `${activePaid} paid`, dot: "info" },
-                { text: `${activeFree} free`, dot: "ok" },
-              ]}
-            />
-            <StatCard
-              label="Calls booked"
-              value={totalCalls}
-              icon={CalendarDays}
-              rows={[
-                { text: `${upcomingCalls} upcoming`, dot: "ok" },
-                { text: `${completedCalls} completed`, dot: "info" },
-              ]}
-            />
-            <StatCard
-              label="Paused"
-              value={paused}
-              icon={Pause}
-              rows={[
-                { text: `${pausedPaid} paid`, dot: pausedPaid > 0 ? "warn" : "ok" },
-                { text: `${pausedFree} free`, dot: "ok" },
-              ]}
-            />
+            {/* Card 1: Total Services */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Services
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{services.length}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block shrink-0" />
+                <span>{googleMeetCount} Google Meet</span>
+              </div>
+            </div>
+
+            {/* Card 2: Live Now */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Live
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+                  <Phone className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{active}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" />
+                <span>{paused > 0 ? `${paused} paused` : "All active"}</span>
+              </div>
+            </div>
+
+            {/* Card 3: Calls Booked */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Calls Booked
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{totalCalls}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 inline-block shrink-0" />
+                <span>{upcomingCalls} upcoming</span>
+              </div>
+            </div>
+
+            {/* Card 4: Completed Calls */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Completed
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+                  <Pause className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{completedCalls}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+                <span>{completedCalls} finished</span>
+              </div>
+            </div>
           </>
         )}
       </div>
@@ -132,11 +180,24 @@ export default function BookingServicesPage() {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
           <Link
-            href="/dashboard/booking/new"
-            className="press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white font-medium text-xs sm:text-[13px] px-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border border-orange-400/40 active:scale-95 transition-all duration-150 cursor-pointer"
+            href={capacity.atLimit ? capacity.upgradeHref : "/dashboard/booking/new"}
+            title={
+              capacity.atLimit
+                ? `Service limit reached (${capacity.used}/${capacity.limit})`
+                : "New service"
+            }
+            className={`press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-medium text-xs sm:text-[13px] px-3.5 border active:scale-95 transition-all duration-150 cursor-pointer ${
+              capacity.atLimit
+                ? "bg-warn/15 text-warn border-warn/30 hover:bg-warn/20"
+                : "bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border-orange-400/40"
+            }`}
           >
-            <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
-            <span>New service</span>
+            {capacity.atLimit ? (
+              <Lock className="w-3.5 h-3.5" />
+            ) : (
+              <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
+            )}
+            <span>{capacity.atLimit ? "Upgrade plan" : "New service"}</span>
           </Link>
         </div>
       </div>

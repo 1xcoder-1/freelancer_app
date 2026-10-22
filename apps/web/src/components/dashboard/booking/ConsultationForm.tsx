@@ -1,20 +1,17 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { toast } from "sonner";
-import { useAuth } from "@clerk/nextjs";
 import { ArrowLeft, Clock, Loader2, AlertCircle, Video } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
-import { BookingConsultationPayload, getGoogleCalendarStatus, getWorkspaceSettings } from "@/lib/api";
+import { BookingConsultationPayload } from "@/lib/api";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
-import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
-import { formatMoney } from "@/lib/currency";
 import { logHandledError } from "@/lib/log-error";
 
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -37,7 +34,6 @@ export interface ConsultationFormState {
   title: string;
   description: string;
   durationMinutes: number;
-  price: number;
   weekdayMask: string;
   startHour: number;
   endHour: number;
@@ -55,14 +51,12 @@ const bookingFormSchema = z.object({
     .max(150, "Title cannot exceed 150 characters"),
   description: z.string().trim().max(1000, "Description cannot exceed 1000 characters").optional(),
   durationMinutes: z.number().int().positive().max(1440),
-  price: z.number().min(0, "Price cannot be negative"),
 });
 
 export const emptyFormState: ConsultationFormState = {
   title: "",
   description: "",
   durationMinutes: 30,
-  price: 0,
   weekdayMask: DEFAULT_MASK,
   startHour: 9,
   endHour: 17,
@@ -118,50 +112,6 @@ export function ConsultationForm({
   children?: React.ReactNode;
 }) {
   const router = useRouter();
-  const { getToken } = useAuth();
-  const { currency } = useWorkspaceCurrency();
-
-  // Whether new bookings actually get a Meet link right now (Settings →
-  // Integrations): requires a connected Google Calendar with Meet enabled.
-  const [meetOn, setMeetOn] = useState<boolean | null>(null);
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const token = (await getToken()) || undefined;
-        const status = await getGoogleCalendarStatus(token);
-        if (mounted) setMeetOn(Boolean(status.connected && status.meet_enabled));
-      } catch (err) {
-        logHandledError("Failed to load Google Calendar status:", err);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [getToken]);
-
-  // Auto-populate price from workspace settings default rate if creating a new service
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const token = (await getToken()) || undefined;
-        const ws = await getWorkspaceSettings(token);
-        if (!mounted || !ws) return;
-        if (!draftKey.includes("edit")) {
-          const defaultRate = typeof ws.default_hourly_rate === "number" ? ws.default_hourly_rate : 0;
-          if (defaultRate > 0) {
-            setPrice((prev) => (prev === 0 || prev === 100 ? defaultRate : prev));
-          }
-        }
-      } catch (err) {
-        logHandledError("Failed to fetch workspace default price:", err);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [getToken, draftKey]);
 
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -169,7 +119,6 @@ export function ConsultationForm({
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [durationMinutes, setDurationMinutes] = useState(initial.durationMinutes);
-  const [price, setPrice] = useState(initial.price);
   const [weekdayMask, setWeekdayMask] = useState(initial.weekdayMask);
   const [startHour, setStartHour] = useState(initial.startHour);
   const [endHour, setEndHour] = useState(initial.endHour);
@@ -180,10 +129,10 @@ export function ConsultationForm({
 
   const formValues = useMemo(
     () => ({
-      title, description, durationMinutes, price, weekdayMask,
+      title, description, durationMinutes, weekdayMask,
       startHour, endHour, minLeadHours, maxAdvanceDays, bufferMinutes, noShowLimit,
     }),
-    [title, description, durationMinutes, price, weekdayMask, startHour, endHour, minLeadHours, maxAdvanceDays, bufferMinutes, noShowLimit]
+    [title, description, durationMinutes, weekdayMask, startHour, endHour, minLeadHours, maxAdvanceDays, bufferMinutes, noShowLimit]
   );
 
   const applyDraft = useCallback((saved: Record<string, unknown>) => {
@@ -192,7 +141,6 @@ export function ConsultationForm({
     setTitle(str("title"));
     setDescription(str("description"));
     setDurationMinutes(num("durationMinutes", initial.durationMinutes));
-    setPrice(num("price", initial.price));
     const mask = str("weekdayMask");
     if (/^[01]{7}$/.test(mask)) setWeekdayMask(mask);
     setStartHour(num("startHour", initial.startHour));
@@ -225,7 +173,6 @@ export function ConsultationForm({
       title,
       description,
       durationMinutes: Number(durationMinutes),
-      price: Number(price),
     });
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -251,7 +198,6 @@ export function ConsultationForm({
         title: title.trim(),
         description: description.trim(),
         duration_minutes: Number(durationMinutes),
-        price: Number(price),
         meeting_provider: "google_meet",
         is_active: isActive ?? true,
         weekday_mask: weekdayMask,
@@ -284,29 +230,38 @@ export function ConsultationForm({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
+        <Link
+          href={backHref}
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Services</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{headline}</span>
+        </Link>
+      </div>
+
+      {/* Main Header Card: Title & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Link
-            href={backHref}
-            className="group inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-all duration-150 mb-1"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-150 group-hover:-translate-x-1" />
-            <span>{backLabel ?? "Back to Services"}</span>
-          </Link>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+          <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
             {headline}
           </h1>
+          <p className="text-xs text-muted/80 mt-1">Configure service settings, duration, and availability rules</p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
             type="button"
             variant="outline"
             onClick={() => guard.guardedPush(doneHref)}
             disabled={saving}
-            className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg border border-line bg-card hover:bg-surface text-fg font-medium text-xs sm:text-sm transition-all duration-150 cursor-pointer disabled:opacity-50 h-9"
+            className="h-9 px-3.5 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg font-medium text-xs transition-all active:scale-[0.97] cursor-pointer"
           >
             Cancel
           </Button>
@@ -315,7 +270,7 @@ export function ConsultationForm({
             type="submit"
             form="booking-form"
             disabled={saving || !title.trim()}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:pointer-events-none h-9"
+            className="h-9 px-4 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] cursor-pointer disabled:opacity-50"
           >
             {saving ? (
               <>
@@ -333,12 +288,14 @@ export function ConsultationForm({
         {/* Left column: form fields */}
         <div className="lg:col-span-7 space-y-5">
           {/* 1. Service details */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4 shadow-xs">
-            <h2 className="text-sm font-medium text-fg">Service Details</h2>
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+              Service Details
+            </h2>
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-fg block">
-                Service Title <span className="text-accent">*</span>
+                Title <span className="text-accent">*</span>
               </label>
               <input
                 type="text"
@@ -349,7 +306,9 @@ export function ConsultationForm({
                   if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
                 }}
                 placeholder="e.g. 1:1 Consultation"
-                className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent focus:bg-card focus:outline-none transition-all ${errors.title ? "border-danger" : "border-line"}`}
+                className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm placeholder:text-muted/60 focus:border-accent/60 focus:bg-card focus:outline-none focus:ring-1 focus:ring-accent/30 transition-all ${
+                  errors.title ? "border-danger" : "border-line"
+                }`}
               />
               {errors.title && (
                 <p className="text-[11px] text-danger flex items-center gap-1">
@@ -364,43 +323,28 @@ export function ConsultationForm({
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of what this session covers."
-                className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
+                placeholder="Brief summary of what this session covers."
+                className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent/60 focus:bg-card focus:outline-none focus:ring-1 focus:ring-accent/30 transition-all resize-y"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Duration</label>
-                <CustomSelect
-                  value={String(durationMinutes)}
-                  onChange={(v) => setDurationMinutes(Number(v))}
-                  options={DURATION_OPTIONS}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Price ({currency})</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={price}
-                  onChange={(e) => setPrice(Number(e.target.value))}
-                  className={`w-full h-10 px-3.5 rounded-xl border bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${errors.price ? "border-danger" : "border-line"}`}
-                />
-                {errors.price && (
-                  <p className="text-[11px] text-danger flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {errors.price}
-                  </p>
-                )}
-              </div>
+            <div className="space-y-1.5 sm:max-w-[50%]">
+              <label className="text-xs font-medium text-fg block">Duration</label>
+              <CustomSelect
+                value={String(durationMinutes)}
+                onChange={(v) => setDurationMinutes(Number(v))}
+                options={DURATION_OPTIONS}
+              />
             </div>
-          </Card>
+          </div>
 
           {/* 2. Opening hours & availability */}
-          <Card className="p-5 sm:p-6 rounded-2xl border border-line bg-card space-y-4 shadow-xs">
-            <h2 className="text-sm font-medium text-fg">Schedule & Availability</h2>
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+              Schedule & Rules
+            </h2>
 
-            {/* Mon-Fri / Available Days section */}
+            {/* Available Days section */}
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-fg">Available Days</label>
@@ -439,20 +383,20 @@ export function ConsultationForm({
                       key={d}
                       type="button"
                       onClick={() => toggleDay(i)}
-                      className={`text-xs py-2 rounded-xl border font-medium transition-all cursor-pointer select-none text-center ${
+                      className={`text-xs py-2 rounded-xl border font-mono transition-all cursor-pointer select-none text-center ${
                         active
-                          ? "bg-accent text-accent-fg border-accent shadow-xs font-semibold"
-                          : "bg-surface/50 text-muted border-line hover:border-line-strong hover:text-fg hover:bg-surface"
+                          ? "bg-accent/15 text-accent border-accent/30 font-semibold shadow-2xs"
+                          : "bg-surface/40 text-faint border-line/40 hover:border-line-strong hover:text-muted hover:bg-surface/70"
                       }`}
                     >
-                      {d}
+                      {d.slice(0, 2)}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Hours & Rules */}
+            {/* Hours & Rules in a clean grid */}
             <div className="grid grid-cols-2 gap-4 pt-3 border-t border-line/60">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-fg block">Opens</label>
@@ -463,60 +407,72 @@ export function ConsultationForm({
                 <CustomSelect value={String(endHour)} onChange={(v) => setEndHour(Number(v))} options={HOUR_OPTIONS} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Buffer (min)</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={240}
-                  value={bufferMinutes}
-                  onChange={(e) => setBufferMinutes(Number(e.target.value))}
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="text-xs font-medium text-fg block">Buffer Padding</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    value={bufferMinutes}
+                    onChange={(e) => setBufferMinutes(Number(e.target.value))}
+                    className="w-full h-10 px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent/60 focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-muted font-mono">min</span>
+                </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Min Notice (hrs)</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={336}
-                  value={minLeadHours}
-                  onChange={(e) => setMinLeadHours(Number(e.target.value))}
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="text-xs font-medium text-fg block">Min Notice</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={0}
+                    max={336}
+                    value={minLeadHours}
+                    onChange={(e) => setMinLeadHours(Number(e.target.value))}
+                    className="w-full h-10 px-3.5 pr-8 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent/60 focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-muted font-mono">hrs</span>
+                </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Max Advance (days)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={maxAdvanceDays}
-                  onChange={(e) => setMaxAdvanceDays(Number(e.target.value))}
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="text-xs font-medium text-fg block">Advance Booking</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={maxAdvanceDays}
+                    onChange={(e) => setMaxAdvanceDays(Number(e.target.value))}
+                    className="w-full h-10 px-3.5 pr-10 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent/60 focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-muted font-mono">days</span>
+                </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-fg block">Missed Calls Limit</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={noShowLimit}
-                  onChange={(e) => setNoShowLimit(Number(e.target.value))}
-                  className="w-full h-10 px-3.5 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
+                <label className="text-xs font-medium text-fg block">No-Show Limit</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={noShowLimit}
+                    onChange={(e) => setNoShowLimit(Number(e.target.value))}
+                    className="w-full h-10 px-3.5 pr-10 rounded-xl border border-line bg-surface/50 text-fg text-sm font-mono focus:border-accent/60 focus:bg-card focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-muted font-mono">calls</span>
+                </div>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Extra blocks the page needs — e.g. days off on the edit page */}
           {children}
         </div>
 
-        {/* Right column: live preview matching the Services Roster cards */}
-        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-6">
+        {/* Right column: live preview */}
+        <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
           <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-medium text-muted">Card Preview</span>
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">Card Preview</span>
             <span className="text-[11px] font-mono text-accent">Live Preview</span>
           </div>
 
@@ -527,45 +483,42 @@ export function ConsultationForm({
             hidePrefix
             className="w-full shadow-sm min-h-[200px]"
             topRightContent={
-              <span className="text-xs font-medium px-3 py-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 shadow-2xs">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live
               </span>
             }
             tags={
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-medium text-muted dark:text-[#a1a1aa] bg-surface/80 dark:bg-white/5 px-2.5 py-0.5 rounded-full border border-line dark:border-white/10 flex items-center gap-1">
+                <span className="text-xs font-mono font-medium text-muted bg-surface px-2.5 py-0.5 rounded-full border border-line flex items-center gap-1">
                   <Clock className="w-3 h-3 text-accent" />
                   {durationMinutes}m
-                </span>
-                <span className="text-xs font-mono font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
-                  {price > 0 ? formatMoney(price, currency, price % 1 === 0 ? 0 : 2) : "Free"}
                 </span>
               </div>
             }
             icon={
-              <div className="w-8 h-8 rounded-xl bg-accent-soft/70 dark:bg-accent/15 border border-accent/25 flex items-center justify-center text-accent shadow-2xs">
+              <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/25 flex items-center justify-center text-accent shadow-2xs">
                 <Video className="w-4 h-4" />
               </div>
             }
           />
 
           {/* Clean Schedule Summary */}
-          <div className="p-4 rounded-2xl border border-line bg-card/60 text-xs space-y-2.5 shadow-xs">
-            <div className="flex items-center justify-between text-muted">
+          <div className="rounded-2xl border border-line/70 bg-card p-5 text-xs space-y-3 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="flex items-center justify-between text-muted border-b border-line/40 pb-2">
               <span>Days</span>
               <span className="font-medium text-fg">{openDays}</span>
             </div>
-            <div className="flex items-center justify-between text-muted">
+            <div className="flex items-center justify-between text-muted border-b border-line/40 pb-2">
               <span>Hours</span>
               <span className="font-mono text-fg font-medium">
                 {String(startHour).padStart(2, "0")}:00 – {String(endHour).padStart(2, "0")}:00
               </span>
             </div>
-            <div className="flex items-center justify-between text-muted pt-2 border-t border-line/50">
-              <span>Meeting Provider</span>
-              <span className="font-medium text-fg flex items-center gap-1.5">
-                <Video className="w-3.5 h-3.5 text-accent" />
+            <div className="flex items-center justify-between text-muted pt-0.5">
+              <span>Meeting Platform</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface border border-line text-fg">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Google Meet
               </span>
             </div>

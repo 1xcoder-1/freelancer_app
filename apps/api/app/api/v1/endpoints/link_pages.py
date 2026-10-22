@@ -1,7 +1,8 @@
 """Link pages (Linktree-style public profile).
 
-Up to 3 pages per workspace, each with a short public slug, an ordered list
-of link buttons, and an append-only event stream powering the stats endpoints.
+Pages per workspace are capped by the plan (pricing.json → link_pages). Each
+page has a short public slug, an ordered list of link buttons, and an
+append-only event stream powering the stats endpoints.
 Owner routes are workspace-scoped like every other module (a page_id that
 belongs to another workspace is a plain 404); public routes address the page
 by slug only (404 — never a "this page exists but is private" hint) and are
@@ -15,11 +16,12 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.quota import enforce_capacity, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.link_page import LinkEvent, LinkItem, LinkPage
 
@@ -28,7 +30,6 @@ router = APIRouter(prefix="/link-pages", tags=["Link Pages"])
 # Lowercase alnum plus hyphens/dots, 2-64 chars, must start and end alnum.
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,62}[a-z0-9]$")
 _MAX_ITEMS = 100  # a link page with 100 buttons is already unusable
-_MAX_PAGES = 3  # per workspace — the dashboard card grid is designed for 3
 
 
 def _validate_slug(value: str) -> str:
@@ -377,18 +378,13 @@ async def create_my_page(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
-    """Create one of the workspace's pages (max 3). Slug uniqueness is
-    checked globally so a taken handle is a clear 409, not a 500."""
+    """Create one of the workspace's pages (the cap is the plan's link_pages
+    limit — see apps/api/config/pricing.json). Slug uniqueness is checked
+    globally so a taken handle is a clear 409, not a 500."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
-
-    count_res = await db.execute(
-        select(func.count()).select_from(LinkPage).where(LinkPage.workspace_id == workspace.id)
+    await enforce_capacity(
+        db, await plan_context(db, current_user), "link_pages", workspace_id=workspace.id
     )
-    if (count_res.scalar_one() or 0) >= _MAX_PAGES:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You can have up to 3 link pages — delete one to add another.",
-        )
 
     taken = await db.execute(select(LinkPage).where(LinkPage.slug == payload.slug))
     if taken.scalar_one_or_none() is not None:
@@ -466,7 +462,7 @@ async def delete_my_page(
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Remove one of the workspace's pages; items and events cascade, which
-    also frees a slot under the 3-page limit."""
+    also frees a slot under the plan's link-page limit."""
     _, workspace = await get_or_create_user_workspace(db, current_user)
     page = await _get_owned_page(db, workspace.id, page_id)
     await db.delete(page)

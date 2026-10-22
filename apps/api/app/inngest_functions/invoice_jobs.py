@@ -15,6 +15,7 @@ from app.core.inngest_client import inngest_client
 from app.models.client import Client
 from app.models.finance import Invoice
 from app.services.email_service import build_invoice_reminder_email, send_email
+from app.services.notify import push_notification
 
 # Blueprint: automated follow-up 4 days after an invoice is overdue.
 REMINDER_GRACE_DAYS = 4
@@ -34,13 +35,25 @@ async def mark_overdue_invoices(session, now: datetime | None = None) -> dict:
     for inv in res.scalars().all():
         inv.status = "overdue"
         marked.append(inv.invoice_number)
+        # Same inbox mirror the manual status endpoint writes — otherwise
+        # cron-overdue invoices never surface in the inbox at all.
+        await push_notification(
+            session,
+            inv.workspace_id,
+            "invoice.overdue",
+            f"Invoice {inv.invoice_number} is overdue",
+            body=f"{inv.total_amount:,.2f} was due and is still outstanding.",
+            link="/dashboard/projects?tab=invoices",
+        )
     await session.commit()
     return {"marked_overdue": len(marked), "invoices": marked}
 
 
 @inngest_client.create_function(
+    # Hourly, not daily: a past-due invoice should surface as 'overdue' in the
+    # app and as an inbox row within the hour it lapses, not the next morning.
     fn_id="invoice.overdue-scan",
-    trigger=inngest.TriggerCron(cron="0 6 * * *"),
+    trigger=inngest.TriggerCron(cron="15 * * * *"),
 )
 async def invoice_overdue_scan(ctx: inngest.Context) -> dict:
     """Daily sweep: mark past-due 'sent' invoices as 'overdue'."""
@@ -107,4 +120,24 @@ async def invoice_reminder_4d(ctx: inngest.Context) -> dict:
         return await send_email(to=invoice["client_email"], subject=subject, text=text, html=html)
 
     result = await ctx.step.run("send-reminder-email", _send)
+
+    # Mirror the reminder into the inbox — the freelancer should see the nudge
+    # that went out on the client's behalf, not only find it in a mailbox.
+    workspace_id = str(data.get("workspace_id") or "")
+    if workspace_id:
+        async def _mirror() -> dict:
+            async with AsyncSessionLocal() as session:
+                await push_notification(
+                    session,
+                    workspace_id,
+                    "invoice.reminder",
+                    f"Reminder sent for invoice {invoice['invoice_number']}",
+                    body=f"Payment nudge emailed to {invoice['client_name']} ({invoice['client_email']}).",
+                    link="/dashboard/projects?tab=invoices",
+                )
+                await session.commit()
+            return {"mirrored": True}
+
+        await ctx.step.run("mirror-reminder-inbox", _mirror)
+
     return {"sent": True, "provider": result.get("provider")}

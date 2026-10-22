@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createProject, getClients, type Client } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
+import { invalidatePlanSnapshot } from "@/hooks/use-plan";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -53,6 +55,13 @@ interface MilestoneDraft {
 export default function NewProjectPage() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const capacity = usePlanCapacity("projects");
+
+  // The API refuses a project beyond the plan's cap, so the form never offers a
+  // create that is certain to fail — it sends the visitor to the tier that has room.
+  useEffect(() => {
+    if (capacity.atLimit) router.replace(capacity.upgradeHref);
+  }, [capacity.atLimit, capacity.upgradeHref, router]);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
@@ -254,6 +263,7 @@ export default function NewProjectPage() {
 
       invalidateCache("projects:data");
       invalidateCache("dashboard:data");
+      invalidatePlanSnapshot();
       guard.markSaved();
       toast.success("Project created successfully!");
       router.push(`/dashboard/projects/${created.id}`);

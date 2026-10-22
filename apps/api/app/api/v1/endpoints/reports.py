@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
+from app.core.quota import enforce_insight, plan_context
 from app.core.workspace import get_or_create_user_workspace
 from app.models.client import Client
 from app.models.finance import Expense, Invoice, InvoicePayment
@@ -37,6 +38,7 @@ async def reports_summary(
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
+    enforce_insight(await plan_context(db, current_user), "reports")
     months = max(3, min(months, 12))
     now = datetime.utcnow()
     window_start = (now.replace(day=1) - timedelta(days=31 * (months - 1))).replace(day=1)

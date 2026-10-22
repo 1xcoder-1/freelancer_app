@@ -7,6 +7,7 @@ effect, and losing one must not fail the business transaction it rode along
 with — the caller's commit matters more.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Optional
@@ -14,6 +15,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
+from app.services.realtime import publish_changed
 
 logger = logging.getLogger(__name__)
 
@@ -41,5 +43,13 @@ async def push_notification(
                     occurred_at=occurred_at or datetime.utcnow(),
                 )
             )
+        # Ping open inbox streams shortly after — delayed so the caller's outer
+        # commit (which usually follows within the same request) lands first and
+        # the client's refetch actually sees the row. A spurious ping after a
+        # rollback is harmless: the refetch just finds nothing new.
+        try:
+            asyncio.get_running_loop().call_later(1.0, publish_changed, workspace_id)
+        except RuntimeError:
+            pass  # no running loop (sync context) — polling still covers it
     except Exception:  # noqa: BLE001 — a failed side effect must not sink the request
         logger.exception("push_notification failed for workspace %s", workspace_id)

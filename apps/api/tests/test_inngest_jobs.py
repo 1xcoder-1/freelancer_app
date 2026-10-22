@@ -23,7 +23,6 @@ import pytest
 from app.inngest_functions.booking_jobs import (
     booking_reminder_24h,
     booking_reminder_1h,
-    booking_payment_confirmed,
 )
 from app.inngest_functions.calendar_jobs import google_calendar_sync
 from app.inngest_functions.invoice_jobs import invoice_overdue_scan, invoice_reminder_4d
@@ -52,7 +51,6 @@ def _make_ctx(event_data=None):
 ALL_FUNCTIONS = [
     booking_reminder_24h,
     booking_reminder_1h,
-    booking_payment_confirmed,
     google_calendar_sync,
     invoice_overdue_scan,
     invoice_reminder_4d,
@@ -109,14 +107,6 @@ async def test_booking_reminder_1h_entrypoint_runs():
     # B6 nudge: missing required fields -> returns immediately without emailing.
     result = await booking_reminder_1h._handler(_make_ctx({}))
     assert result.get("skipped") is True
-
-
-@pytest.mark.asyncio
-async def test_booking_payment_confirmed_entrypoint_runs():
-    # B4: an unknown invoice id resolves to no appointment -> updated False, no
-    # crash (the throwaway schema has no matching appointment row).
-    result = await booking_payment_confirmed._handler(_make_ctx({"invoice_id": "missing"}))
-    assert result["updated"] is False
 
 
 @pytest.mark.asyncio

@@ -33,8 +33,7 @@ import { useApiData, invalidateCache } from "@/hooks/use-api-data";
 import { LINK_TEMPLATES } from "@/components/link-page/template-constants";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { logHandledError } from "@/lib/log-error";
-
-const MAX_PAGES = 3;
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
 /* Overview — real-time headline metric cards at the top, action buttons below them,
    followed by the link tree roster cards (max 3). */
@@ -58,7 +57,10 @@ export default function LinkPageOverview() {
   );
 
   const list = pages ?? [];
-  const atLimit = list.length >= MAX_PAGES;
+  // The quota is the plan's, read from the API snapshot — not a number
+  // duplicated in this file, which is how a fourth page used to slip past.
+  const capacity = usePlanCapacity("link_pages");
+  const atLimit = capacity.atLimit;
 
   // 1. Calculate per-page live metrics (unifying direct item counters & event stream breakdown)
   const aggregateViews = Number(statsData?.totals?.views) || 0;
@@ -222,15 +224,23 @@ export default function LinkPageOverview() {
               ]}
             />
 
-            {/* Card 4: Link Pages Quota */}
+            {/* Card 4: Link Pages Quota (from the plan snapshot) */}
             <StatCard
-              label="Link Pages"
-              value={`${list.length} of ${MAX_PAGES}`}
+              label={capacity.label || "Link pages"}
+              value={
+                capacity.unlimited
+                  ? `${capacity.used} · unlimited`
+                  : `${capacity.used} of ${capacity.limit}`
+              }
               icon={Globe}
               className="min-h-[145px] p-5"
               rows={[
                 {
-                  text: atLimit ? "Maximum quota used" : `${MAX_PAGES - list.length} slot${MAX_PAGES - list.length === 1 ? "" : "s"} left`,
+                  text: capacity.unlimited
+                    ? "Owner account — no cap"
+                    : atLimit
+                      ? `Maximum ${capacity.limit} on ${capacity.planName}`
+                      : `${Number(capacity.limit) - capacity.used} slot${Number(capacity.limit) - capacity.used === 1 ? "" : "s"} left`,
                   dot: atLimit ? "warn" : "ok",
                 },
               ]}

@@ -60,7 +60,6 @@ export default function EditBookingServicePage() {
         title: consultation.title,
         description: consultation.description ?? "",
         durationMinutes: consultation.duration_minutes,
-        price: consultation.price,
         weekdayMask: consultation.weekday_mask || "1111100",
         start_minute: consultation.start_minute,
         end_minute: consultation.end_minute,
@@ -84,10 +83,12 @@ export default function EditBookingServicePage() {
         toast.success("Service updated");
       }}
     >
-      <Card className="p-5 sm:p-6 rounded-2xl border border-line bg-card space-y-4 shadow-xs">
-        <h2 className="text-sm font-medium text-fg">Days Off</h2>
+      <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+        <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+          Days Off
+        </h2>
         <ServiceDaysOffEditor consultationId={consultation.id} />
-      </Card>
+      </div>
     </ConsultationForm>
   );
 }

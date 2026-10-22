@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
 import {
   Users,
   Plus,
@@ -12,6 +11,7 @@ import {
   Layers,
   Crown,
   Repeat,
+  Lock,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,13 +22,12 @@ import { getClients, getProjects, type Client, type Project } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 
-const DEFAULT_CATEGORIES = ["Featured", "VIP & Enterprise", "Repeat Clients", "Active Retainers", "General Clients"];
 const CARDS_PER_PAGE = 20;
 
 export function ClientsPanel() {
   const router = useRouter();
-  const { getToken } = useAuth();
   const wsCurrency = useWorkspaceCurrency().currency;
   const [catPages, setCatPages] = useState<Record<string, number>>({});
 
@@ -50,6 +49,7 @@ export function ClientsPanel() {
 
   const clients = clientsData ?? [];
   const projects = projectsData ?? [];
+  const capacity = usePlanCapacity("clients");
 
   // Helper to get effective category for a client
   const getClientCategory = (c: Client): string => {
@@ -71,7 +71,7 @@ export function ClientsPanel() {
   };
 
   const handleOpenCreate = () => {
-    router.push("/dashboard/clients/new");
+    router.push(capacity.atLimit ? capacity.upgradeHref : "/dashboard/clients/new");
   };
 
   const handleOpenDetail = (client: Client) => {
@@ -240,10 +240,23 @@ export function ClientsPanel() {
 
           <button
             onClick={() => handleOpenCreate()}
-            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
+            title={
+              capacity.atLimit
+                ? `Client limit reached (${capacity.used}/${capacity.limit})`
+                : "Add Client"
+            }
+            className={`press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer ${
+              capacity.atLimit
+                ? "bg-warn/15 text-warn border border-warn/30 hover:bg-warn/20"
+                : "bg-accent hover:bg-accent-hi text-accent-fg"
+            }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Client</span>
+            {capacity.atLimit ? (
+              <Lock className="w-3.5 h-3.5" />
+            ) : (
+              <Plus className="w-3.5 h-3.5" />
+            )}
+            <span>{capacity.atLimit ? "Upgrade plan" : "Add Client"}</span>
           </button>
         </div>
       </div>

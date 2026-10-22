@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   LayoutGrid,
   Layers,
+  Lock,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { formatMoney } from "@/lib/currency";
 import { toast } from "sonner";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { usePlanCapacity } from "@/components/dashboard/PlanLimit";
 import { logHandledError } from "@/lib/log-error";
 
 const CARDS_PER_PAGE = 20;
@@ -38,6 +40,7 @@ const moneyShort = (n: number, currency: string) => formatMoney(n, currency, 0);
 export function ProjectsPanel() {
   const router = useRouter();
   const { getToken } = useAuth();
+  const capacity = usePlanCapacity("projects");
   const { currency } = useWorkspaceCurrency();
 
   const [activeTab, setActiveTab] = useState<"now" | "archive">("now");
@@ -77,7 +80,7 @@ export function ProjectsPanel() {
   const currentProjectList = activeTab === "archive" ? archivedProjects : activeProjects;
 
   const handleOpenCreate = () => {
-    router.push("/dashboard/projects/new");
+    router.push(capacity.atLimit ? capacity.upgradeHref : "/dashboard/projects/new");
   };
 
   const handleOpenDetail = (project: Project) => {
@@ -192,10 +195,23 @@ export function ProjectsPanel() {
 
           <button
             onClick={handleOpenCreate}
-            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
+            title={
+              capacity.atLimit
+                ? `Project limit reached (${capacity.used}/${capacity.limit})`
+                : "Add Project"
+            }
+            className={`press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer ${
+              capacity.atLimit
+                ? "bg-warn/15 text-warn border border-warn/30 hover:bg-warn/20"
+                : "bg-accent hover:bg-accent-hi text-accent-fg"
+            }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Project</span>
+            {capacity.atLimit ? (
+              <Lock className="w-3.5 h-3.5" />
+            ) : (
+              <Plus className="w-3.5 h-3.5" />
+            )}
+            <span>{capacity.atLimit ? "Upgrade plan" : "Add Project"}</span>
           </button>
         </div>
       </div>

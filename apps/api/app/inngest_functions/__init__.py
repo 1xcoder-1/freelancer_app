@@ -7,7 +7,6 @@ when INNGEST_ENABLED is true. Keep this list in sync when adding job modules.
 from app.inngest_functions.booking_jobs import (
     booking_reminder_24h,
     booking_reminder_1h,
-    booking_payment_confirmed,
     booking_google_meet_sync,
     booking_google_event_cancel,
 )
@@ -24,7 +23,6 @@ functions = [
     lead_proposal_expiry_scan,
     booking_reminder_24h,
     booking_reminder_1h,
-    booking_payment_confirmed,
     google_calendar_sync,
     booking_google_meet_sync,
     booking_google_event_cancel,

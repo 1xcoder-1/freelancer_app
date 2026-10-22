@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as Sentry from '@sentry/nextjs';
 import { logHandledError } from "@/lib/log-error";
+import { planDenialFrom } from "@/lib/plans";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -12,27 +13,46 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-function formatApiErrorMessage(error: any): string {
+interface ApiErrorShape {
+  response?: { data?: { detail?: unknown; message?: unknown } };
+  message?: unknown;
+}
+
+function formatApiErrorMessage(error: unknown): string {
   if (!error) return 'An unexpected network error occurred. Please try again.';
 
-  const data = error?.response?.data;
+  const err = error as ApiErrorShape;
+  const data = err.response?.data;
   if (data) {
     if (typeof data.detail === 'string' && data.detail.trim() && data.detail !== '[object Object]') {
       return data.detail.trim();
     }
+    // 402 plan denials carry a structured body (app/core/quota.py). Reading it
+    // here means the toast says which limit was hit instead of a generic failure.
+    const denial = planDenialFrom(data);
+    if (denial) {
+      const label = denial.label || denial.kind || 'this plan feature';
+      if (denial.code === 'plan_feature_locked') return `${label} is not part of your plan.`;
+      if (denial.limit === 0) return `Your plan does not include ${label}.`;
+      return `You have used all ${denial.limit} ${label} on your plan (${denial.used} in use).`;
+    }
     if (Array.isArray(data.detail)) {
       const messages = data.detail
-        .map((d: any) => {
+        .map((d: unknown) => {
           if (typeof d === 'string' && d !== '[object Object]') return d;
           if (d && typeof d === 'object') {
-            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : '';
-            const msg = d.msg || d.message || '';
-            if (field && msg && field !== 'body') return `${field}: ${msg}`;
+            const entry = d as { loc?: unknown; msg?: unknown; message?: unknown };
+            const field = Array.isArray(entry.loc) ? entry.loc[entry.loc.length - 1] : '';
+            const msg =
+              (typeof entry.msg === 'string' && entry.msg) ||
+              (typeof entry.message === 'string' && entry.message) ||
+              '';
+            if (field && msg && field !== 'body') return `${String(field)}: ${msg}`;
             if (msg) return msg;
           }
           return null;
         })
-        .filter(Boolean);
+        .filter((m): m is string => Boolean(m));
       if (messages.length > 0) return messages.join(' • ');
     }
     if (typeof data.message === 'string' && data.message.trim() && data.message !== '[object Object]') {
@@ -40,8 +60,8 @@ function formatApiErrorMessage(error: any): string {
     }
   }
 
-  if (typeof error.message === 'string' && error.message.trim() && error.message !== '[object Object]') {
-    return error.message;
+  if (typeof err.message === 'string' && err.message.trim() && err.message !== '[object Object]') {
+    return err.message;
   }
 
   return 'Unable to complete request. Please check your connection and try again.';
@@ -153,9 +173,12 @@ export interface DuplicatePersonConflict {
 }
 
 export function getDuplicateConflict(err: unknown): DuplicatePersonConflict | null {
-  const detail = (err as { response?: { data?: { detail?: any } } })?.response?.data?.detail;
-  if (detail && typeof detail === 'object' && detail.code === 'duplicate_person' && detail.person?.id) {
-    return detail as DuplicatePersonConflict;
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (detail && typeof detail === 'object') {
+    const d = detail as { code?: unknown; person?: { id?: unknown } };
+    if (d.code === 'duplicate_person' && d.person?.id) {
+      return detail as DuplicatePersonConflict;
+    }
   }
   return null;
 }
@@ -999,7 +1022,6 @@ export interface WorkspaceSettings {
   slug: string;
   business_name?: string;
   professional_title?: string;
-  tax_id?: string;
   currency: string;
   default_hourly_rate: number;
   invoice_prefix: string;
@@ -1527,7 +1549,6 @@ export interface BookingConsultation {
   title: string;
   description?: string;
   duration_minutes: number;
-  price: number;
   meeting_provider: string;
   is_active: boolean;
   token: string;
@@ -1552,14 +1573,11 @@ export interface BookingAppointment {
   client_email: string;
   appointment_time: string;
   meeting_link?: string;
-  payment_status: string;
   notes?: string;
   status: string;
   token?: string;
   reschedule_count: number;
   no_show: boolean;
-  invoice_id?: string | null;
-  invoice_token?: string | null;
   client_id?: string | null;
   created_at: string;
 }
@@ -1569,7 +1587,6 @@ export interface PublicBookingConsultation {
   title: string;
   description?: string;
   duration_minutes: number;
-  price: number;
   freelancer_name: string;
   token: string;
   created_at: string;
@@ -1580,8 +1597,6 @@ export interface PublicBookingConsultation {
   min_lead_hours: number;
   max_advance_days: number;
   buffer_minutes: number;
-  requires_payment: boolean;
-  currency: string;
   intake_form_id?: string | null;
   intake_token?: string | null;
 }
@@ -1598,11 +1613,9 @@ export interface PublicAppointment {
   client_name: string;
   appointment_time: string;
   status: string;
-  payment_status: string;
   meeting_link?: string;
   reschedule_count: number;
   max_reschedules: number;
-  invoice_token?: string | null;
 }
 
 export interface BookingAgenda {
@@ -1612,14 +1625,12 @@ export interface BookingAgenda {
   week_booked: number;
   week_available: number;
   no_show_count: number;
-  prepayment_required: boolean;
 }
 
 export interface BookingConsultationPayload {
   title: string;
   description?: string;
   duration_minutes: number;
-  price: number;
   meeting_provider: string;
   is_active: boolean;
   weekday_mask?: string;
@@ -2352,6 +2363,12 @@ export const markAllNotificationsRead = async (token?: string): Promise<number> 
 export const deleteNotification = async (id: string, token?: string): Promise<void> => {
   await apiClient.delete(`/notifications/${id}`, authHeaders(token));
 };
+
+// Realtime inbox channel (SSE). EventSource cannot send headers, so the
+// short-lived Clerk token rides in the query string — the server verifies it
+// exactly like a Bearer header.
+export const notificationsStreamUrl = (token: string): string =>
+  `${API_URL}/api/v1/notifications/stream?token=${encodeURIComponent(token)}`;
 
 // ------------------------------------------------------------------------------
 // Testimonials — request a quote with a single-use token link, the client

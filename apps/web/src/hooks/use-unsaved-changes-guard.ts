@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 
@@ -45,16 +45,18 @@ export interface UnsavedGuard {
   forcePush: (path: string) => void;
 }
 
-function normalize(v: Record<string, unknown>): Record<string, string> {
+function normalize(v?: Record<string, unknown> | null): Record<string, string> {
   const out: Record<string, string> = {};
+  if (!v || typeof v !== "object") return out;
   for (const k of Object.keys(v)) out[k] = v[k] == null ? "" : String(v[k]);
   return out;
 }
 
 function isDirty(
-  values: Record<string, unknown>,
-  baseline: Record<string, unknown>
+  values?: Record<string, unknown> | null,
+  baseline?: Record<string, unknown> | null
 ): boolean {
+  if (!values && !baseline) return false;
   const a = normalize(values);
   const b = normalize(baseline);
   for (const k of Object.keys(a)) {
@@ -81,7 +83,10 @@ export function useUnsavedChangesGuard({
   onRestoreDraft,
 }: UnsavedGuardOptions): UnsavedGuard {
   const router = useRouter();
-  const [baseline, setBaseline] = useState<Record<string, unknown>>(initial ?? {});
+  const seededRef = useRef(Boolean(enabled && !initial));
+  const [baseline, setBaseline] = useState<Record<string, unknown>>(
+    () => initial ?? (enabled ? values : {})
+  );
 
   const valuesRef = useRef(values);
   valuesRef.current = values;
@@ -91,18 +96,16 @@ export function useUnsavedChangesGuard({
   initialRef.current = initial;
   const bypassRef = useRef(false);
   const restoreAsked = useRef(false);
-  const seededRef = useRef(false);
-  const seededBaselineRef = useRef<Record<string, unknown> | null>(null);
+  const seededBaselineRef = useRef<Record<string, unknown> | null>(
+    enabled && !initial ? { ...values } : null
+  );
   const onRestoreRef = useRef(onRestoreDraft);
   onRestoreRef.current = onRestoreDraft;
 
-  const [dirty, setDirty] = useState(false);
-
-  // Re-evaluate dirtiness whenever the form (or its baseline) moves.
-  useEffect(() => {
-    setDirty(enabled && isDirty(values, baseline));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, baseline, enabled]);
+  // Derived dirtiness — pure computation during render.
+  // Avoids storing dirty in useState and syncing in useEffect, which triggers
+  // cascading renders and "Maximum update depth exceeded" when values changes.
+  const dirty = Boolean(enabled && isDirty(values, baseline));
 
   // "New" forms (no `initial`): baseline starts as the values on first enabled
   // render — their designed defaults — not an empty shell, so pre-filled
@@ -120,9 +123,11 @@ export function useUnsavedChangesGuard({
   // Baseline follows `initial` once (edit forms capture it after loading).
   const initialKey = draftKey ?? "";
   useEffect(() => {
-    if (initial) setBaseline(initial);
+    if (initial) {
+      setBaseline((prev) => (isDirty(prev, initial) ? initial : prev));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialKey, enabled]);
+  }, [initialKey, enabled, initial]);
 
   // Debounced draft autosave while dirty; cleared on save.
   useEffect(() => {
@@ -250,8 +255,9 @@ export function useUnsavedChangesGuard({
 
   const seedBaseline = useCallback(() => {
     seededRef.current = true;
-    seededBaselineRef.current = { ...valuesRef.current };
-    setBaseline({ ...valuesRef.current });
+    const current = { ...valuesRef.current };
+    seededBaselineRef.current = current;
+    setBaseline((prev) => (isDirty(prev, current) ? current : prev));
   }, []);
 
   const guardedPush = useCallback(
@@ -277,5 +283,8 @@ export function useUnsavedChangesGuard({
     [router]
   );
 
-  return { dirty, markSaved, seedBaseline, guardedPush, forcePush };
+  return useMemo(
+    () => ({ dirty, markSaved, seedBaseline, guardedPush, forcePush }),
+    [dirty, markSaved, seedBaseline, guardedPush, forcePush]
+  );
 }

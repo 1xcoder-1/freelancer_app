@@ -67,21 +67,6 @@ function ProfileMenuPanel({
   email?: string;
   onClose: () => void;
 }) {
-  // Lazy init is safe: the panel only renders after a user click (never in
-  // the SSR output), so document is always available here.
-  const [theme, setTheme] = useState<"light" | "dark">(() =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-      ? "dark"
-      : "light"
-  );
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.classList.toggle("dark", next === "dark");
-    localStorage.setItem("fb-theme", next);
-    setTheme(next);
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -116,28 +101,6 @@ function ProfileMenuPanel({
         <User className="w-4 h-4 text-muted shrink-0" />
         My Profile
       </Link>
-
-      <button
-        type="button"
-        onClick={toggleTheme}
-        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg hover:bg-surface transition-colors"
-      >
-        <span className="w-4 h-4 flex items-center justify-center text-muted shrink-0">
-          {/* Same half-circle mark as the top-bar ThemeToggle */}
-          {theme === "dark" ? (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-            </svg>
-          )}
-        </span>
-        Toggle theme
-      </button>
 
       <div className="border-t border-dashed border-line my-1" />
 
@@ -440,8 +403,8 @@ export function DashboardSidebar() {
                         onMouseEnter={(e) => openSubmenuAt(item.title, e.currentTarget)}
                         onMouseLeave={scheduleFlyoutClose}
                         className={`press relative flex items-center rounded-full text-sm w-11 h-11 mx-auto justify-center ${isActive
-                            ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                            : "text-muted font-medium hover:bg-surface hover:text-fg"
+                          ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                          : "text-muted font-medium hover:bg-surface hover:text-fg"
                           }`}
                         title={item.title}
                       >
@@ -460,8 +423,8 @@ export function DashboardSidebar() {
                         data-nav-row
                         onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.title)}
                         className={`press w-full flex items-center justify-between px-4 py-2.5 rounded-full text-sm ${isActive
-                            ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                            : "text-muted font-medium hover:bg-surface hover:text-fg"
+                          ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                          : "text-muted font-medium hover:bg-surface hover:text-fg"
                           }`}
                       >
                         <div className="flex items-center gap-3">
@@ -493,8 +456,8 @@ export function DashboardSidebar() {
                                   href={child.href}
                                   data-nav-row
                                   className={`press flex items-center justify-between px-3 py-2 rounded-xl text-xs ${isCurrent
-                                      ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                                      : "text-muted hover:bg-surface hover:text-fg font-medium"
+                                    ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                                    : "text-muted hover:bg-surface hover:text-fg font-medium"
                                     }`}
                                 >
                                   <div className="flex items-center gap-2.5">
@@ -520,8 +483,8 @@ export function DashboardSidebar() {
                 <div
                   data-nav-row
                   className={`press relative flex items-center gap-3 rounded-full text-sm ${isActive
-                      ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                      : "text-muted font-medium hover:bg-surface hover:text-fg"
+                    ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                    : "text-muted font-medium hover:bg-surface hover:text-fg"
                     } ${isCollapsed ? "w-11 h-11 mx-auto justify-center px-0" : "px-4 py-2.5"}`}
                   title={item.title}
                 >
@@ -667,8 +630,8 @@ export function DashboardSidebar() {
                       data-nav-row
                       onClick={() => setOpenSubmenu(null)}
                       className={`press flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${isCurrent
-                          ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
-                          : "text-fg hover:bg-surface hover:text-accent"
+                        ? "bg-accent-soft text-fg font-bold border border-accent/40 shadow-xs"
+                        : "text-fg hover:bg-surface hover:text-accent"
                         }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">

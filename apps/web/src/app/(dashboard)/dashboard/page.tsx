@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useUser, useAuth } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "sonner";
+import { showWelcomeToast } from "@/components/dashboard/WelcomeToast";
 import {
   Clock,
   DollarSign,
@@ -17,6 +19,7 @@ import {
   TrendingDown,
   Users,
   AlertTriangle,
+  Inbox,
   MessageSquare,
   Video,
 } from "@/components/animated-icons";
@@ -24,24 +27,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard, StatChip } from "@/components/dashboard/patterns";
+import { CalendarEventDetailModal } from "@/components/dashboard/CalendarEventModals";
 import {
   getDashboardStats,
   getDashboardOverview,
-  getActiveTimer,
   getCalendarEvents,
   getExpenses,
+  getProjects,
+  getClients,
   getLeads,
   getIntakeForms,
   getContracts,
   getBookings,
   getBookingAppointments,
-  type TimerSession,
   type CalendarFeedItem,
+  type Project,
+  type Client,
 } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
 import { useLiveNotifications } from "@/hooks/use-live-notifications";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { formatMoney } from "@/lib/currency";
+import {
+  humanizeInvoiceNumber,
+  formatHumanDate,
+  humanizeCalendarTitle,
+  humanizeEventType,
+} from "@/lib/humanize";
 
 /* ------------------------------------------------------------------
    Home is deliberately simple: a greeting, the four numbers every
@@ -51,11 +63,12 @@ import { formatMoney } from "@/lib/currency";
    the supporting metrics — nothing shows twice.
 ------------------------------------------------------------------- */
 
-type TabKey = "today" | "projects" | "invoices" | "time";
+type TabKey = "today" | "projects" | "invoices";
 
 export default function DashboardPage() {
   const { user } = useUser();
   const [tab, setTab] = useState<TabKey>("today");
+  const [selectedEventDetail, setSelectedEventDetail] = useState<CalendarFeedItem | null>(null);
 
   const { data: dashboardData, loading, error, refresh: loadData } = useApiData(
     "dashboard:data",
@@ -70,6 +83,8 @@ export default function DashboardPage() {
         contractsRes,
         bookingsRes,
         appointmentsRes,
+        projectsRes,
+        clientsRes,
       ] = await Promise.all([
         getDashboardStats(token),
         getDashboardOverview(token),
@@ -79,6 +94,8 @@ export default function DashboardPage() {
         getContracts(undefined, token).catch(() => []),
         getBookings(token).catch(() => []),
         getBookingAppointments(undefined, token).catch(() => []),
+        getProjects(token).catch(() => []),
+        getClients(token).catch(() => []),
       ]);
       return {
         stats: statsRes,
@@ -89,6 +106,8 @@ export default function DashboardPage() {
         contracts: contractsRes,
         bookings: bookingsRes,
         appointments: appointmentsRes,
+        projects: projectsRes,
+        clients: clientsRes,
       };
     },
     { reportContext: "dashboard" }
@@ -99,7 +118,30 @@ export default function DashboardPage() {
   const expenses = dashboardData?.expenses ?? [];
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const recurringExpenses = expenses.filter((e) => e.is_recurring).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const expensesCount = expenses.length;
+  const now = new Date();
+  const thisMonthExpenses = expenses
+    .filter((e) => {
+      if (!e.created_at) return false;
+      const d = new Date(e.created_at);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    })
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  // Real live projects metrics (zero dummy repetition)
+  const projects: Project[] = dashboardData?.projects ?? [];
+  const totalProjects = projects.length > 0 ? projects.length : (stats?.active_projects_count ?? 0);
+  const doneProjects = projects.filter((p) => p.status === "completed").length;
+  const incompleteProjects = projects.length > 0
+    ? projects.filter((p) => p.status !== "completed").length
+    : (stats?.active_projects_count ?? 0);
+
+  // Real live clients metrics (zero dummy repetition)
+  const clients: Client[] = dashboardData?.clients ?? [];
+  const totalClients = clients.length > 0 ? clients.length : (stats?.active_clients_count ?? 0);
+  const activeClients = clients.length > 0
+    ? clients.filter((c) => c.status !== "archived").length
+    : (stats?.active_clients_count ?? 0);
+  const inactiveClients = clients.filter((c) => c.status === "archived").length;
 
   const leads = dashboardData?.leads ?? [];
   const pendingLeadsCount = leads.filter((l) => l.stage !== "won" && l.stage !== "lost").length;
@@ -122,7 +164,7 @@ export default function DashboardPage() {
   const unreadCount = useLiveNotifications();
 
   // Today's schedule — same feed the calendar uses, window = today only.
-  const { data: todayEvents, loading: todayLoading } = useApiData<CalendarFeedItem[]>(
+  const { data: todayEvents, loading: todayLoading, refresh: refreshToday } = useApiData<CalendarFeedItem[]>(
     "dashboard:today",
     async (token) => {
       const start = new Date();
@@ -134,75 +176,43 @@ export default function DashboardPage() {
     { reportContext: "dashboard-today" }
   );
 
-  const firstName = (user?.firstName || user?.fullName || "").trim();
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const todayLabel = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  // Sync real-time updates when tasks/events are created, updated, or deleted
+  useEffect(() => {
+    const handleCalendarUpdate = () => {
+      refreshToday(true);
+    };
+    window.addEventListener("calendar-updated", handleCalendarUpdate);
+    return () => window.removeEventListener("calendar-updated", handleCalendarUpdate);
+  }, [refreshToday]);
+
+  // When a user opens the dashboard page, display a polished welcome toast
+  const hasGreetedRef = useRef(false);
+  useEffect(() => {
+    if (hasGreetedRef.current) return;
+    if (user === undefined) return;
+    hasGreetedRef.current = true;
+
+    const timer = setTimeout(() => {
+      const name = (user?.firstName || user?.fullName || "").trim();
+      showWelcomeToast(name);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [user]);
 
   const { currency } = useWorkspaceCurrency();
   const usd = (n: number | undefined) => formatMoney(n ?? 0, currency, 0);
+  const num = (n: number | undefined) => (n ?? 0).toLocaleString();
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "today", label: "Today" },
-    { key: "projects", label: "My Projects" },
+    { key: "projects", label: "Projects" },
     { key: "invoices", label: "Recent Invoices" },
-    { key: "time", label: "Time Entries" },
   ];
 
   return (
     <div className="space-y-6 enter-stagger">
-      {/* Greeting + one-line summary */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg" suppressHydrationWarning>
-            {greeting}
-            {firstName ? `, ${firstName}` : ""}
-          </h1>
-          <p className="text-muted text-sm mt-1" suppressHydrationWarning>{todayLabel}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadData(true)}
-            disabled={loading}
-            className="rounded-xl bg-card border-line text-fg w-9 h-9 p-0 flex items-center justify-center shrink-0"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-          <Link href="/dashboard/inbox" className="relative inline-flex">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl bg-card border-line text-fg w-9 h-9 p-0 flex items-center justify-center shrink-0 hover:bg-surface"
-              title="Inbox"
-              aria-label="Open inbox"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-            </Button>
-            {unreadCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full bg-accent text-accent-fg text-[10px] font-bold flex items-center justify-center border-2 border-bg">
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </Link>
-          <Link href="/dashboard/calendar" className="inline-flex">
-            <Button
-              size="sm"
-              className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold shadow-sm"
-              title="Calendar"
-            >
-              <CalendarDays className="w-3.5 h-3.5 mr-1" />
-              Calendar
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <h1 className="sr-only">Dashboard</h1>
 
       {/* Data unreachable: show a retry strip instead of silent zeros. */}
       {!loading && error && !dashboardData && (
@@ -245,15 +255,13 @@ export default function DashboardPage() {
               href="/dashboard/cashflow"
               rows={[
                 {
-                  text: stats?.revenue_growth_pct != null
-                    ? `${stats.revenue_growth_pct >= 0 ? "+" : ""}${Math.round(stats.revenue_growth_pct)}% vs last month`
-                    : "Cleared this month",
+                  text: `${num(stats?.monthly_revenue)} This month`,
                   dot: "ok",
                   href: "/dashboard/cashflow",
                 },
                 {
-                  text: `${usd(stats?.pending_invoices_amount)} Pending`,
-                  dot: "danger",
+                  text: `${num(stats?.pending_invoices_amount)} Pending`,
+                  dot: (stats?.pending_invoices_amount ?? 0) > 0 ? "warn" : "info",
                   href: "/dashboard/projects?tab=invoices",
                 },
               ]}
@@ -264,28 +272,52 @@ export default function DashboardPage() {
               icon={TrendingDown}
               href="/dashboard/cashflow?tab=expenses"
               rows={[
-                { text: `${expensesCount} Recorded`, dot: "ok", href: "/dashboard/cashflow?tab=expenses" },
-                { text: `${usd(recurringExpenses)} Recurring`, dot: "danger", href: "/dashboard/cashflow?tab=expenses" },
+                {
+                  text: `${num(thisMonthExpenses)} This month`,
+                  dot: "ok",
+                  href: "/dashboard/cashflow?tab=expenses",
+                },
+                {
+                  text: `${num(recurringExpenses)} Recurring`,
+                  dot: recurringExpenses > 0 ? "warn" : "info",
+                  href: "/dashboard/cashflow?tab=expenses",
+                },
               ]}
             />
             <StatCard
               label="Projects"
-              value={stats?.active_projects_count ?? 0}
+              value={totalProjects}
               icon={LayoutGrid}
               href="/dashboard/projects"
               rows={[
-                { text: `${stats?.active_projects_count ?? 0} Total`, dot: "ok", href: "/dashboard/projects" },
-                { text: `${stats?.active_projects_count ?? 0} In Progress`, dot: "danger", href: "/dashboard/projects" },
+                {
+                  text: `${doneProjects} Done`,
+                  dot: "ok",
+                  href: "/dashboard/projects",
+                },
+                {
+                  text: `${incompleteProjects} Incomplete`,
+                  dot: incompleteProjects > 0 ? "warn" : "info",
+                  href: "/dashboard/projects",
+                },
               ]}
             />
             <StatCard
               label="Active Clients"
-              value={stats?.active_clients_count ?? 0}
+              value={totalClients}
               icon={Users}
               href="/dashboard/clients"
               rows={[
-                { text: `${stats?.active_clients_count ?? 0} Retainers`, check: true, href: "/dashboard/clients" },
-                { text: `${stats?.active_clients_count ?? 0} Ongoing`, dot: "danger", href: "/dashboard/clients" },
+                {
+                  text: `${activeClients} Active`,
+                  dot: "ok",
+                  href: "/dashboard/clients",
+                },
+                {
+                  text: `${inactiveClients} Inactive`,
+                  dot: inactiveClients > 0 ? "warn" : "info",
+                  href: "/dashboard/clients",
+                },
               ]}
             />
           </>
@@ -316,7 +348,7 @@ export default function DashboardPage() {
         </StatChip>
         {unreadCount > 0 && (
           <StatChip tone="amber" href="/dashboard/inbox">
-            <MessageSquare className="w-3.5 h-3.5" />
+            <Inbox className="w-3.5 h-3.5" />
             <span className="font-semibold">{String(unreadCount)}</span>
             <span>New signals</span>
           </StatChip>
@@ -325,232 +357,385 @@ export default function DashboardPage() {
 
       {/* One small tabbed area — pick a label, see a short list */}
       <div className="bg-card border border-line rounded-xl p-5">
-        <div className="flex items-center gap-5 border-b border-line mb-4 overflow-x-auto no-scrollbar">
-          {tabs.map((t) => (
+        <div className="flex items-center justify-between gap-3 border-b border-line mb-4 pb-2 select-none">
+          <div className="flex items-center gap-5 overflow-x-auto no-scrollbar select-none">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`py-2 px-1 text-sm font-semibold border-b-2 -mb-[9px] whitespace-nowrap transition-colors cursor-pointer select-none outline-none focus:outline-none focus-visible:ring-0 ${
+                  tab === t.key
+                    ? "border-accent text-accent"
+                    : "border-transparent text-muted hover:text-fg"
+                }`}
+                style={{ caretColor: "transparent", userSelect: "none" }}
+              >
+                <span className="select-none pointer-events-none">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Quick Actions in the same row as the tabs */}
+          <div className="flex items-center gap-2 shrink-0 select-none">
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`py-2.5 px-1 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap transition-colors cursor-pointer ${
-                tab === t.key
-                  ? "border-accent text-accent"
-                  : "border-transparent text-muted hover:text-fg"
-              }`}
+              type="button"
+              onClick={() => loadData(true)}
+              disabled={loading}
+              className="w-9 h-9 rounded-xl border border-line bg-surface/40 hover:bg-surface text-muted hover:text-fg hover:border-line-strong flex items-center justify-center shadow-xs transition-all active:scale-[0.96] cursor-pointer disabled:opacity-50"
+              title="Refresh dashboard"
+              aria-label="Refresh dashboard"
             >
-              {t.label}
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-accent" : ""}`} />
             </button>
-          ))}
+
+            <Link
+              href="/dashboard/inbox"
+              className="relative w-9 h-9 rounded-xl border border-line bg-surface/40 hover:bg-surface text-muted hover:text-fg hover:border-line-strong flex items-center justify-center shadow-xs transition-all active:scale-[0.96] cursor-pointer group"
+              title="Inbox"
+              aria-label="Open inbox"
+            >
+              <Inbox className="w-4 h-4 text-muted group-hover:text-fg transition-colors" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#ea580c] text-white text-[9px] font-bold flex items-center justify-center shadow-xs ring-2 ring-card tracking-tight pointer-events-none">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Link>
+
+            {tab === "projects" ? (
+              <Link
+                href="/dashboard/projects/new"
+                className="h-9 px-3.5 rounded-xl border border-line bg-surface/40 hover:bg-surface text-muted hover:text-fg hover:border-line-strong flex items-center gap-2 text-xs font-medium transition-all active:scale-[0.96] shadow-xs cursor-pointer group"
+                title="Create New Project"
+                aria-label="Create New Project"
+              >
+                <Plus className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span className="font-medium text-fg/90 group-hover:text-fg transition-colors">New Project</span>
+              </Link>
+            ) : tab === "invoices" ? (
+              <Link
+                href="/dashboard/projects?tab=invoices"
+                className="h-9 px-3.5 rounded-xl border border-line bg-surface/40 hover:bg-surface text-muted hover:text-fg hover:border-line-strong flex items-center gap-2 text-xs font-medium transition-all active:scale-[0.96] shadow-xs cursor-pointer group"
+                title="View All Invoices"
+                aria-label="View All Invoices"
+              >
+                <Receipt className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span className="font-medium text-fg/90 group-hover:text-fg transition-colors">Invoices</span>
+              </Link>
+            ) : (
+              <Link
+                href="/dashboard/calendar"
+                className="h-9 px-3.5 rounded-xl border border-line bg-surface/40 hover:bg-surface text-muted hover:text-fg hover:border-line-strong flex items-center gap-2 text-xs font-medium transition-all active:scale-[0.96] shadow-xs cursor-pointer group"
+                title="Open Calendar"
+                aria-label="Open Calendar"
+              >
+                <CalendarDays className="w-3.5 h-3.5 text-accent shrink-0" />
+                <span className="font-medium text-fg/90 group-hover:text-fg transition-colors">Calendar</span>
+              </Link>
+            )}
+          </div>
         </div>
 
         <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={tab}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-        >
-        {tab === "today" && (
-          todayLoading ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-12 rounded-lg" />
-              ))}
-            </div>
-          ) : todayEvents && todayEvents.length > 0 ? (
-            <div className="divide-y divide-line">
-              {todayEvents.map((ev) => {
-                const eventHref =
-                  ev.source === "booking"
-                    ? `/dashboard/booking/calls/${ev.id}`
-                    : ev.source === "invoice"
-                    ? "/dashboard/projects?tab=invoices"
-                    : "/dashboard/calendar";
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+          >
+            {tab === "today" && (
+              <div className="space-y-3">
+                {todayLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-16 rounded-xl" />
+                    ))}
+                  </div>
+                ) : todayEvents && todayEvents.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {todayEvents.map((ev) => {
+                      const isDeadline = ev.event_type === "deadline";
+                      const isMeeting = ev.event_type === "meeting";
+                      const isClientWork = ev.event_type === "client_work";
 
-                return (
-                  <Link
-                    key={ev.id}
-                    href={eventHref}
-                    className="flex items-center gap-3 py-2.5 px-2 -mx-2 hover:bg-surface/70 rounded-xl transition-all cursor-pointer group select-none"
-                    title={`Open ${ev.title}`}
-                  >
-                    <span className="text-xs font-mono text-muted w-16 shrink-0 group-hover:text-fg transition-colors">
-                      {new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                    </span>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      ev.event_type === "deadline" ? "bg-danger"
-                        : ev.event_type === "meeting" ? "bg-info"
-                        : ev.event_type === "client_work" ? "bg-accent" : "bg-faint"
-                    }`} />
-                    <span className="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">{ev.title}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-faint ml-auto shrink-0 font-mono">
-                      {ev.event_type.replace("_", " ")}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all shrink-0" />
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <SimpleEmpty
-              icon={Calendar}
-              title="Nothing scheduled today"
-              desc="Add a meeting or deadline in the calendar to see it here."
-              action={
-                <Link href="/dashboard/calendar">
-                  <Button size="sm" variant="outline" className="rounded-lg border-line text-fg mt-4">
-                    <Plus className="w-4 h-4 mr-1.5" />
-                    Open Calendar
-                  </Button>
-                </Link>
-              }
-            />
-          )
-        )}
+                      const badgeStyle = isDeadline
+                        ? "bg-rose-500/10 text-rose-400 border-rose-500/25"
+                        : isMeeting
+                          ? "bg-sky-500/10 text-sky-400 border-sky-500/25"
+                          : isClientWork
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                            : "bg-purple-500/10 text-purple-400 border-purple-500/25";
 
-        {tab === "projects" && (
-          loading ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-14 rounded-lg" />
-              ))}
-            </div>
-          ) : overview?.recent_projects && overview.recent_projects.length > 0 ? (
-            <div className="divide-y divide-line">
-              {overview.recent_projects.slice(0, 4).map((proj) => (
-                <Link
-                  key={proj.id}
-                  href="/dashboard/projects"
-                  className="flex items-center gap-4 py-3 hover:bg-surface/60 rounded-lg transition-colors px-2 -mx-2"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-fg truncate">{proj.title}</p>
-                    <p className="text-xs text-muted">{proj.client_name}</p>
-                  </div>
-                  <div className="w-28 shrink-0 hidden sm:block">
-                    <div className="w-full bg-surface rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-accent h-full rounded-full" style={{ width: `${proj.progress_pct}%` }} />
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted font-mono w-12 text-right">{proj.progress_pct}%</span>
-                  <ChevronRight className="w-4 h-4 text-faint shrink-0" />
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <SimpleEmpty
-              icon={LayoutGrid}
-              title="No projects yet"
-              desc="Create your first project to organize tasks and track time."
-              action={
-                <Link href="/dashboard/projects" className="inline-block mt-4">
-                  <Button size="sm" className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg">
-                    <Plus className="w-4 h-4 mr-1.5" />
-                    Create Project
-                  </Button>
-                </Link>
-              }
-            />
-          )
-        )}
+                      const dotColor = isDeadline
+                        ? "bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.5)]"
+                        : isMeeting
+                          ? "bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)]"
+                          : isClientWork
+                            ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]"
+                            : "bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.5)]";
 
-        {tab === "invoices" && (
-          loading ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-14 rounded-lg" />
-              ))}
-            </div>
-          ) : overview?.recent_invoices && overview.recent_invoices.length > 0 ? (
-            <div className="divide-y divide-line">
-              {overview.recent_invoices.slice(0, 4).map((inv) => (
-                <Link
-                  key={inv.id}
-                  href="/dashboard/projects?tab=invoices"
-                  className="flex items-center gap-4 py-3 hover:bg-surface/60 rounded-lg transition-colors px-2 -mx-2"
-                >
-                  <div className="p-2 rounded-full bg-accent-soft text-accent shrink-0">
-                    <Receipt className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-fg truncate">{inv.number}</p>
-                    <p className="text-xs text-muted">{inv.client} • {inv.issue_date}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-fg font-mono">{formatMoney(inv.amount, currency)}</p>
-                    <span
-                      className={`text-[10px] font-mono font-semibold ${
-                        inv.status === "paid" ? "text-ok" : inv.status === "overdue" ? "text-danger" : "text-warn"
-                      }`}
-                    >
-                      {inv.status.toUpperCase()}
-                    </span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-faint shrink-0" />
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <SimpleEmpty
-              icon={Receipt}
-              title="No invoices yet"
-              desc="Invoices now live inside Projects — create one and send it in minutes."
-              action={
-                <Link href="/dashboard/projects?tab=invoices" className="inline-block mt-4">
-                  <Button size="sm" className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg">
-                    <Plus className="w-4 h-4 mr-1.5" />
-                    Create Invoice
-                  </Button>
-                </Link>
-              }
-            />
-          )
-        )}
+                      const timeText = ev.is_all_day
+                        ? "All day"
+                        : new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-        {tab === "time" && (
-          loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-16 rounded-lg" />
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-12 rounded-lg" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <LiveFocusWidget />
-              {overview?.recent_time_entries && overview.recent_time_entries.length > 0 ? (
-                <div className="divide-y divide-line">
-                  {overview.recent_time_entries.slice(0, 4).map((t) => (
-                    <Link
-                      key={t.id}
-                      href="/dashboard/time-tracker"
-                      className="flex items-center justify-between py-2.5 px-2 -mx-2 hover:bg-surface/60 rounded-lg transition-colors cursor-pointer group"
-                      title="Open in Time Tracker"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{t.task}</p>
-                        <p className="text-xs text-muted">{t.project} • {t.date}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="font-mono text-sm text-fg font-semibold">{t.duration}</span>
-                        <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-faint text-center py-4">
-                  No time tracked yet.{" "}
-                  <Link href="/dashboard/time-tracker" className="text-accent font-semibold hover:underline">
-                    Start the timer
-                  </Link>
-                </p>
-              )}
-            </div>
-          )
-        )}
-        </motion.div>
+                      return (
+                        <div
+                          key={ev.id}
+                          onClick={() => setSelectedEventDetail(ev)}
+                          className="group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-line/70 bg-surface/30 hover:bg-surface/70 hover:border-line transition-all cursor-pointer select-none"
+                          title={`View details for ${ev.title}`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {/* Compact time badge */}
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface border border-line/80 text-[11px] font-medium text-fg/90 shrink-0">
+                              <Clock className="w-3 h-3 text-muted" />
+                              <span>{timeText}</span>
+                            </div>
+
+                            <p className="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors shrink-0">
+                              {humanizeCalendarTitle(ev.title)}
+                            </p>
+
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium border shrink-0 ${badgeStyle}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                              {humanizeEventType(ev.event_type)}
+                            </span>
+
+                            {ev.client_name && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0 truncate">
+                                <Users className="w-3 h-3 text-muted" />
+                                <span>Client: {ev.client_name}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            {ev.meeting_link && (
+                              <a
+                                href={ev.meeting_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md bg-accent hover:bg-accent-hi text-accent-fg text-[11px] font-medium transition-all shadow-xs cursor-pointer active:scale-95"
+                              >
+                                <Video className="w-3 h-3" />
+                                <span>Join</span>
+                              </a>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <SimpleEmpty
+                    icon={Calendar}
+                    title="Nothing scheduled today"
+                    desc="Add a meeting, client deliverable, or deadline to keep your day on track."
+                    action={
+                      <Link href="/dashboard/calendar" className="inline-block mt-4">
+                        <Button size="sm" className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg">
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Open Calendar
+                        </Button>
+                      </Link>
+                    }
+                  />
+                )}
+              </div>
+            )}
+
+            {tab === "projects" && (
+              <div className="space-y-2.5">
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-11 rounded-xl" />
+                    ))}
+                  </div>
+                ) : overview?.recent_projects && overview.recent_projects.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {overview.recent_projects.slice(0, 5).map((proj) => (
+                      <Link
+                        key={proj.id}
+                        href={`/dashboard/projects/${proj.id}`}
+                        className="group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-line/70 bg-surface/30 hover:bg-surface/70 hover:border-line transition-all select-none"
+                        title={`View project: ${proj.title}`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-7 h-7 rounded-lg bg-accent-soft text-accent border border-accent/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                          </div>
+
+                          <p className="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">
+                            {proj.title}
+                          </p>
+
+                          {proj.client_name && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0 truncate max-w-[140px]">
+                              <Users className="w-3 h-3 text-muted" />
+                              <span>{proj.client_name}</span>
+                            </span>
+                          )}
+
+                          {proj.due_date && (
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0">
+                              <Calendar className="w-3 h-3 text-muted" />
+                              <span>Due {formatHumanDate(proj.due_date)}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 sm:w-28 bg-surface rounded-full h-1.5 overflow-hidden border border-line/60">
+                              <div
+                                className="bg-accent h-full rounded-full transition-all duration-300"
+                                style={{ width: `${Math.min(100, Math.max(0, proj.progress_pct))}%` }}
+                              />
+                            </div>
+                            <span className="text-[11px] font-semibold text-fg/90 min-w-[32px] text-right font-mono">
+                              {proj.progress_pct}%
+                            </span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <SimpleEmpty
+                    icon={LayoutGrid}
+                    title="No projects yet"
+                    desc="Create your first project to organize tasks and track time."
+                    action={
+                      <Link href="/dashboard/projects/new" className="inline-block mt-4">
+                        <Button size="sm" className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg">
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Create Project
+                        </Button>
+                      </Link>
+                    }
+                  />
+                )}
+              </div>
+            )}
+
+            {tab === "invoices" && (
+              <div className="space-y-2.5">
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-11 rounded-xl" />
+                    ))}
+                  </div>
+                ) : overview?.recent_invoices && overview.recent_invoices.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {overview.recent_invoices.slice(0, 5).map((inv) => {
+                      const isPaid = inv.status === "paid";
+                      const isOverdue = inv.status === "overdue";
+                      const statusPill = isPaid ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                          Paid
+                        </span>
+                      ) : isOverdue ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/25 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.5)]" />
+                          Overdue
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
+                          Pending
+                        </span>
+                      );
+
+                      const humanTitle = humanizeInvoiceNumber(inv.number);
+                      const formattedDate = formatHumanDate(inv.issue_date);
+
+                      return (
+                        <Link
+                          key={inv.id}
+                          href="/dashboard/projects?tab=invoices"
+                          className="group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-line/70 bg-surface/30 hover:bg-surface/70 hover:border-line transition-all select-none"
+                          title={`View invoice: ${humanTitle}`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
+                              isPaid
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : isOverdue
+                                  ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                  : "bg-accent-soft text-accent border-accent/20"
+                            }`}>
+                              <Receipt className="w-3.5 h-3.5" />
+                            </div>
+
+                            <p className="text-sm font-medium text-fg truncate group-hover:text-accent transition-colors">
+                              {humanTitle}
+                            </p>
+
+                            {inv.client && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0 truncate max-w-[140px]">
+                                <Users className="w-3 h-3 text-muted" />
+                                <span>{inv.client}</span>
+                              </span>
+                            )}
+
+                            {formattedDate && (
+                              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0">
+                                <Clock className="w-3 h-3 text-muted" />
+                                <span>{formattedDate}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            {statusPill}
+                            <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <SimpleEmpty
+                    icon={Receipt}
+                    title="No invoices yet"
+                    desc="Bill clients and track payments from your projects."
+                    action={
+                      <Link href="/dashboard/projects?tab=invoices" className="inline-block mt-4">
+                        <Button size="sm" className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg">
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Create Invoice
+                        </Button>
+                      </Link>
+                    }
+                  />
+                )}
+              </div>
+            )}
+
+
+          </motion.div>
         </AnimatePresence>
       </div>
+
+      {selectedEventDetail && (
+        <CalendarEventDetailModal
+          item={selectedEventDetail}
+          onClose={() => setSelectedEventDetail(null)}
+          onDeleted={() => {
+            setSelectedEventDetail(null);
+            refreshToday(true);
+            loadData(true);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -576,82 +761,3 @@ function SimpleEmpty({
   );
 }
 
-function LiveFocusWidget() {
-  const { getToken } = useAuth();
-  const [session, setSession] = useState<TimerSession | null>(null);
-  const [drift, setDrift] = useState(0);
-
-  const pull = useCallback(async () => {
-    try {
-      const token = (await getToken()) || undefined;
-      const s = await getActiveTimer(token);
-      setSession(s);
-      setDrift(0);
-    } catch {
-      // A poll failure shouldn't blank the widget; keep the last known state.
-    }
-  }, [getToken]);
-
-  // Restore on mount and periodically re-sync against the server clock.
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const token = (await getToken()) || undefined;
-      try {
-        const s = await getActiveTimer(token);
-        if (mounted) {
-          setSession(s);
-          setDrift(0);
-        }
-      } catch {
-        // ignore; the interval will retry
-      }
-    })();
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") void pull();
-    }, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(id);
-    };
-  }, [pull, getToken]);
-
-  // Smooth local ticking while a run is active.
-  useEffect(() => {
-    if (!session?.is_running) return;
-    const id = setInterval(() => setDrift((d) => d + 1), 1000);
-    return () => clearInterval(id);
-  }, [session?.is_running]);
-
-  if (!session) return null;
-
-  const total = session.elapsed_seconds + (session.is_running ? drift : 0);
-  const hrs = Math.floor(total / 3600);
-  const mins = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-  const fmt = `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-
-  return (
-    <div className="bg-surface border border-line rounded-xl p-4 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <div className={`p-2.5 rounded-xl ${session.is_running ? "bg-accent-soft text-accent" : "bg-card text-muted"}`}>
-          <Clock className={`w-5 h-5 ${session.is_running ? "animate-pulse" : ""}`} />
-        </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-faint">
-            {session.is_running ? "Currently focused on" : "Paused session"}
-          </p>
-          <h4 className="text-sm font-semibold text-fg">{session.project_title || "Untitled project"}</h4>
-        </div>
-      </div>
-      <div className="flex items-center gap-4">
-        <span className="font-mono text-xl font-bold text-accent">{fmt}</span>
-        <Link href="/dashboard/time-tracker">
-          <Button size="sm" variant="outline" className="rounded-lg border-line text-fg">
-            Open Timer
-          </Button>
-        </Link>
-      </div>
-    </div>
-  );
-}

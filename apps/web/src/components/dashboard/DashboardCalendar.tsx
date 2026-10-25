@@ -2,12 +2,12 @@
 
 /* eslint-disable react-hooks/exhaustive-deps */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
   ChevronLeft,
   ChevronRight,
-  Plus,
+  ChevronDown,
   X,
   CalendarDays,
   RefreshCw,
@@ -18,11 +18,12 @@ import {
 } from "@/components/animated-icons";
 
 import { Button } from "@/components/ui/button";
+import { CalendarSkeleton } from "./CalendarSkeleton";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "sonner";
+import { CalendarEventDetailModal } from "./CalendarEventModals";
 import {
   getCalendarEvents,
-  createCalendarEvent,
   deleteCalendarEvent,
   getGoogleCalendarStatus,
   startGoogleCalendarConnect,
@@ -32,6 +33,7 @@ import {
   type GoogleConnectionStatus,
 } from "@/lib/api";
 import { logHandledError } from "@/lib/log-error";
+import { humanizeCalendarTitle } from "@/lib/humanize";
 
 type ViewKey = "day" | "week" | "month";
 
@@ -63,15 +65,72 @@ function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 function fmtTime(d: Date): string {
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-const TYPE_STYLE: Record<string, { dot: string; chip: string; label: string }> = {
-  meeting: { dot: "bg-accent", chip: "bg-accent/15 text-accent", label: "Meeting" },
-  client_work: { dot: "bg-info", chip: "bg-info/15 text-info", label: "Client work" },
-  deadline: { dot: "bg-danger", chip: "bg-danger/15 text-danger", label: "Deadline" },
-  personal: { dot: "bg-violet", chip: "bg-violet/15 text-violet", label: "Personal" },
+export interface EventStyle {
+  label: string;
+  dot: string;
+  chip: string;
+  timeGridBg: string;
+  badge: string;
+  titleColor: string;
+  timeColor: string;
+}
+
+const TYPE_STYLE: Record<string, EventStyle> = {
+  meeting: {
+    label: "Meeting",
+    dot: "bg-sky-500 dark:bg-sky-400",
+    chip: "bg-sky-500/10 hover:bg-sky-500/15 dark:bg-sky-500/15 dark:hover:bg-sky-500/25 border border-sky-500/20 dark:border-sky-500/30 border-l-[3px] border-l-sky-500 dark:border-l-sky-400 shadow-xs",
+    timeGridBg: "bg-sky-500/10 hover:bg-sky-500/15 dark:bg-sky-500/15 dark:hover:bg-sky-500/25 border border-sky-500/20 dark:border-sky-500/30 border-l-[3px] border-l-sky-500 dark:border-l-sky-400 shadow-xs backdrop-blur-xs",
+    badge: "bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25",
+    titleColor: "text-sky-950 dark:text-sky-100",
+    timeColor: "text-sky-700/85 dark:text-sky-300/85",
+  },
+  client_work: {
+    label: "Client work",
+    dot: "bg-emerald-500 dark:bg-emerald-400",
+    chip: "bg-emerald-500/10 hover:bg-emerald-500/15 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 border border-emerald-500/20 dark:border-emerald-500/30 border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400 shadow-xs",
+    timeGridBg: "bg-emerald-500/10 hover:bg-emerald-500/15 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 border border-emerald-500/20 dark:border-emerald-500/30 border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400 shadow-xs backdrop-blur-xs",
+    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25",
+    titleColor: "text-emerald-950 dark:text-emerald-100",
+    timeColor: "text-emerald-700/85 dark:text-emerald-300/85",
+  },
+  deadline: {
+    label: "Deadline",
+    dot: "bg-rose-500 dark:bg-rose-400",
+    chip: "bg-rose-500/10 hover:bg-rose-500/15 dark:bg-rose-500/15 dark:hover:bg-rose-500/25 border border-rose-500/20 dark:border-rose-500/30 border-l-[3px] border-l-rose-500 dark:border-l-rose-400 shadow-xs",
+    timeGridBg: "bg-rose-500/10 hover:bg-rose-500/15 dark:bg-rose-500/15 dark:hover:bg-rose-500/25 border border-rose-500/20 dark:border-rose-500/30 border-l-[3px] border-l-rose-500 dark:border-l-rose-400 shadow-xs backdrop-blur-xs",
+    badge: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25",
+    titleColor: "text-rose-950 dark:text-rose-100",
+    timeColor: "text-rose-700/85 dark:text-rose-300/85",
+  },
+  personal: {
+    label: "Personal",
+    dot: "bg-purple-500 dark:bg-purple-400",
+    chip: "bg-purple-500/10 hover:bg-purple-500/15 dark:bg-purple-500/15 dark:hover:bg-purple-500/25 border border-purple-500/20 dark:border-purple-500/30 border-l-[3px] border-l-purple-500 dark:border-l-purple-400 shadow-xs",
+    timeGridBg: "bg-purple-500/10 hover:bg-purple-500/15 dark:bg-purple-500/15 dark:hover:bg-purple-500/25 border border-purple-500/20 dark:border-purple-500/30 border-l-[3px] border-l-purple-500 dark:border-l-purple-400 shadow-xs backdrop-blur-xs",
+    badge: "bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/25",
+    titleColor: "text-purple-950 dark:text-purple-100",
+    timeColor: "text-purple-700/85 dark:text-purple-300/85",
+  },
 };
+
+function getEventStyle(e: CalendarFeedItem): EventStyle {
+  if (e.source === "invoice") {
+    return {
+      label: "Invoice",
+      dot: "bg-amber-500 dark:bg-amber-400",
+      chip: "bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 border border-amber-500/20 dark:border-amber-500/30 border-l-[3px] border-l-amber-500 dark:border-l-amber-400 shadow-xs",
+      timeGridBg: "bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 border border-amber-500/20 dark:border-amber-500/30 border-l-[3px] border-l-amber-500 dark:border-l-amber-400 shadow-xs backdrop-blur-xs",
+      badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25",
+      titleColor: "text-amber-950 dark:text-amber-100",
+      timeColor: "text-amber-700/85 dark:text-amber-300/85",
+    };
+  }
+  return TYPE_STYLE[e.event_type] || TYPE_STYLE.meeting;
+}
 
 // ------------------------------------------------------------ component ----
 export function DashboardCalendar() {
@@ -81,11 +140,10 @@ export function DashboardCalendar() {
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
   const [events, setEvents] = useState<CalendarFeedItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [liveAt, setLiveAt] = useState<Date | null>(null);
   const [google, setGoogle] = useState<GoogleConnectionStatus | null>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState<CalendarFeedItem | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
@@ -118,9 +176,10 @@ export function DashboardCalendar() {
       setEvents(data);
       setLiveAt(new Date());
     } catch (err) {
-      if (!silent) setNotice(err instanceof Error ? err.message : "Failed to load calendar");
+      if (!silent) toast.error(err instanceof Error ? err.message : "Failed to load calendar");
     } finally {
       setLoading(false);
+      setInitialLoaded(true);
     }
   }, [rangeStart.toISOString(), rangeEnd.toISOString()]);
 
@@ -194,218 +253,186 @@ export function DashboardCalendar() {
     void loadEvents(true);
   };
 
-  // Escape backs out of the topmost layer: detail, then the new-event form
+  // Escape backs out of the detail modal
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (detail) setDetail(null);
-      else if (creating) setCreating(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [detail, creating]);
+  }, [detail]);
 
-  const title =
-    view === "month"
-      ? `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}`
-      : view === "week"
-        ? `Week of ${MONTHS[cursor.getMonth()].slice(0, 3)} ${cursor.getDate()}, ${cursor.getFullYear()}`
-        : `${MONTHS[cursor.getMonth()]} ${cursor.getDate()}, ${cursor.getFullYear()}`;
+  const title = useMemo(() => {
+    if (view === "month") {
+      return `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}`;
+    }
+    if (view === "week") {
+      const weekStart = cells[0];
+      const weekEnd = cells[cells.length - 1];
+      if (weekStart && weekEnd) {
+        if (weekStart.getMonth() === weekEnd.getMonth()) {
+          return `${MONTHS[weekStart.getMonth()].slice(0, 3)} ${weekStart.getDate()}–${weekEnd.getDate()}, ${weekStart.getFullYear()}`;
+        }
+        return `${MONTHS[weekStart.getMonth()].slice(0, 3)} ${weekStart.getDate()} – ${MONTHS[weekEnd.getMonth()].slice(0, 3)} ${weekEnd.getDate()}`;
+      }
+      return `${MONTHS[cursor.getMonth()].slice(0, 3)} ${cursor.getDate()}, ${cursor.getFullYear()}`;
+    }
+    return `${MONTHS[cursor.getMonth()].slice(0, 3)} ${cursor.getDate()}, ${cursor.getFullYear()}`;
+  }, [view, cursor, cells]);
 
   const now = new Date(nowTick);
 
+  if (!initialLoaded && events.length === 0) {
+    return <CalendarSkeleton />;
+  }
+
   return (
     <div className="relative flex flex-col h-[calc(100vh-8rem)] min-h-[520px] bg-card text-fg overflow-hidden rounded-2xl border border-line">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-16 shrink-0">
-          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-14 shrink-0 border-b border-line/40">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Unified Previous / Next buttons */}
+          <div className="inline-flex items-center h-8 rounded-lg border border-line bg-surface/60 p-0.5 shadow-xs shrink-0">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 rounded-lg text-muted hover:text-fg hover:bg-surface transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-surface transition-all active:scale-95 cursor-pointer"
               title="Previous"
+              aria-label="Previous"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => navigate(1)}
-              className="p-2 rounded-lg border border-line text-fg hover:bg-surface transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-surface transition-all active:scale-95 cursor-pointer"
               title="Next"
+              aria-label="Next"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={goToday}
-              className="px-3.5 py-1.5 rounded-lg border border-line-strong text-xs font-semibold text-fg hover:bg-surface transition-colors"
-            >
-              Today
-            </button>
-            <h2 className="text-base md:text-lg font-bold tracking-tight truncate ml-1">{title}</h2>
-            <span className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted ml-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${loading ? "bg-warn" : "bg-ok"} ${liveAt ? "animate-pulse" : ""}`} />
-              LIVE{liveAt ? ` · ${fmtTime(liveAt)}` : ""}
-            </span>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <GoogleBar
-              status={google}
-              busy={googleBusy}
-              onConnect={async () => {
-                setGoogleBusy(true);
-                try {
-                  const token = (await getToken()) || undefined;
-                  const { auth_url } = await startGoogleCalendarConnect(token);
-                  window.location.href = auth_url;
-                } catch (err) {
-                  setNotice(err instanceof Error ? err.message : "Could not start Google connect");
-                  setGoogleBusy(false);
-                }
-              }}
-              onSync={async () => {
-                setGoogleBusy(true);
-                try {
-                  const token = (await getToken()) || undefined;
-                  const res = await syncGoogleCalendar(token);
-                  setNotice(`Synced: ${res.created} new, ${res.updated} updated`);
-                  await loadGoogleStatus();
-                  refreshAfterMutation();
-                } catch (err) {
-                  setNotice(err instanceof Error ? err.message : "Google sync failed");
-                } finally {
-                  setGoogleBusy(false);
-                }
-              }}
-              onDisconnect={async () => {
-                const ok = await confirmDialog({
-                  title: "Disconnect Google Calendar",
-                  message: "Your Google meetings will stop appearing here. You can reconnect any time.",
-                  confirmLabel: "Disconnect",
-                  danger: true,
-                });
-                if (!ok) return;
-                setGoogleBusy(true);
-                try {
-                  const token = (await getToken()) || undefined;
-                  await disconnectGoogleCalendar(token);
-                  await loadGoogleStatus();
-                  refreshAfterMutation();
-                  toast.success("Google Calendar disconnected");
-                } catch (err) {
-                  logHandledError("Failed to disconnect Google Calendar:", err);
-                  toast.error("Could not disconnect Google Calendar");
-                } finally {
-                  setGoogleBusy(false);
-                }
-              }}
-            />
+          <button
+            onClick={goToday}
+            className="inline-flex items-center justify-center h-8 px-2.5 rounded-lg border border-line bg-surface/60 hover:bg-surface text-xs font-semibold text-fg shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+          >
+            Today
+          </button>
 
-            {/* Day / Week / Month segmented control (reference style) */}
-            <div className="flex items-center rounded-full bg-surface border border-line p-0.5">
-              {(["day", "week", "month"] as ViewKey[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
-                    view === v
-                      ? "bg-accent text-accent-fg shadow-sm"
-                      : "text-muted hover:text-fg"
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            <Button
-              size="sm"
-              onClick={() => setCreating(true)}
-              className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
-              title="New event"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              <span className="hidden sm:inline">New Event</span>
-            </Button>
+          <div className="flex items-center h-8 pl-1">
+            <h2 className="text-base font-bold tracking-tight text-fg shrink-0 whitespace-nowrap">
+              {title}
+            </h2>
           </div>
         </div>
 
-        {notice && (
-          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-surface border border-line text-xs text-muted flex items-center justify-between gap-3">
-            <span>{notice}</span>
-            <button onClick={() => setNotice(null)} className="text-faint hover:text-fg"><X className="w-3.5 h-3.5" /></button>
-          </div>
-        )}
-
-        {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col px-3 pb-3 md:px-5 md:pb-5">
-          {view === "month" && (
-            <MonthView
-              cells={cells}
-              cursor={cursor}
-              now={now}
-              selectedDay={selectedDay}
-              eventsForDay={eventsForDay}
-              onDayClick={(d) => {
-                setSelectedDay(d);
-                setCursor(d);
-              }}
-              onDayDoubleClick={(d) => {
-                setSelectedDay(d);
-                setCreating(true);
-              }}
-              onEventClick={setDetail}
-            />
-          )}
-          {(view === "week" || view === "day") && (
-            <TimeGrid
-              days={view === "week" ? cells : [startOfDay(cursor)]}
-              now={now}
-              events={events}
-              onEventClick={setDetail}
-              onSlotClick={(d) => {
-                setSelectedDay(d);
-                setCreating(true);
-              }}
-            />
-          )}
-        </div>
-
-        {creating && (
-          <NewEventDialog
-            day={selectedDay}
-            onClose={() => setCreating(false)}
-            onCreated={async () => {
-              setCreating(false);
-              setNotice(null);
-              refreshAfterMutation();
+        <div className="flex items-center gap-2 shrink-0">
+          <GoogleBar
+            status={google}
+            busy={googleBusy}
+            onConnect={async () => {
+              setGoogleBusy(true);
+              try {
+                const token = (await getToken()) || undefined;
+                const { auth_url } = await startGoogleCalendarConnect(token);
+                window.location.href = auth_url;
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Could not start Google connect");
+                setGoogleBusy(false);
+              }
             }}
-          />
-        )}
-
-        {detail && (
-          <EventDetail
-            item={detail}
-            onClose={() => setDetail(null)}
-            onDelete={async () => {
+            onSync={async () => {
+              setGoogleBusy(true);
+              try {
+                const token = (await getToken()) || undefined;
+                const res = await syncGoogleCalendar(token);
+                toast.success(`Synced: ${res.created} new, ${res.updated} updated`);
+                await loadGoogleStatus();
+                refreshAfterMutation();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Google sync failed");
+              } finally {
+                setGoogleBusy(false);
+              }
+            }}
+            onDisconnect={async () => {
               const ok = await confirmDialog({
-                title: "Delete event",
-                message: "This event will be removed from your calendar.",
-                confirmLabel: "Delete",
+                title: "Disconnect Google Calendar",
+                message: "Your Google meetings will stop appearing here. You can reconnect any time.",
+                confirmLabel: "Disconnect",
                 danger: true,
               });
               if (!ok) return;
-              const token = (await getToken()) || undefined;
+              setGoogleBusy(true);
               try {
-                await deleteCalendarEvent(detail.id, token);
-                setDetail(null);
+                const token = (await getToken()) || undefined;
+                await disconnectGoogleCalendar(token);
+                await loadGoogleStatus();
                 refreshAfterMutation();
-                toast.success("Event deleted");
+                toast.success("Google Calendar disconnected");
               } catch (err) {
-                setNotice(err instanceof Error ? err.message : "Delete failed");
-                toast.error("Could not delete event");
+                logHandledError("Failed to disconnect Google Calendar:", err);
+                toast.error("Could not disconnect Google Calendar");
+              } finally {
+                setGoogleBusy(false);
               }
             }}
           />
+
+          {/* Day / Week / Month segmented switcher */}
+          <div className="inline-flex items-center h-8 p-0.5 rounded-lg bg-surface/90 border border-line-strong shadow-xs shrink-0 gap-0.5">
+            {(["day", "week", "month"] as ViewKey[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`h-7 px-2.5 rounded-md text-xs capitalize transition-all select-none cursor-pointer flex items-center justify-center font-medium ${view === v
+                    ? "bg-card text-fg font-bold shadow-xs border border-line/80 ring-1 ring-white/5"
+                    : "text-muted hover:text-fg hover:bg-surface/80"
+                  }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col px-3 pb-3 md:px-5 md:pb-5">
+        {view === "month" && (
+          <MonthView
+            cells={cells}
+            cursor={cursor}
+            now={now}
+            selectedDay={selectedDay}
+            eventsForDay={eventsForDay}
+            onDayClick={(d) => {
+              setSelectedDay(d);
+              setCursor(d);
+            }}
+            onEventClick={setDetail}
+          />
         )}
+        {(view === "week" || view === "day") && (
+          <TimeGrid
+            days={view === "week" ? cells : [startOfDay(cursor)]}
+            now={now}
+            events={events}
+            onEventClick={setDetail}
+          />
+        )}
+      </div>
+
+      {detail && (
+        <CalendarEventDetailModal
+          item={detail}
+          onClose={() => setDetail(null)}
+          onDeleted={async () => {
+            setDetail(null);
+            refreshAfterMutation();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -424,55 +451,109 @@ function GoogleBar({
   onSync: () => void;
   onDisconnect: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   if (!status) return null;
   if (!status.configured) {
     return (
       <span
-        className="hidden lg:inline text-[10px] font-mono text-faint border border-dashed border-line rounded-full px-2.5 py-1"
+        className="hidden xl:inline text-[10px] font-mono text-faint border border-line/60 rounded-md px-2 py-1"
         title="Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in apps/api/.env to enable Google Calendar"
       >
-        Google Calendar: not configured
+        Google: unconfigured
       </span>
     );
   }
   if (!status.connected) {
     return (
-      <Button
-        size="sm"
-        variant="outline"
+      <button
         onClick={onConnect}
         disabled={busy}
-        className="rounded-lg border-line-strong text-fg hover:bg-surface gap-1.5"
+        title="Connect Google Calendar"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line bg-surface/60 hover:bg-surface text-xs font-semibold text-fg shadow-xs transition-all active:scale-95 cursor-pointer shrink-0 disabled:opacity-50"
       >
-        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarDays className="w-3.5 h-3.5 text-accent" />}
-        <span className="hidden md:inline">Connect Google Calendar</span>
-        <span className="md:hidden">Google</span>
-      </Button>
+        {busy ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <CalendarDays className="w-3.5 h-3.5 text-accent" />
+        )}
+        <span>Google</span>
+      </button>
     );
   }
+
+  const syncLabel = status.last_synced_at
+    ? `Synced ${fmtTime(parseDT(status.last_synced_at))}`
+    : "Connected";
+
   return (
-    <div className="hidden md:flex items-center gap-1.5 rounded-full border border-dashed border-line-strong px-2.5 py-1">
-      <span className="w-1.5 h-1.5 rounded-full bg-ok animate-pulse" />
-      <span className="text-[10px] font-mono text-muted max-w-[140px] truncate" title={status.google_email || ""}>
-        {status.google_email || "Google"}
-        {status.last_synced_at ? ` · ${fmtTime(parseDT(status.last_synced_at))}` : ""}
-      </span>
+    <div ref={menuRef} className="relative shrink-0">
       <button
-        onClick={onSync}
+        onClick={() => setOpen((prev) => !prev)}
         disabled={busy}
-        className="p-1 rounded hover:bg-surface text-muted hover:text-fg transition-colors"
-        title="Sync now"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line bg-surface/60 hover:bg-surface text-xs font-semibold text-fg shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+        title={`Google Calendar connected (${status.google_email || ""}) — click for options`}
+        aria-haspopup="true"
+        aria-expanded={open}
       >
-        <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
+        {busy ? (
+          <Loader2 className="w-3 h-3 text-accent animate-spin shrink-0" />
+        ) : (
+          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] shrink-0" />
+        )}
+        <span>Google</span>
+        <ChevronDown className={`w-3 h-3 text-muted transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
-      <button
-        onClick={onDisconnect}
-        disabled={busy}
-        className="p-1 rounded hover:bg-surface text-muted hover:text-danger transition-colors"
-        title="Disconnect Google Calendar"
-      >
-        <Unplug className="w-3.5 h-3.5" />
-      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 w-56 rounded-xl bg-card border border-line p-1.5 shadow-xl z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
+          <div className="px-2.5 py-2 border-b border-line/60">
+            <div className="flex items-center gap-1.5 text-fg font-semibold truncate">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="truncate">{status.google_email || "Google Calendar"}</span>
+            </div>
+            <p className="text-[11px] text-muted font-mono mt-0.5">{syncLabel}</p>
+          </div>
+
+          <div className="py-1">
+            <button
+              onClick={() => {
+                setOpen(false);
+                onSync();
+              }}
+              disabled={busy}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-fg hover:bg-surface transition-colors cursor-pointer text-left font-medium disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-muted ${busy ? "animate-spin" : ""}`} />
+              <span>Sync events now</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setOpen(false);
+                onDisconnect();
+              }}
+              disabled={busy}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-danger hover:bg-danger/10 transition-colors cursor-pointer text-left font-medium disabled:opacity-50"
+            >
+              <Unplug className="w-3.5 h-3.5" />
+              <span>Disconnect</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -485,7 +566,6 @@ function MonthView({
   selectedDay,
   eventsForDay,
   onDayClick,
-  onDayDoubleClick,
   onEventClick,
 }: {
   cells: Date[];
@@ -494,20 +574,10 @@ function MonthView({
   selectedDay: Date;
   eventsForDay: (d: Date) => CalendarFeedItem[];
   onDayClick: (d: Date) => void;
-  onDayDoubleClick: (d: Date) => void;
   onEventClick: (e: CalendarFeedItem) => void;
 }) {
   return (
-    <div className="flex-1 flex flex-col min-h-[640px]">
-      {/* Weekday header row */}
-      <div className="grid grid-cols-7 shrink-0">
-        {WEEKDAYS.map((w) => (
-          <div key={w} className="py-3 text-center text-[11px] font-semibold tracking-[0.15em] text-muted">
-            {w}
-          </div>
-        ))}
-      </div>
-
+    <div className="flex-1 flex flex-col min-h-[640px] pt-3">
       {/* Day cells */}
       <div className="grid grid-cols-7 flex-1 min-h-0 border-t border-l border-line rounded-xl overflow-hidden">
         {cells.map((d, i) => {
@@ -519,20 +589,17 @@ function MonthView({
             <div
               key={i}
               onClick={() => onDayClick(d)}
-              onDoubleClick={() => onDayDoubleClick(d)}
-              className={`relative border-r border-b border-line p-1.5 min-h-[72px] md:min-h-[96px] cursor-pointer transition-colors ${
-                isSelected ? "bg-accent/[0.06] ring-1 ring-inset ring-accent/60" : "hover:bg-surface/60"
-              }`}
+              className={`relative border-r border-b border-line p-1.5 min-h-[72px] md:min-h-[96px] cursor-pointer transition-colors ${isSelected ? "bg-accent/[0.06] ring-1 ring-inset ring-accent/60" : "hover:bg-surface/60"
+                }`}
             >
               <div className="flex justify-center pt-1">
                 <span
-                  className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold ${
-                    isToday
+                  className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold ${isToday
                       ? "bg-accent text-accent-fg"
                       : inMonth
                         ? "text-fg"
                         : "text-faint"
-                  }`}
+                    }`}
                 >
                   {d.getDate()}
                 </span>
@@ -540,7 +607,7 @@ function MonthView({
 
               <div className="mt-1 space-y-1">
                 {dayEvents.slice(0, 3).map((e) => {
-                  const style = TYPE_STYLE[e.event_type] || TYPE_STYLE.personal;
+                  const style = getEventStyle(e);
                   return (
                     <button
                       key={`${e.source}-${e.id}`}
@@ -548,19 +615,21 @@ function MonthView({
                         ev.stopPropagation();
                         onEventClick(e);
                       }}
-                      className={`w-full text-left px-1.5 py-0.5 rounded-md text-[10px] md:text-[11px] font-medium truncate transition-opacity hover:opacity-80 flex items-center gap-1.5 ${style.chip}`}
-                      title={`${e.title}${e.client_name ? ` — ${e.client_name}` : ""}`}
+                      className={`w-full text-left px-1.5 py-1 rounded-[5px] text-[10px] md:text-[11px] font-medium truncate transition-all active:scale-[0.98] flex items-center gap-1.5 cursor-pointer ${style.chip}`}
+                      title={`${humanizeCalendarTitle(e.title)}${e.client_name ? ` — ${e.client_name}` : ""}`}
                     >
-                      <span className={`w-1 h-1.5 rounded-full shrink-0 ${style.dot}`} />
-                      <span className="truncate">
-                        {e.is_all_day ? "" : `${fmtTime(parseDT(e.start_time))} `}
-                        {e.title}
-                      </span>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot} shadow-xs`} />
+                      {!e.is_all_day && (
+                        <span className={`shrink-0 font-semibold text-[9px] md:text-[10px] tracking-tight ${style.timeColor}`}>
+                          {fmtTime(parseDT(e.start_time))}
+                        </span>
+                      )}
+                      <span className={`truncate font-medium ${style.titleColor}`}>{humanizeCalendarTitle(e.title)}</span>
                     </button>
                   );
                 })}
                 {dayEvents.length > 3 && (
-                  <div className="text-[10px] text-faint font-mono pl-1.5">
+                  <div className="text-[10px] text-faint font-medium pl-1.5">
                     +{dayEvents.length - 3} more
                   </div>
                 )}
@@ -581,13 +650,11 @@ function TimeGrid({
   now,
   events,
   onEventClick,
-  onSlotClick,
 }: {
   days: Date[];
   now: Date;
   events: CalendarFeedItem[];
   onEventClick: (e: CalendarFeedItem) => void;
-  onSlotClick: (d: Date) => void;
 }) {
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -614,20 +681,40 @@ function TimeGrid({
   return (
     <div className="flex-1 flex flex-col min-h-[420px] border border-line rounded-xl overflow-hidden bg-card">
       {/* Day headers */}
-      <div className="grid shrink-0 border-b border-line" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)` }}>
+      <div className="grid shrink-0 border-b border-line bg-card" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)` }}>
         <div />
-        {days.map((d, i) => (
-          <div key={i} className="py-2.5 text-center">
-            <div className="text-[10px] font-semibold tracking-widest text-muted">{WEEKDAYS[d.getDay()]}</div>
-            <div
-              className={`mx-auto mt-1 w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold ${
-                sameDay(d, now) ? "bg-accent text-accent-fg" : "text-fg"
-              }`}
-            >
-              {d.getDate()}
+        {days.map((d, i) => {
+          const dayKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+          const allDayList = (eventsByDay.get(dayKey) ?? []).filter((e) => e.is_all_day);
+          return (
+            <div key={i} className="py-2.5 px-1 text-center border-r border-line last:border-r-0">
+              <div className="text-[10px] font-semibold tracking-widest text-muted">{WEEKDAYS[d.getDay()]}</div>
+              <div
+                className={`mx-auto mt-1 w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold ${sameDay(d, now) ? "bg-accent text-accent-fg" : "text-fg"
+                  }`}
+              >
+                {d.getDate()}
+              </div>
+              {allDayList.length > 0 && (
+                <div className="mt-1.5 space-y-1 text-left">
+                  {allDayList.map((e) => {
+                    const style = getEventStyle(e);
+                    return (
+                      <button
+                        key={`${e.source}-${e.id}`}
+                        onClick={() => onEventClick(e)}
+                        className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-semibold truncate shadow-xs block ${style.chip}`}
+                        title={humanizeCalendarTitle(e.title)}
+                      >
+                        <span className={style.titleColor}>{humanizeCalendarTitle(e.title)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Scrollable hour grid */}
@@ -649,7 +736,6 @@ function TimeGrid({
               <div
                 key={di}
                 className="relative border-r border-line last:border-r-0"
-                onDoubleClick={() => onSlotClick(day)}
               >
                 {hours.map((h) => (
                   <div key={h} className="absolute w-full border-t border-line/60" style={{ top: h * HOUR_H }} />
@@ -672,22 +758,21 @@ function TimeGrid({
                     const en = parseDT(e.end_time);
                     const startH = s.getHours() + s.getMinutes() / 60;
                     const durH = Math.max(0.5, (en.getTime() - s.getTime()) / (60 * 60 * 1000));
-                    const style = TYPE_STYLE[e.event_type] || TYPE_STYLE.personal;
+                    const style = getEventStyle(e);
                     return (
                       <button
                         key={`${e.source}-${e.id}`}
                         onClick={() => onEventClick(e)}
-                        className={`absolute left-0.5 right-0.5 rounded-md px-1.5 py-1 text-left text-[10px] font-medium border-l-2 overflow-hidden hover:opacity-90 transition-opacity ${style.chip}`}
+                        className={`absolute left-0.5 right-0.5 rounded-md px-2 py-1 text-left overflow-hidden active:scale-[0.99] transition-all cursor-pointer z-20 ${style.timeGridBg}`}
                         style={{
                           top: startH * HOUR_H + 1,
-                          height: Math.min(durH * HOUR_H - 2, 6 * HOUR_H),
-                          borderColor: "currentColor",
+                          height: Math.max(26, Math.min(durH * HOUR_H - 2, 6 * HOUR_H)),
                         }}
-                        title={e.title}
+                        title={humanizeCalendarTitle(e.title)}
                       >
-                        <div className="truncate font-semibold">{e.title}</div>
-                        <div className="truncate opacity-80">
-                          {fmtTime(s)}{e.client_name ? ` · ${e.client_name}` : ""}
+                        <div className={`truncate font-semibold text-xs leading-tight ${style.titleColor}`}>{humanizeCalendarTitle(e.title)}</div>
+                        <div className={`truncate text-[10px] leading-tight mt-0.5 font-normal ${style.timeColor}`}>
+                          {fmtTime(s)}{durH > 0.6 ? ` – ${fmtTime(en)}` : ""}{e.client_name ? ` · ${e.client_name}` : ""}
                         </div>
                       </button>
                     );
@@ -701,224 +786,4 @@ function TimeGrid({
   );
 }
 
-// ------------------------------------------------------- new event form ----
-function NewEventDialog({
-  day,
-  onClose,
-  onCreated,
-}: {
-  day: Date;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const { getToken } = useAuth();
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState("meeting");
-  const [clientName, setClientName] = useState("");
-  const [allDay, setAllDay] = useState(false);
-  const [startStr, setStartStr] = useState(() => {
-    const d = new Date(day);
-    d.setHours(Math.min(18, Math.max(9, d.getHours() + 1)), 0, 0, 0);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  });
-  const [durationMin, setDurationMin] = useState(60);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const submit = async () => {
-    if (!title.trim()) {
-      setError("Give the event a title");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const start = new Date(startStr);
-      const token = (await getToken()) || undefined;
-      await createCalendarEvent(
-        {
-          title: title.trim(),
-          event_type: type,
-          client_name: clientName.trim() || undefined,
-          is_all_day: allDay,
-          start_time: toLocalISO(start),
-          end_time: toLocalISO(allDay ? start : new Date(start.getTime() + durationMin * 60_000)),
-        },
-        token
-      );
-      onCreated();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save the event");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="absolute inset-0 z-[90] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60" />
-      <div
-        className="relative w-full max-w-md bg-card border border-line rounded-2xl p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-fg">New Event</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-surface"><X className="w-4 h-4" /></button>
-        </div>
-
-        <div className="space-y-3">
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title — e.g. Client sync with Acme"
-            className="w-full px-3 py-2 rounded-lg bg-surface border border-line text-sm text-fg placeholder:text-faint focus:outline-none focus:border-accent"
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs text-muted space-y-1">
-              <span>Type</span>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="w-full px-2.5 py-2 rounded-lg bg-surface border border-line text-sm text-fg focus:outline-none focus:border-accent"
-              >
-                <option value="meeting">Meeting</option>
-                <option value="client_work">Client work block</option>
-                <option value="deadline">Deadline</option>
-                <option value="personal">Personal</option>
-              </select>
-            </label>
-            <label className="text-xs text-muted space-y-1">
-              <span>Client (optional)</span>
-              <input
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="Acme Inc."
-                className="w-full px-2.5 py-2 rounded-lg bg-surface border border-line text-sm text-fg placeholder:text-faint focus:outline-none focus:border-accent"
-              />
-            </label>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs text-muted space-y-1">
-              <span>Starts</span>
-              <input
-                type="datetime-local"
-                value={startStr}
-                onChange={(e) => setStartStr(e.target.value)}
-                className="w-full px-2.5 py-2 rounded-lg bg-surface border border-line text-sm text-fg focus:outline-none focus:border-accent"
-              />
-            </label>
-            <label className="text-xs text-muted space-y-1">
-              <span>Duration (min)</span>
-              <input
-                type="number"
-                min={15}
-                step={15}
-                value={durationMin}
-                disabled={allDay}
-                onChange={(e) => setDurationMin(Number(e.target.value))}
-                className="w-full px-2.5 py-2 rounded-lg bg-surface border border-line text-sm text-fg disabled:opacity-50 focus:outline-none focus:border-accent"
-              />
-            </label>
-          </div>
-
-          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
-            <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} className="accent-[var(--accent)]" />
-            All-day event
-          </label>
-
-          {error && <p className="text-xs text-danger">{error}</p>}
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" size="sm" onClick={onClose} className="rounded-lg border-line text-fg">
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={submit}
-              disabled={saving}
-              className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
-            >
-              {saving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
-              Save Event
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------ event detail card ----
-function EventDetail({
-  item,
-  onClose,
-  onDelete,
-}: {
-  item: CalendarFeedItem;
-  onClose: () => void;
-  onDelete: () => void;
-}) {
-  const style = TYPE_STYLE[item.event_type] || TYPE_STYLE.personal;
-  const s = parseDT(item.start_time);
-  const en = parseDT(item.end_time);
-  const deletable = item.source === "local";
-
-  return (
-    <div className="absolute inset-0 z-[90] flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50" />
-      <div
-        className="relative w-full max-w-sm bg-card border border-line rounded-2xl p-5 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold font-mono uppercase tracking-wide px-2 py-0.5 rounded-full ${style.chip}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-              {style.label}
-              {item.source !== "local" ? ` · ${item.source}` : ""}
-            </span>
-            <h3 className="font-bold text-fg mt-2">{item.title}</h3>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-surface"><X className="w-4 h-4" /></button>
-        </div>
-
-        <div className="mt-3 space-y-1.5 text-xs text-muted">
-          <p className="font-mono text-fg">
-            {s.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
-            {" · "}
-            {item.is_all_day ? "All day" : `${fmtTime(s)} – ${fmtTime(en)}`}
-          </p>
-          {item.client_name && <p>Client: <span className="text-fg">{item.client_name}</span></p>}
-          {item.status && <p>Status: <span className="text-fg capitalize">{item.status}</span></p>}
-          {item.description && <p className="pt-1 leading-relaxed">{item.description}</p>}
-        </div>
-
-        {item.meeting_link && (
-          <a
-            href={item.meeting_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-accent hover:text-accent-hi"
-          >
-            <Video className="w-3.5 h-3.5" />
-            Join meeting
-          </a>
-        )}
-
-        {deletable && (
-          <button
-            onClick={onDelete}
-            className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-danger hover:opacity-80"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete event
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}

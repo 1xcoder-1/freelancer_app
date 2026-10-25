@@ -43,11 +43,11 @@ engine_kwargs = {
 if db_url.startswith("postgresql"):
     engine_kwargs["connect_args"] = {
         "statement_cache_size": 0,
-        "timeout": 30,
-        "command_timeout": 60,
+        "command_timeout": 30,
     }
-    engine_kwargs["pool_size"] = 10
-    engine_kwargs["max_overflow"] = 15
+    engine_kwargs["pool_size"] = 15
+    engine_kwargs["max_overflow"] = 25
+    engine_kwargs["pool_timeout"] = 30
 if not db_url.startswith("sqlite"):
     engine_kwargs["pool_pre_ping"] = True
     # Neon sits ~300 ms away per round trip, so dropping a pooled connection

@@ -19,6 +19,7 @@ import {
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getLead,
   deleteLead,
@@ -274,27 +275,36 @@ export default function LeadDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto py-24 text-center space-y-3">
-        <Loader2 className="w-7 h-7 animate-spin text-accent mx-auto" />
-        <p className="text-xs text-muted font-medium">Loading lead details...</p>
+      <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+        <Skeleton className="h-6 w-36 rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-2xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-32 rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!lead) {
     return (
-      <div className="max-w-md mx-auto py-24 text-center space-y-4">
-        <h2 className="text-lg font-medium text-fg">Lead Not Found</h2>
-        <p className="text-xs text-muted">
-          This deal or prospect may have been removed.
-        </p>
-        <Link href="/dashboard/leads">
-          <Button
-            className="rounded-xl px-4 text-xs bg-accent hover:bg-accent-hi text-accent-fg font-medium cursor-pointer"
+      <div className="max-w-5xl mx-auto pt-6 px-3 sm:px-6">
+        <Card className="bg-card border-dashed border-line rounded-2xl p-12 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 text-danger flex items-center justify-center mx-auto">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <h3 className="font-display text-xl font-medium text-fg">Lead not found</h3>
+          <p className="text-muted text-sm max-w-sm mx-auto">
+            This deal or prospect may have been removed or does not exist.
+          </p>
+          <Link
+            href="/dashboard/leads"
+            className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline font-medium"
           >
-            Back to Leads
-          </Button>
-        </Link>
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Leads
+          </Link>
+        </Card>
       </div>
     );
   }
@@ -357,124 +367,127 @@ export default function LeadDetailPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
-      {/* Top Navigation & Header */}
-      <div className="space-y-4 pb-4 border-b border-line">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
         <Link
           href="/dashboard/leads"
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Leads</span>
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Leads</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{lead.name}</span>
         </Link>
+      </div>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            {/* Name + stage on one line; everything else sits in a quiet meta line */}
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1">
-                {lead.name}
-              </h1>
+      {/* Main Header Card: Title, Status & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
+              {lead.name}
+            </h1>
 
-              {/* Stage Pill */}
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${getStageStyle(
-                  lead.stage
-                )}`}
-              >
-                {lead.stage === "won" ? "★ Won Deal" : lead.stage === "lost" ? "Closed Lost" : stageObj.label}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-              {lead.company && (
-                <span className="inline-flex items-center gap-1.5 mr-1">
-                  <Building2 className="w-3.5 h-3.5 text-accent" />
-                  <span className="text-fg font-medium">{lead.company}</span>
-                  <span>•</span>
-                  <span>Source: {lead.source || "Referral"}</span>
-                </span>
-              )}
-
-              {/* Category Pill */}
-              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25">
-                {category}
-              </span>
-
-              {/* Priority Pill */}
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border capitalize ${getPriorityStyle(
-                  lead.priority
-                )}`}
-              >
-                {lead.priority} Priority
-              </span>
-            </div>
-          </div>
-
-          {/* Action Buttons — own row so they never crowd the identity block */}
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            {!isWon && !isLost && (
-              <Button
-                size="sm"
-                onClick={() => (showStart ? setShowStart(false) : openStartForm())}
-                className="text-xs rounded-xl h-9 px-4 bg-accent hover:bg-accent-hi text-accent-fg font-medium shadow-xs transition-all cursor-pointer"
-              >
-                <Rocket className="w-3.5 h-3.5 mr-1.5" />
-                Start Work
-              </Button>
-            )}
-
-            {!isWon && !isLost && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleConvert}
-                disabled={busyAction}
-                className="text-xs rounded-xl h-9 px-3.5 border-line cursor-pointer"
-              >
-                {busyAction ? (
-                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <UserPlus className="w-3.5 h-3.5 mr-1.5 text-accent" />
-                )}
-                {busyAction ? "Converting..." : "Convert to Client"}
-              </Button>
-            )}
-
-            {!isWon && !isLost && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowLost((v) => !v)}
-                className="text-xs rounded-xl h-9 px-3 text-muted hover:text-danger hover:bg-danger/10 cursor-pointer"
-              >
-                <XCircle className="w-3.5 h-3.5 mr-1.5" />
-                Mark Lost
-              </Button>
-            )}
-
-            <Link href={`/dashboard/leads/${lead.id}/edit`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs rounded-xl h-9 px-3.5 border-line cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Edit
-              </Button>
-            </Link>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleting || busyAction}
-              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10 cursor-pointer"
-              title="Delete Lead"
+            {/* Stage Pill */}
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border capitalize ${getStageStyle(
+                lead.stage
+              )}`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              <span>{lead.stage === "won" ? "★ Won Deal" : lead.stage === "lost" ? "Closed Lost" : stageObj.label}</span>
+            </span>
+
+            {/* Category Pill */}
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-sky-500/10 text-sky-400 border-sky-500/20">
+              {category}
+            </span>
+
+            {/* Priority Pill */}
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border capitalize ${getPriorityStyle(
+                lead.priority
+              )}`}
+            >
+              {lead.priority} Priority
+            </span>
           </div>
+
+          {lead.company && (
+            <p className="text-xs text-muted font-normal flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-accent" />
+              <span className="text-fg font-medium">{lead.company}</span>
+              <span>•</span>
+              <span>Source: {lead.source || "Referral"}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Action Buttons Toolbar */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start lg:self-center">
+          {!isWon && !isLost && (
+            <Button
+              size="sm"
+              onClick={() => (showStart ? setShowStart(false) : openStartForm())}
+              className="bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border border-orange-400/40 font-medium text-xs rounded-xl h-9 px-4 transition-all duration-150 cursor-pointer"
+            >
+              <Rocket className="w-3.5 h-3.5 mr-1.5 text-white" />
+              Start Work
+            </Button>
+          )}
+
+          {!isWon && !isLost && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleConvert}
+              disabled={busyAction}
+              className="border-line text-fg bg-card hover:bg-surface text-xs rounded-xl h-9 px-3.5 cursor-pointer flex items-center gap-1.5 shadow-xs"
+            >
+              {busyAction ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <UserPlus className="w-3.5 h-3.5 text-accent" />
+              )}
+              <span>{busyAction ? "Converting..." : "Convert to Client"}</span>
+            </Button>
+          )}
+
+          {!isWon && !isLost && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowLost((v) => !v)}
+              className="border-line text-muted hover:text-danger hover:bg-danger/10 text-xs rounded-xl h-9 px-3 cursor-pointer"
+            >
+              <XCircle className="w-3.5 h-3.5 mr-1" />
+              <span>Mark Lost</span>
+            </Button>
+          )}
+
+          <Link href={`/dashboard/leads/${lead.id}/edit`}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-line text-fg bg-card hover:bg-surface text-xs rounded-xl h-9 px-3.5 cursor-pointer flex items-center gap-1.5 shadow-xs"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Edit</span>
+            </Button>
+          </Link>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDelete}
+            disabled={deleting || busyAction}
+            className="border-line text-muted hover:text-danger hover:bg-danger/10 text-xs rounded-xl h-9 w-9 p-0 flex items-center justify-center cursor-pointer transition-colors"
+            title="Delete Lead"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
 

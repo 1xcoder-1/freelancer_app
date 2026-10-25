@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { TextMorph } from "torph/react";
-import { CalendarDays, Lock, Pause, Phone, Plus, RefreshCw } from "@/components/animated-icons";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Lock,
+  Phone,
+  Plus,
+  RefreshCw,
+  Video,
+} from "@/components/animated-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/dashboard/patterns";
 import { BookingServicesPanel } from "@/components/dashboard/panels/BookingServicesPanel";
 import { getBookings, getBookingAppointments, type BookingAppointment } from "@/lib/api";
 import { useApiData } from "@/hooks/use-api-data";
@@ -42,7 +50,6 @@ export default function BookingServicesPage() {
 
   // Card 1: Services setup breakdown
   const googleMeetCount = services.filter((s) => !s.meeting_provider || s.meeting_provider === "google_meet").length;
-  const withIntakeCount = services.filter((s) => Boolean(s.intake_form_id)).length;
 
   // Card 2: Live services breakdown
   const activeServices = services.filter((s) => s.is_active);
@@ -61,101 +68,65 @@ export default function BookingServicesPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* 4 Headline Metric Cards at the top — concise, vibrant, real-time */}
+      {/* 4 Headline Metric Cards at the top — unified StatCard pattern */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
         {loading && !data ? (
           [1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-36 w-full rounded-2xl bg-card border border-line" />
+            <Skeleton key={i} className="h-[180px] w-full rounded-2xl bg-card border border-line" />
           ))
         ) : (
           <>
-            {/* Card 1: Total Services */}
-            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
-              <div className="relative z-10 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
-                  Services
-                </span>
-                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
-                  <CalendarDays className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="relative z-10 my-2.5">
-                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
-                  <TextMorph numbers className="tabular-nums">{services.length}</TextMorph>
-                </div>
-              </div>
-              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block shrink-0" />
-                <span>{googleMeetCount} Google Meet</span>
-              </div>
-            </div>
+            {/* Card 1: Services Roster */}
+            <StatCard
+              label="Services"
+              value={services.length}
+              icon={CalendarDays}
+              rows={[
+                {
+                  text: `${googleMeetCount} Google Meet`,
+                  dot: "ok",
+                },
+              ]}
+            />
 
             {/* Card 2: Live Now */}
-            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
-              <div className="relative z-10 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
-                  Live
-                </span>
-                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
-                  <Phone className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="relative z-10 my-2.5">
-                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
-                  <TextMorph numbers className="tabular-nums">{active}</TextMorph>
-                </div>
-              </div>
-              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" />
-                <span>{paused > 0 ? `${paused} paused` : "All active"}</span>
-              </div>
-            </div>
+            <StatCard
+              label="Live Services"
+              value={active}
+              icon={Phone}
+              rows={[
+                {
+                  text: paused > 0 ? `${paused} paused` : "All active",
+                  dot: paused > 0 ? "warn" : "ok",
+                },
+              ]}
+            />
 
             {/* Card 3: Calls Booked */}
-            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
-              <div className="relative z-10 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
-                  Calls Booked
-                </span>
-                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
-                  <CalendarDays className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="relative z-10 my-2.5">
-                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
-                  <TextMorph numbers className="tabular-nums">{totalCalls}</TextMorph>
-                </div>
-              </div>
-              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 inline-block shrink-0" />
-                <span>{upcomingCalls} upcoming</span>
-              </div>
-            </div>
+            <StatCard
+              label="Calls Booked"
+              value={totalCalls}
+              icon={Video}
+              rows={[
+                {
+                  text: `${upcomingCalls} upcoming`,
+                  dot: "info",
+                },
+              ]}
+            />
 
             {/* Card 4: Completed Calls */}
-            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
-              <div className="relative z-10 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
-                  Completed
-                </span>
-                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
-                  <Pause className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="relative z-10 my-2.5">
-                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
-                  <TextMorph numbers className="tabular-nums">{completedCalls}</TextMorph>
-                </div>
-              </div>
-              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
-                <span>{completedCalls} finished</span>
-              </div>
-            </div>
+            <StatCard
+              label="Completed"
+              value={completedCalls}
+              icon={CheckCircle2}
+              rows={[
+                {
+                  text: `${completedCalls} finished`,
+                  dot: "ok",
+                },
+              ]}
+            />
           </>
         )}
       </div>
@@ -174,10 +145,10 @@ export default function BookingServicesPage() {
             size="sm"
             onClick={() => refresh(true)}
             disabled={loading}
-            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
-            title="Refresh"
+            className="border-line text-fg bg-card hover:bg-surface w-9 h-9 p-0 rounded-xl flex items-center justify-center shrink-0 cursor-pointer transition-all active:scale-95"
+            title="Refresh services"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-accent" : ""}`} />
           </Button>
           <Link
             href={capacity.atLimit ? capacity.upgradeHref : "/dashboard/booking/new"}

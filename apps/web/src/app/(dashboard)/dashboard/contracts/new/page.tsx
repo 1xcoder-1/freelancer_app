@@ -187,58 +187,62 @@ export default function NewContractPage() {
   const selectedClient = clients.find((c) => c.id === clientId);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar max-w-7xl mx-auto pb-16">
-      {/* Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-line/60">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/contracts"
-              className="inline-flex items-center text-xs font-semibold text-muted hover:text-fg transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              Contracts
-            </Link>
-            <span className="text-muted text-xs">•</span>
-            <span className="text-xs text-accent font-semibold font-mono">Draft New</span>
-          </div>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-            Draft New Contract
+    <div className="space-y-6 max-w-5xl mx-auto pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
+        <Link
+          href="/dashboard/contracts"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Contracts</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">New Contract</span>
+        </Link>
+      </div>
+
+      {/* Main Header Card: Title & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-4 sm:px-6 sm:py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-fg capitalize">
+            New Contract
           </h1>
-          <p className="text-muted text-sm">
-            Generate an agreement, configure legal terms, and send a client signature link.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
+            type="button"
             variant="outline"
             onClick={() => guard.guardedPush("/dashboard/contracts")}
-            className="border-line text-xs font-semibold h-9 rounded-xl"
+            disabled={submitting}
+            className="h-9 px-3.5 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg font-medium text-xs transition-all active:scale-[0.97] cursor-pointer"
           >
             Cancel
           </Button>
+
           <Button
             onClick={handleSubmit}
             disabled={submitting}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-bold text-xs h-9 px-4 rounded-xl shadow-xs"
+            className="h-9 px-4 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] cursor-pointer disabled:opacity-50"
           >
             <Send className="w-3.5 h-3.5 mr-1.5" />
-            {submitting ? "Drafting..." : "Generate Agreement"}
+            <span>{submitting ? "Drafting..." : "Generate Agreement"}</span>
           </Button>
         </div>
       </div>
 
       {/* 2-Column Grid: Form (7 cols) + Sticky Live Visual Card Preview (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Form Controls */}
-        <form onSubmit={handleSubmit} className="lg:col-span-7 space-y-6">
+        <form onSubmit={handleSubmit} className="lg:col-span-7 space-y-5">
           {/* Quick Templates */}
-          <Card className="bg-card border-line p-5 rounded-2xl space-y-3">
-            <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-3">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-accent" />
               Quick Templates
-            </span>
+            </h2>
             <div className="flex flex-wrap gap-2">
               {TEMPLATES.map((t) => (
                 <button
@@ -251,11 +255,13 @@ export default function NewContractPage() {
                 </button>
               ))}
             </div>
-          </Card>
+          </div>
 
           {/* Project & Client Selector */}
-          <Card className="bg-card border-line p-5 rounded-2xl space-y-4">
-            <span className="text-xs font-bold text-fg">Link to Project & Client</span>
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+              Link to Project & Client
+            </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted">Select Project *</label>
@@ -290,11 +296,13 @@ export default function NewContractPage() {
                 </select>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Agreement Title & Signer Details */}
-          <Card className="bg-card border-line p-5 rounded-2xl space-y-4">
-            <span className="text-xs font-bold text-fg">Signer & Document Details</span>
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+              Signer & Document Details
+            </h2>
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted">Contract Title *</label>
@@ -366,12 +374,12 @@ export default function NewContractPage() {
                 <p className="text-[11px] text-muted">After this the link expires and the client must be sent a new copy.</p>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Agreement Body / Clauses */}
-          <Card className="bg-card border-line p-5 rounded-2xl space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-fg">Agreement Clauses & Legal Scope *</span>
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-3">
+            <div className="flex items-center justify-between pb-2.5 border-b border-line/60">
+              <h2 className="font-display text-base font-medium tracking-wide text-fg">Agreement Clauses & Legal Scope *</h2>
               <span className="text-[11px] text-muted font-mono">{content.length} chars</span>
             </div>
             <textarea
@@ -382,7 +390,7 @@ export default function NewContractPage() {
               className="w-full p-3 rounded-xl bg-surface border border-line text-xs font-mono text-fg leading-relaxed resize-y focus:outline-none focus:border-accent"
               required
             />
-          </Card>
+          </div>
 
           <Button
             type="submit"

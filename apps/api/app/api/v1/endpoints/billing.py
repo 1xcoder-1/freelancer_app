@@ -37,6 +37,7 @@ from app.core.plans import (
 from app.core.quota import invalidate_tier_cache, plan_context, usage_snapshot
 from app.core.workspace import get_or_create_user_workspace
 from app.models.user_plan import UserPlan
+from app.schemas.types import UTCDatetime
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
@@ -64,8 +65,8 @@ class PlanSyncIn(BaseModel):
     plan_name: Optional[str] = Field(None, max_length=80)
     amount_cents: Optional[int] = None
     currency: Optional[str] = Field(None, max_length=10)
-    period_start: Optional[datetime] = None
-    period_end: Optional[datetime] = None
+    period_start: Optional[UTCDatetime] = None
+    period_end: Optional[UTCDatetime] = None
     # 'clerk_sync' | 'clerk_webhook' | 'owner' — shown on the billing page when a
     # tier looks stale.
     source: str = Field("clerk_sync", max_length=24)
@@ -112,8 +113,8 @@ async def _apply_sync(db: AsyncSession, payload: PlanSyncIn) -> PlanSyncOut:
     row.plan_name = payload.plan_name
     row.amount_cents = payload.amount_cents
     row.currency = payload.currency
-    row.period_start = payload.period_start
-    row.period_end = payload.period_end
+    row.period_start = payload.period_start.replace(tzinfo=None) if payload.period_start and payload.period_start.tzinfo else payload.period_start
+    row.period_end = payload.period_end.replace(tzinfo=None) if payload.period_end and payload.period_end.tzinfo else payload.period_end
     row.synced_at = datetime.utcnow()
 
     try:

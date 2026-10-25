@@ -278,126 +278,134 @@ export default function ContractDetailPage() {
     : { cls: "bg-surface text-muted border-line", label: "Draft" };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar max-w-7xl mx-auto pb-16">
-      {/* Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-line/60">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/contracts"
-              className="inline-flex items-center text-xs font-semibold text-muted hover:text-fg transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              Contracts
-            </Link>
-            <span className="text-muted text-xs">•</span>
-            <span className="text-xs text-accent font-semibold font-mono">Agreement Room</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
-              {contract.title}
-            </h1>
-            <span
-              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold border ${pill.cls}`}
-            >
-              {pill.label}
-            </span>
-            {contract.version && contract.version > 1 && (
-              <span className="text-[11px] font-mono text-accent bg-accent-soft px-2 py-0.5 rounded-full border border-accent/20">
-                v{contract.version}
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between">
+        <Link
+          href="/dashboard/contracts"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Contracts</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{contract.title}</span>
+        </Link>
+      </div>
+
+      {/* Main Header Card: Title, Status & Sleek Action Toolbar */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
+                {contract.title}
+              </h1>
+
+              {/* Status Pill with Ambient Glow */}
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border capitalize ${pill.cls}`}
+              >
+                <span>{pill.label}</span>
               </span>
-            )}
-            {isOpen && typeof contract.days_left === "number" && (
-              <span className="text-[11px] font-mono text-warn bg-warn/15 px-2 py-0.5 rounded-full border border-warn/25">
-                {contract.days_left <= 0 ? "expires today" : `valid ${contract.days_left} more days`}
-              </span>
+
+              {contract.version && contract.version > 1 && (
+                <span className="text-[11px] font-mono text-accent bg-accent/10 px-2.5 py-0.5 rounded-full border border-accent/25 font-bold">
+                  v{contract.version}
+                </span>
+              )}
+
+              {isOpen && typeof contract.days_left === "number" && (
+                <span className="text-[11px] font-mono text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/25">
+                  {contract.days_left <= 0 ? "expires today" : `valid ${contract.days_left} more days`}
+                </span>
+              )}
+            </div>
+            {contract.recipient_name && (
+              <p className="text-xs sm:text-sm text-muted font-normal">
+                Signer: <strong className="text-fg font-medium">{contract.recipient_name}</strong> {contract.recipient_email ? `(${contract.recipient_email})` : ""}
+              </p>
             )}
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyLink}
-            className="border-line text-xs font-semibold h-9 rounded-xl gap-1.5"
-          >
-            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-accent" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Link Copied" : "Copy E-Sign Link"}
-          </Button>
-
-          <a
-            href={`/sign-contract/${contract.token || contract.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button
-              size="sm"
-              className="bg-accent hover:bg-accent-hi text-accent-fg font-bold text-xs h-9 px-3.5 rounded-xl gap-1.5 shadow-xs"
-            >
-              <span>Open Signer View</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Button>
-          </a>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSaveAsTemplate}
-            className="border-line text-xs font-semibold h-9 rounded-xl gap-1.5"
-            title="Save as a reusable template"
-          >
-            <BookmarkPlus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Save as Template</span>
-          </Button>
-
-          {!isExecuted && !isDead && (
+          {/* Unified Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0">
             <Button
               variant="outline"
               size="sm"
-              onClick={handleResend}
-              className="border-line text-xs font-semibold h-9 rounded-xl gap-1.5"
-              title="Re-send as a new version"
+              onClick={handleCopyLink}
+              className="h-9 px-3.5 rounded-xl border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] group cursor-pointer"
             >
-              <RotateCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Re-send (v2)</span>
+              {copied ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-accent animate-in zoom-in-50 duration-200" />
+                  <span className="font-semibold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
+                  <span>Copy E-Sign Link</span>
+                </>
+              )}
             </Button>
-          )}
 
-          {!isExecuted && !isDead && (
+            <a
+              href={`/sign-contract/${contract.token || contract.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group shrink-0"
+            >
+              <span>Signer View</span>
+              <ExternalLink className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110 text-muted group-hover:text-fg" />
+            </a>
+
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRotateLink}
-              disabled={rotating}
-              className="border-line text-xs font-semibold h-9 rounded-xl gap-1.5"
-              title="Rotate the signing link to revoke any leaked copy"
+              onClick={handleSaveAsTemplate}
+              className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
+              title="Save as a reusable template"
             >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{rotating ? "Rotating…" : "Rotate link"}</span>
+              <BookmarkPlus className="w-3.5 h-3.5" />
+              <span>Save Template</span>
             </Button>
-          )}
 
-          {needsCounterSign && (
+            {!isExecuted && !isDead && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRotateLink}
+                disabled={rotating}
+                className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
+                title="Rotate signing link"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>{rotating ? "Rotating…" : "Rotate Link"}</span>
+              </Button>
+            )}
+
+            {needsCounterSign && (
+              <Button
+                size="sm"
+                onClick={() => setShowSignForm((s) => !s)}
+                className="h-9 px-3.5 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] cursor-pointer"
+              >
+                <PenLine className="w-3.5 h-3.5" />
+                <span>Counter-sign</span>
+              </Button>
+            )}
+
             <Button
+              variant="ghost"
               size="sm"
-              onClick={() => setShowSignForm((s) => !s)}
-              className="bg-accent hover:bg-accent-hi text-accent-fg font-bold text-xs h-9 px-3.5 rounded-xl gap-1.5"
+              onClick={handleDelete}
+              className="h-9 w-9 p-0 rounded-xl text-muted/60 hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 transition-all active:scale-[0.96] cursor-pointer"
+              title="Delete Contract"
             >
-              <PenLine className="w-3.5 h-3.5" />
-              Counter-sign
+              <Trash2 className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
             </Button>
-          )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDelete}
-            className="text-xs text-muted hover:text-danger hover:bg-danger/10 h-9 px-2 rounded-xl"
-            title="Delete Agreement"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          </div>
         </div>
       </div>
 

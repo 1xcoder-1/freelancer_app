@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
@@ -8,6 +8,9 @@ import {
   Video,
   CheckCircle2,
   AlertCircle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
 } from "@/components/animated-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -33,6 +36,39 @@ function fmtTime(iso: string): string {
   return iso.slice(11, 16);
 }
 
+function buildGoogleCalendarUrl({
+  title,
+  startTimeIso,
+  durationMinutes = 30,
+  details = "",
+  location = "",
+}: {
+  title: string;
+  startTimeIso: string;
+  durationMinutes?: number;
+  details?: string;
+  location?: string;
+}): string {
+  const cleanIso = startTimeIso.endsWith("Z") ? startTimeIso : `${startTimeIso}Z`;
+  const start = new Date(cleanIso);
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+
+  const formatUtc = (d: Date) => {
+    return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  };
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title,
+    dates: `${formatUtc(start)}/${formatUtc(end)}`,
+  });
+
+  if (details) params.set("details", details);
+  if (location) params.set("location", location);
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 export default function PublicBookingPage() {
   const params = useParams();
   const token = params?.token as string;
@@ -50,6 +86,54 @@ export default function PublicBookingPage() {
   const [notes, setNotes] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [confirmedAppt, setConfirmedAppt] = useState<BookingAppointment | null>(null);
+
+  const dateScrollRef = useRef<HTMLDivElement>(null);
+  const [isDraggingDates, setIsDraggingDates] = useState(false);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
+  const hasDragged = useRef(false);
+
+  const handleDateMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !dateScrollRef.current) return;
+    setIsDraggingDates(true);
+    hasDragged.current = false;
+    dragStartX.current = e.pageX;
+    dragScrollLeft.current = dateScrollRef.current.scrollLeft;
+  };
+
+  useEffect(() => {
+    if (!isDraggingDates) return;
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dateScrollRef.current) return;
+      const walk = (e.pageX - dragStartX.current) * 1.3;
+      if (Math.abs(walk) > 4) {
+        hasDragged.current = true;
+      }
+      dateScrollRef.current.scrollLeft = dragScrollLeft.current - walk;
+    };
+    const onMouseUp = () => {
+      setIsDraggingDates(false);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isDraggingDates]);
+
+  const handleDateWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!dateScrollRef.current) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      dateScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
+  const scrollDates = (dir: "left" | "right") => {
+    if (!dateScrollRef.current) return;
+    const amount = dir === "left" ? -220 : 220;
+    dateScrollRef.current.scrollBy({ left: amount, behavior: "smooth" });
+  };
 
   const formValues = useMemo(
     () => ({ clientName, clientEmail, notes }),
@@ -87,6 +171,21 @@ export default function PublicBookingPage() {
     return () => {
       active = false;
     };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    try {
+      const cached = sessionStorage.getItem(`booking_confirmed_${token}`);
+      if (cached) {
+        const parsed = JSON.parse(cached) as BookingAppointment;
+        if (parsed && parsed.appointment_time && parsed.token) {
+          setConfirmedAppt(parsed);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
   }, [token]);
 
   const loadSlots = useCallback(async () => {
@@ -140,6 +239,11 @@ export default function PublicBookingPage() {
         notes: notes || undefined,
       });
       guard.markSaved();
+      try {
+        sessionStorage.setItem(`booking_confirmed_${token}`, JSON.stringify(appt));
+      } catch {
+        // ignore
+      }
       setConfirmedAppt(appt);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "That slot was just taken. Please pick another.");
@@ -151,13 +255,22 @@ export default function PublicBookingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-4">
-        <div className="w-full max-w-xl mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 space-y-4">
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-64" />
-          <div className="space-y-3 pt-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-24 w-full" />
+      <div className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Ambient Top Glow */}
+        <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-accent/4 blur-[120px] rounded-full -z-10" />
+        <div className="w-full max-w-xl mx-auto rounded-3xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/30 p-6 sm:p-8 space-y-5 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48 rounded-xl" />
+            <Skeleton className="h-4 w-72 rounded-lg" />
+          </div>
+          <div className="space-y-4 pt-4 border-t border-line/60">
+            <Skeleton className="h-10 w-full rounded-xl" />
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <Skeleton key={i} className="h-10 rounded-xl" />
+              ))}
+            </div>
+            <Skeleton className="h-11 w-full rounded-xl pt-2" />
           </div>
         </div>
       </div>
@@ -166,13 +279,19 @@ export default function PublicBookingPage() {
 
   if (error || !consultation) {
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-4 text-fg">
-        <div className="w-full max-w-md mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 text-center space-y-3 shadow-sm">
-          <AlertCircle className="w-8 h-8 text-danger mx-auto" />
-          <h2 className="text-lg font-bold">Consultation Unavailable</h2>
-          <p className="text-xs text-muted">
-            {error || "This consultation link is no longer accepting bookings."}
-          </p>
+      <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Ambient Top Glow */}
+        <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-accent/4 blur-[120px] rounded-full -z-10" />
+        <div className="relative w-full max-w-md mx-auto rounded-3xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/30 p-8 text-center space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 border border-danger/25 text-danger flex items-center justify-center mx-auto shadow-2xs">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="font-display text-xl font-medium tracking-tight text-fg">Consultation Unavailable</h2>
+            <p className="text-xs sm:text-sm text-muted max-w-sm mx-auto leading-relaxed">
+              {error || "This consultation link is no longer accepting bookings."}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -180,202 +299,304 @@ export default function PublicBookingPage() {
 
   if (confirmedAppt) {
     return (
-      <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4">
-        <div className="w-full max-w-md mx-auto rounded-2xl border border-line bg-card p-6 sm:p-8 text-center space-y-5 shadow-sm">
-          <div className="w-12 h-12 rounded-full bg-accent-soft text-accent flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-6 h-6" />
+      <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4 sm:p-6 relative overflow-hidden selection:bg-accent/30 selection:text-white">
+        {/* Ambient Top Glow */}
+        <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-emerald-500/10 blur-[120px] rounded-full -z-10" />
+
+        <div className="relative w-full max-w-md mx-auto rounded-3xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/30 p-7 sm:p-8 text-center space-y-6 shadow-[0_25px_60px_rgba(0,0,0,0.45),0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] overflow-hidden">
+          {/* Subtle Ambient Orb */}
+          <div className="absolute -right-12 -top-12 w-36 h-36 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center justify-center mx-auto shadow-[0_0_16px_rgba(16,185,129,0.15)] animate-in zoom-in-75 duration-300">
+            <CheckCircle2 className="w-7 h-7" />
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-fg">Booking Confirmed</h2>
-            <p className="text-xs sm:text-sm text-muted mt-1">
+
+          <div className="space-y-1.5">
+            <h2 className="font-display text-2xl font-medium tracking-tight text-fg">Booking Confirmed!</h2>
+            <p className="text-xs sm:text-sm text-muted capitalize">
               {consultation.title}
             </p>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-surface border border-line text-xs text-left space-y-2">
-            <div className="flex justify-between">
+          <div className="p-4 rounded-2xl bg-surface/60 border border-line/70 text-xs text-left space-y-2.5 shadow-inner">
+            <div className="flex justify-between items-center">
               <span className="text-muted">Date:</span>
               <span className="font-medium text-fg">{fmtDay(confirmedAppt.appointment_time)}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-muted">Time:</span>
-              <span className="font-mono text-accent font-medium">{fmtTime(confirmedAppt.appointment_time)} UTC</span>
+              <span className="font-mono text-accent font-semibold">{fmtTime(confirmedAppt.appointment_time)} UTC</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-muted">Duration:</span>
-              <span className="text-fg">{consultation.duration_minutes} min</span>
+              <span className="text-fg font-medium">{consultation.duration_minutes} min</span>
             </div>
-            {confirmedAppt.meeting_link && (
-              <div className="flex justify-between items-center pt-2 border-t border-line">
-                <span className="text-muted">Meeting:</span>
+            <div className="pt-2.5 border-t border-line/60 space-y-2">
+              {confirmedAppt.meeting_link && (
                 <a
                   href={confirmedAppt.meeting_link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent hover:underline flex items-center gap-1 font-medium"
+                  className="w-full h-9 rounded-xl font-medium text-xs text-white bg-accent hover:bg-accent-hi shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 >
-                  <Video className="w-3.5 h-3.5" /> Join call
+                  <Video className="w-3.5 h-3.5 text-white" />
+                  <span>Join Video Call</span>
                 </a>
-              </div>
-            )}
+              )}
+              <a
+                href={buildGoogleCalendarUrl({
+                  title: `${consultation.title || "Consultation"}`,
+                  startTimeIso: confirmedAppt.appointment_time,
+                  durationMinutes: consultation.duration_minutes || 30,
+                  details: confirmedAppt.meeting_link
+                    ? `Consultation: ${consultation.title}\nVideo Call: ${confirmedAppt.meeting_link}`
+                    : `Consultation: ${consultation.title}`,
+                  location: confirmedAppt.meeting_link || "Online",
+                })}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full h-9 rounded-xl font-medium text-xs text-fg/90 bg-surface/80 hover:bg-surface-elevated hover:text-fg border border-line/80 hover:border-line-strong shadow-2xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+              >
+                <CalendarDays className="w-3.5 h-3.5 text-accent" />
+                <span>Add to Google Calendar</span>
+              </a>
+            </div>
           </div>
 
-          {confirmedAppt.token && (
-            <a href={`/reschedule/${confirmedAppt.token}`} className="block text-xs text-muted hover:text-fg underline">
-              Reschedule
-            </a>
-          )}
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
+            {confirmedAppt.token && (
+              <a
+                href={`/reschedule/${confirmedAppt.token}`}
+                className="text-muted hover:text-fg underline underline-offset-4 transition-colors cursor-pointer"
+              >
+                Need to reschedule?
+              </a>
+            )}
+            <span className="text-line/80">•</span>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem(`booking_confirmed_${token}`);
+                } catch {
+                  // ignore
+                }
+                setConfirmedAppt(null);
+                void loadSlots();
+              }}
+              className="text-muted hover:text-fg underline underline-offset-4 transition-colors cursor-pointer"
+            >
+              Book another appointment
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-xl mx-auto">
-        <div className="rounded-2xl border border-line bg-card p-6 sm:p-8 shadow-sm space-y-6">
-          {/* Minimal Clean Header */}
-          <div className="flex items-start justify-between gap-4 pb-5 border-b border-line">
-            <div className="space-y-1 flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-fg">
-                {consultation.title}
-              </h1>
-              {consultation.description && (
-                <p className="text-xs sm:text-sm text-muted">
-                  {consultation.description}
-                </p>
-              )}
-            </div>
+    <div className="min-h-screen bg-bg text-fg flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden selection:bg-accent/30 selection:text-white">
+      {/* Ambient Top Glow */}
+      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-accent/4 blur-[120px] rounded-full -z-10" />
 
-            <div className="text-right shrink-0">
-              <div className="text-xs text-muted flex items-center justify-end gap-1">
-                <Clock className="w-3 h-3 text-muted" />
-                {consultation.duration_minutes} min
-              </div>
-            </div>
+      <div className="relative w-full max-w-xl mx-auto rounded-3xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/25 p-6 sm:p-8 md:p-9 shadow-[0_20px_50px_rgba(0,0,0,0.4),0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm overflow-hidden space-y-6 animate-in fade-in duration-300">
+        {/* Ambient Top-Right Orb */}
+        <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-accent/4 blur-3xl pointer-events-none" />
+
+        {/* Header Section */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-line/60">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize leading-snug">
+              {consultation.title}
+            </h1>
+            {consultation.description && (
+              <p className="text-xs sm:text-sm text-muted/90 font-normal leading-relaxed max-w-md">
+                {consultation.description}
+              </p>
+            )}
           </div>
 
-          <form onSubmit={handleSchedule} className="space-y-5">
-            {/* Date Selection */}
-            {days.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted block">Select date</label>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  {days.map((d) => {
-                    const isSelected = selectedDay === d;
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setPickedDay(d)}
-                        className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
-                          isSelected
-                            ? "bg-accent text-accent-fg border-accent"
-                            : "bg-surface text-fg border-line hover:border-line-strong"
-                        }`}
-                      >
-                        {fmtDay(d)}
-                      </button>
-                    );
-                  })}
+          <div className="flex flex-wrap items-center gap-2 sm:self-start shrink-0">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-medium text-muted bg-surface/80 border border-line/80 shadow-2xs">
+              <Clock className="w-3.5 h-3.5 text-accent" />
+              <span>{consultation.duration_minutes} min</span>
+            </span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSchedule} className="relative z-10 space-y-5">
+          {/* Date Selection */}
+          {days.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-xs font-mono capitalize tracking-wide text-muted font-medium">
+                  <CalendarDays className="w-3.5 h-3.5 text-accent" />
+                  <span>Select Date</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted/80">{days.length} available</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => scrollDates("left")}
+                      className="p-1 rounded-lg text-muted hover:text-fg hover:bg-surface border border-line/60 transition-colors cursor-pointer"
+                      title="Scroll left"
+                      aria-label="Scroll left"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollDates("right")}
+                      className="p-1 rounded-lg text-muted hover:text-fg hover:bg-surface border border-line/60 transition-colors cursor-pointer"
+                      title="Scroll right"
+                      aria-label="Scroll right"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            )}
-
-            {/* Time Slot Selection */}
-            {daySlots.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted block">Select time</label>
-                  <span className="text-[11px] text-muted font-mono">{consultation.timezone || "UTC"}</span>
-                </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {daySlots.map((s) => {
-                    const isSelected = selectedSlot === s;
-                    const timeOnly = fmtTime(s);
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setPickedSlot(s)}
-                        className={`py-2 px-2.5 rounded-xl text-xs font-mono font-medium transition-colors border text-center cursor-pointer ${
-                          isSelected
-                            ? "bg-accent text-accent-fg border-accent"
-                            : "bg-surface text-fg border-line hover:border-accent/40"
-                        }`}
-                      >
-                        {timeOnly}
-                      </button>
-                    );
-                  })}
-                </div>
+              <div
+                ref={dateScrollRef}
+                onMouseDown={handleDateMouseDown}
+                onWheel={handleDateWheel}
+                className={`flex gap-2 overflow-x-auto pb-1.5 pt-0.5 select-none scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+                  isDraggingDates ? "cursor-grabbing" : "cursor-grab"
+                }`}
+              >
+                {days.map((d) => {
+                  const isSelected = selectedDay === d;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => {
+                        if (!hasDragged.current) {
+                          setPickedDay(d);
+                        }
+                      }}
+                      className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-medium border transition-all duration-150 select-none active:scale-95 cursor-pointer ${
+                        isSelected
+                          ? "bg-accent hover:bg-accent-hi text-white font-semibold border-accent/50 shadow-sm"
+                          : "bg-surface/70 hover:bg-surface-elevated text-fg/80 hover:text-fg border-line/70 hover:border-line-strong hover:shadow-2xs"
+                      }`}
+                    >
+                      {fmtDay(d)}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
+          )}
 
-            {days.length === 0 && (
-              <p className="text-xs text-muted py-4 text-center">No open slots available right now.</p>
-            )}
-
-            {/* Client Inputs */}
-            <div className="space-y-3 pt-3 border-t border-line">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-fg block">
-                    Name <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Your name"
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-surface border border-line text-fg text-xs sm:text-sm focus:border-accent focus:outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-fg block">
-                    Email <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Your email"
-                    value={clientEmail}
-                    onChange={(e) => setClientEmail(e.target.value)}
-                    className="w-full h-9 px-3 rounded-xl bg-surface border border-line text-fg text-xs sm:text-sm focus:border-accent focus:outline-none transition-colors"
-                  />
-                </div>
+          {/* Time Slot Selection */}
+          {daySlots.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-xs font-mono capitalize tracking-wide text-muted font-medium">
+                  <Clock className="w-3.5 h-3.5 text-accent" />
+                  <span>Select Time</span>
+                </label>
+                <span className="text-[11px] text-muted font-mono bg-surface/80 px-2.5 py-0.5 rounded-md border border-line/60">
+                  {consultation.timezone || "UTC"}
+                </span>
               </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-0.5">
+                {daySlots.map((s) => {
+                  const isSelected = selectedSlot === s;
+                  const timeOnly = fmtTime(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setPickedSlot(s)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-mono transition-all duration-150 border text-center cursor-pointer select-none active:scale-95 ${
+                        isSelected
+                          ? "bg-accent text-white font-semibold border-accent/50 shadow-sm"
+                          : "bg-surface/60 hover:bg-surface-elevated border-line/70 hover:border-line-strong text-fg/90 hover:text-fg font-medium hover:shadow-2xs"
+                      }`}
+                    >
+                      {timeOnly}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-fg block">Notes (optional)</label>
-                <textarea
-                  rows={2}
-                  placeholder="What would you like to discuss?"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-surface border border-line text-fg text-xs sm:text-sm focus:border-accent focus:outline-none transition-colors resize-none"
+          {days.length === 0 && (
+            <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-line/60 bg-surface/30 space-y-2">
+              <CalendarDays className="w-6 h-6 text-faint mx-auto" />
+              <p className="text-xs text-muted">No open slots available right now.</p>
+            </div>
+          )}
+
+          {/* Client Inputs */}
+          <div className="space-y-3.5 pt-4 border-t border-line/60">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-fg flex items-center gap-1">
+                  <span>Name</span>
+                  <span className="text-accent font-semibold">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Your name"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/60 border border-line/80 text-fg text-xs sm:text-sm placeholder:text-muted/50 focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20 transition-all outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-fg flex items-center gap-1">
+                  <span>Email</span>
+                  <span className="text-accent font-semibold">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="your.email@example.com"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/60 border border-line/80 text-fg text-xs sm:text-sm placeholder:text-muted/50 focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20 transition-all outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)]"
                 />
               </div>
             </div>
 
-            {/* Action Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={scheduling || !selectedSlot}
-                className="w-full h-10 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
-              >
-                {scheduling ? (
-                  "Booking..."
-                ) : (
-                  "Confirm Booking"
-                )}
-              </button>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-fg block">Notes (optional)</label>
+              <textarea
+                rows={3}
+                placeholder="What would you like to discuss?"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full p-3 rounded-xl bg-surface/60 border border-line/80 text-fg text-xs sm:text-sm placeholder:text-muted/50 focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20 transition-all outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)] resize-none scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              />
             </div>
-          </form>
-        </div>
+          </div>
+
+          {/* Action Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={scheduling || !selectedSlot}
+              className="press w-full h-11 rounded-xl font-medium text-sm text-white bg-accent hover:bg-accent-hi border border-accent/40 shadow-sm transition-all duration-150 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {scheduling ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Confirming Booking...</span>
+                </>
+              ) : (
+                <span>Confirm Booking</span>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
+

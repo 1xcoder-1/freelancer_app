@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { TextMorph } from "torph/react";
 import {
   Receipt,
   Plus,
@@ -16,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatCard } from "@/components/dashboard/patterns";
 import {
   getInvoices,
   getUnbilledTimeEntries,
@@ -26,7 +27,7 @@ import {
 import { useApiData } from "@/hooks/use-api-data";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { formatMoney } from "@/lib/currency";
-import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
 
 const DEFAULT_CATEGORIES = [
   "Featured",
@@ -67,10 +68,6 @@ export function InvoicesPanel() {
     return "Outstanding & Unpaid";
   };
 
-  const handleOpenCreate = () => {
-    router.push("/dashboard/invoices/new");
-  };
-
   const handleOpenDetail = (invoice: Invoice) => {
     router.push(`/dashboard/invoices/${invoice.id}`);
   };
@@ -93,58 +90,106 @@ export function InvoicesPanel() {
 
   return (
     <div className="space-y-6">
-      {/* 4 Headline Cards at the top (same as Clients) */}
+      {/* 4 Headline Metric Cards at the top — concise, vibrant, real-time */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
         {loading && invoices.length === 0 ? (
-          <>
-            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
-            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
-            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
-            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
-          </>
+          [1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-36 w-full rounded-2xl bg-card border border-line" />
+          ))
         ) : (
           <>
-            <StatCard
-              label="Total Invoices"
-              value={invoices.length}
-              icon={Receipt}
-              rows={[
-                { text: `${unbilledCount} unbilled time logs`, dot: unbilledCount > 0 ? "warn" : "info" },
-              ]}
-            />
-            <StatCard
-              label="Outstanding"
-              value={outstandingCount}
-              icon={Clock}
-              rows={[
-                {
-                  text: `${formatMoney(unbilledTotal, currency, 0)} ready to bill`,
-                  dot: outstandingCount > 0 ? "warn" : "ok",
-                },
-              ]}
-            />
-            <StatCard
-              label="Overdue"
-              value={overdueCount}
-              icon={AlertCircle}
-              rows={[
-                {
-                  text: overdueCount > 0 ? "needs a follow-up" : "nothing overdue",
-                  dot: overdueCount > 0 ? "danger" : "ok",
-                },
-              ]}
-            />
-            <StatCard
-              label="Paid & Settled"
-              value={paidCount}
-              icon={DollarSign}
-              rows={[{ text: `${formatMoney(paidTotal, currency, 0)} collected`, dot: "ok" }]}
-            />
+            {/* Card 1: Total Invoices */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Invoices
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+                  <Receipt className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{invoices.length}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block shrink-0" />
+                <span>{unbilledCount} unbilled items</span>
+              </div>
+            </div>
+
+            {/* Card 2: Outstanding */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Outstanding
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{outstandingCount}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" />
+                <span>{formatMoney(unbilledTotal, currency, 0)} ready to bill</span>
+              </div>
+            </div>
+
+            {/* Card 3: Overdue */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Overdue
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-rose-400 group-hover:border-rose-500/30 transition-all duration-200">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{overdueCount}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className={`w-1.5 h-1.5 rounded-full ${overdueCount > 0 ? "bg-rose-500" : "bg-sky-500"} inline-block shrink-0`} />
+                <span>{overdueCount > 0 ? "needs follow-up" : "all up to date"}</span>
+              </div>
+            </div>
+
+            {/* Card 4: Paid & Settled */}
+            <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">
+                  Paid & Settled
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="relative z-10 my-2.5">
+                <div className="font-display text-3xl sm:text-4xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+                  <TextMorph numbers className="tabular-nums">{paidCount}</TextMorph>
+                </div>
+              </div>
+              <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+                <span>{formatMoney(paidTotal, currency, 0)} collected</span>
+              </div>
+            </div>
           </>
         )}
       </div>
 
-      {/* Action Controls Row (same as Clients) */}
+      {/* Action Controls Row (below the 4 main cards) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div className="flex items-center gap-2">
           <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
@@ -164,13 +209,13 @@ export function InvoicesPanel() {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
-          <button
-            onClick={handleOpenCreate}
-            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
+          <Link
+            href="/dashboard/invoices/new"
+            className="press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-medium text-xs sm:text-[13px] px-3.5 border active:scale-95 transition-all duration-150 cursor-pointer bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border-orange-400/40"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
             <span>Issue Invoice</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -189,24 +234,26 @@ export function InvoicesPanel() {
           ))}
         </div>
       ) : invoices.length === 0 ? (
-        <Card className="bg-card border-dashed border-line p-10 text-center rounded-2xl">
-          <div className="w-12 h-12 rounded-xl bg-accent-soft flex items-center justify-center mx-auto mb-3.5">
-            <ChaiCupIcon className="w-6 h-6" />
+        <div className="rounded-2xl border border-line/70 bg-card p-12 text-center shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-surface border border-line/80 mx-auto flex items-center justify-center text-muted">
+            <Receipt className="w-6 h-6" />
           </div>
-          <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No invoices yet</h3>
-          <p className="text-xs sm:text-sm text-muted mt-1 max-w-sm mx-auto leading-relaxed">
-            Issue invoices, convert tracked sprint time into line items, and receive client payments directly.
-          </p>
-          <div className="mt-5 flex justify-center">
-            <button
-              onClick={handleOpenCreate}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
+          <div className="space-y-1">
+            <h3 className="font-display text-lg font-medium text-fg">No invoices yet</h3>
+            <p className="text-muted text-xs max-w-sm mx-auto">
+              Issue invoices, convert tracked sprint time into line items, and receive client payments directly.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              href="/dashboard/invoices/new"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent font-semibold text-xs shadow-[0_0_16px_rgba(212,107,40,0.12)] transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Issue Invoice</span>
-            </button>
+            </Link>
           </div>
-        </Card>
+        </div>
       ) : (
         <div className="space-y-10">
           {categoriesPresent.map((cat) => {

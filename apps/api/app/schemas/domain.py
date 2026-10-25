@@ -1145,12 +1145,13 @@ class PublicAppointmentOut(BaseModel):
     exposes the internal id, the client email back or workspace details."""
     consultation_title: Optional[str] = None
     consultation_token: Optional[str] = None
+    duration_minutes: Optional[int] = 30
     client_name: str
     appointment_time: datetime
     status: str
     meeting_link: Optional[str] = None
     reschedule_count: int = 0
-    max_reschedules: int = 3
+    max_reschedules: int = 1
 
 class BookingAgendaOut(BaseModel):
     """Live Today agenda (B6): ages and counts are derived server-side so the
@@ -1278,6 +1279,7 @@ class CalendarFeedItem(BaseModel):
     is_all_day: bool = False
     source: str  # local | google | booking | invoice
     client_name: Optional[str] = None
+    project_id: Optional[str] = None
     meeting_link: Optional[str] = None
     status: Optional[str] = None
 

@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getIntakeForm,
   deleteIntakeForm,
@@ -134,25 +135,36 @@ export default function IntakeDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto py-24 text-center space-y-3">
-        <Loader2 className="w-7 h-7 animate-spin text-accent mx-auto" />
-        <p className="text-xs text-muted font-medium">Loading intake questionnaire...</p>
+      <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+        <Skeleton className="h-6 w-36 rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-2xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-32 rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!form) {
     return (
-      <div className="max-w-md mx-auto py-24 text-center space-y-4">
-        <h2 className="text-lg font-medium text-fg">Questionnaire Not Found</h2>
-        <p className="text-xs text-muted">
-          This intake questionnaire may have been removed or does not exist.
-        </p>
-        <Link href="/dashboard/intake">
-          <Button className="rounded-xl px-4 text-xs bg-accent hover:bg-accent-hi text-accent-fg font-medium cursor-pointer">
-            Back to Intake Forms
-          </Button>
-        </Link>
+      <div className="max-w-5xl mx-auto pt-6 px-3 sm:px-6">
+        <Card className="bg-card border-dashed border-line rounded-2xl p-12 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 text-danger flex items-center justify-center mx-auto">
+            <ClipboardList className="w-6 h-6" />
+          </div>
+          <h3 className="font-display text-xl font-medium text-fg">Questionnaire not found</h3>
+          <p className="text-muted text-sm max-w-sm mx-auto">
+            This intake questionnaire may have been removed or does not exist.
+          </p>
+          <Link
+            href="/dashboard/intake"
+            className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline font-medium"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Intake Forms
+          </Link>
+        </Card>
       </div>
     );
   }
@@ -177,71 +189,76 @@ export default function IntakeDetailPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
-      {/* Top Navigation & Header */}
-      <div className="space-y-4 pb-4 border-b border-line">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
         <Link
           href="/dashboard/intake"
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Intake Forms</span>
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Intake Forms</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{form.title}</span>
         </Link>
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            {/* Colorful soft pill tags matching Clients & Leads pattern */}
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1 capitalize">
-                {form.title}
-              </h1>
+      {/* Main Header Card: Title, Status & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
+              {form.title}
+            </h1>
 
-              {/* Status Pill */}
-              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 capitalize">
-                {form.status || "Active Questionnaire"}
-              </span>
+            {/* Status Pill */}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)] capitalize">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{form.status || "Active Questionnaire"}</span>
+            </span>
 
-              {/* Category Pill */}
-              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25 capitalize">
-                {category}
-              </span>
+            {/* Category Pill */}
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-sky-500/10 text-sky-400 border-sky-500/20 capitalize">
+              {category}
+            </span>
 
-              {/* Submissions Pill */}
-              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-mono font-medium border bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25">
-                {submissions.length} Response{submissions.length === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            {cleanDescription && (
-              <p className="text-xs text-muted font-normal max-w-2xl">
-                {cleanDescription}
-              </p>
-            )}
+            {/* Submissions Pill */}
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-mono font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20">
+              {submissions.length} Response{submissions.length === 1 ? "" : "s"}
+            </span>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Link href={`/dashboard/intake/${form.id}/edit`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs rounded-xl h-9 px-3.5 border-line cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Edit Form
-              </Button>
-            </Link>
+          {cleanDescription && (
+            <p className="text-xs text-muted font-normal max-w-2xl">
+              {cleanDescription}
+            </p>
+          )}
+        </div>
 
+        {/* Action Buttons Toolbar */}
+        <div className="flex items-center gap-2.5 shrink-0 self-start lg:self-center">
+          <Link href={`/dashboard/intake/${form.id}/edit`}>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10 cursor-pointer"
-              title="Delete Form"
+              className="border-line text-fg bg-card hover:bg-surface text-xs rounded-xl h-9 px-3.5 cursor-pointer flex items-center gap-1.5 shadow-xs"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Edit Form</span>
             </Button>
-          </div>
+          </Link>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="border-line text-muted hover:text-danger hover:bg-danger/10 text-xs rounded-xl h-9 w-9 p-0 flex items-center justify-center cursor-pointer transition-colors"
+            title="Delete Form"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
 
@@ -250,7 +267,7 @@ export default function IntakeDetailPage() {
         {/* Left Column: Public Link, Fields & Answers (8 cols) */}
         <div className="lg:col-span-8 space-y-5">
           {/* Share Box Card */}
-          <div className="p-5 rounded-2xl bg-card border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-5 rounded-2xl bg-gradient-to-b from-card to-card/90 border border-line/70 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <span className="text-xs font-medium text-muted">Public Client Share Link</span>
               <div className="text-xs sm:text-sm font-mono text-fg break-all select-all">
@@ -263,30 +280,30 @@ export default function IntakeDetailPage() {
                 variant="outline"
                 size="sm"
                 onClick={handleCopyLink}
-                className="text-xs rounded-xl h-9 px-3.5 border-line cursor-pointer"
+                className="border-line text-fg bg-card hover:bg-surface text-xs rounded-xl h-9 px-3.5 cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
                 {copied ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-accent" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 ) : (
-                  <Copy className="w-3.5 h-3.5 mr-1.5 text-accent" />
+                  <Copy className="w-3.5 h-3.5 text-accent" />
                 )}
-                {copied ? "Copied" : "Copy Link"}
+                <span>{copied ? "Copied" : "Copy Link"}</span>
               </Button>
 
               <a
                 href={`/intake/${shareToken}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center text-xs rounded-xl h-9 px-3.5 bg-accent hover:bg-accent-hi text-accent-fg font-medium transition-colors cursor-pointer"
+                className="bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border border-orange-400/40 font-medium text-xs rounded-xl h-9 px-3.5 inline-flex items-center justify-center gap-1.5 transition-all duration-150 cursor-pointer"
               >
                 <span>Live View</span>
-                <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
+                <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
           </div>
 
           {/* Questionnaire Questions List */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
+          <Card className="p-5 sm:p-6 rounded-2xl border-line/70 bg-gradient-to-b from-card to-card/90 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-line">
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-accent" />
@@ -330,7 +347,7 @@ export default function IntakeDetailPage() {
           </Card>
 
           {/* Submissions Section */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
+          <Card className="p-5 sm:p-6 rounded-2xl border-line/70 bg-gradient-to-b from-card to-card/90 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-line">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-accent" />

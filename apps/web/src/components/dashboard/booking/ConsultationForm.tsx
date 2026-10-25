@@ -7,9 +7,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { ArrowLeft, Clock, Loader2, AlertCircle, Video } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { CategoryVisualCard } from "@/components/dashboard/CategoryVisualCard";
+import { ServiceCard } from "@/components/dashboard/booking/ServiceCard";
 import { BookingConsultationPayload } from "@/lib/api";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { logHandledError } from "@/lib/log-error";
@@ -247,12 +246,11 @@ export function ConsultationForm({
       </div>
 
       {/* Main Header Card: Title & Actions */}
-      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-4 sm:px-6 sm:py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-fg capitalize">
             {headline}
           </h1>
-          <p className="text-xs text-muted/80 mt-1">Configure service settings, duration, and availability rules</p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
@@ -471,36 +469,37 @@ export function ConsultationForm({
 
         {/* Right column: live preview */}
         <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
-          <div className="flex items-center justify-between px-1">
-            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">Card Preview</span>
-            <span className="text-[11px] font-mono text-accent">Live Preview</span>
+          <div className="flex items-center gap-2 px-1">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block animate-pulse" />
+              Live Preview
+            </span>
           </div>
 
-          {/* Real CategoryVisualCard matching the Services Roster */}
-          <CategoryVisualCard
-            title={title.trim() || "Service Title"}
-            subtitle={`${durationMinutes} min online consultation`}
-            hidePrefix
-            className="w-full shadow-sm min-h-[200px]"
-            topRightContent={
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live
-              </span>
-            }
-            tags={
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-medium text-muted bg-surface px-2.5 py-0.5 rounded-full border border-line flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-accent" />
-                  {durationMinutes}m
-                </span>
-              </div>
-            }
-            icon={
-              <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/25 flex items-center justify-center text-accent shadow-2xs">
-                <Video className="w-4 h-4" />
-              </div>
-            }
+          {/* Real ServiceCard matching the Services Roster */}
+          <ServiceCard
+            item={{
+              id: "preview-service",
+              workspace_id: "preview-ws",
+              title: title.trim() || "Service Title",
+              description: description.trim(),
+              duration_minutes: durationMinutes,
+              meeting_provider: "google_meet",
+              is_active: true,
+              token: "preview",
+              appointments_count: 0,
+              weekday_mask: weekdayMask,
+              start_minute: startHour * 60,
+              end_minute: endHour * 60,
+              timezone: "UTC",
+              min_lead_hours: minLeadHours,
+              max_advance_days: maxAdvanceDays,
+              buffer_minutes: bufferMinutes,
+              no_show_limit: noShowLimit,
+              created_at: new Date().toISOString(),
+            }}
+            isPreview
+            className="w-full shadow-sm"
           />
 
           {/* Clean Schedule Summary */}

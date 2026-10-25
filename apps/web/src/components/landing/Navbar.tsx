@@ -27,23 +27,8 @@ const navLinks = [
   { label: "Docs", href: "/docs" },
 ];
 
-const GLASS_BG = "rgba(22, 22, 23, 0.8)";
 const GLASS_SHADOW =
   "0px 0px 24px rgba(0,0,0,0.55), 0px 1px 1px rgba(0,0,0,0.5), 0px 0px 0px 1px rgba(255,255,255,0.07), 0px 16px 68px rgba(0,0,0,0.45), 0px 1px 0px rgba(255,255,255,0.05) inset";
-const CLEAR_SHADOW =
-  "0px 0px 24px rgba(0,0,0,0), 0px 1px 1px rgba(0,0,0,0), 0px 0px 0px 1px rgba(255,255,255,0), 0px 16px 68px rgba(0,0,0,0), 0px 1px 0px rgba(255,255,255,0) inset";
-
-const glassMorph = (floating: boolean, pinned = false) => ({
-  // pinned (docs): the bar never shrinks into the floating pill — it only
-  // gains the glass background so content scrolls under it readably
-  width: floating && !pinned ? "80%" : "100%",
-  y: floating && !pinned ? 20 : 0,
-  backgroundColor: floating ? GLASS_BG : "rgba(22, 22, 23, 0)",
-  backdropFilter: floating ? "blur(10px)" : "blur(0px)",
-  boxShadow: floating ? GLASS_SHADOW : CLEAR_SHADOW,
-});
-
-const glassSpring = { type: "spring" as const, stiffness: 120, damping: 28 };
 
 function Wordmark({ className }: { className?: string }) {
   return (
@@ -125,7 +110,7 @@ export function Navbar({ pinned = false }: { pinned?: boolean }) {
       : [{ label: "Home", href: "/" }, ...navLinks];
   const { scrollY } = useScroll();
   const [floating, setFloating] = useState(false);
-  useMotionValueEvent(scrollY, "change", (y) => setFloating(y > 100));
+  useMotionValueEvent(scrollY, "change", (y) => setFloating(y > 50));
 
   return (
     <>
@@ -137,12 +122,24 @@ export function Navbar({ pinned = false }: { pinned?: boolean }) {
         )}
       >
         {/* Desktop bar — transparent at rest, floating glass pill on scroll */}
-        <motion.div
-          animate={glassMorph(floating, pinned)}
-          transition={glassSpring}
+        <div
+          style={{
+            boxShadow: floating && !pinned ? GLASS_SHADOW : pinned && floating ? GLASS_SHADOW : "none",
+          }}
           className={cn(
-            "relative z-[60] mx-auto hidden w-full max-w-7xl flex-row items-center justify-between self-start p-4 lg:flex",
-            pinned ? "rounded-none" : "rounded-full"
+            "relative z-[60] mx-auto hidden flex-row items-center justify-between self-start p-4 lg:flex",
+            "transform-gpu transition-[width,transform,background-color,border-color,box-shadow] duration-300 ease-out",
+            pinned
+              ? cn(
+                  "w-full max-w-7xl rounded-none translate-y-0",
+                  floating ? "border-b border-line/60 bg-[#161617]/80 backdrop-blur-md" : "border-b border-transparent bg-transparent"
+                )
+              : cn(
+                  "rounded-full",
+                  floating
+                    ? "w-[80%] translate-y-5 border border-white/[0.08] bg-[#161617]/80 backdrop-blur-md"
+                    : "w-full max-w-7xl translate-y-0 border border-transparent bg-transparent"
+                )
           )}
         >
           <Wordmark className="z-10" />
@@ -179,13 +176,17 @@ export function Navbar({ pinned = false }: { pinned?: boolean }) {
               <UserButton afterSignOutUrl="/" />
             </SignedIn>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Mobile bar — same transparent-to-glass morph */}
-        <motion.div
-          animate={glassMorph(floating, pinned)}
-          transition={glassSpring}
-          className="relative z-50 mx-auto flex w-full flex-col items-center justify-between py-4 lg:hidden"
+        {/* Mobile bar — transparent at rest, glass on scroll */}
+        <div
+          className={cn(
+            "relative z-50 mx-auto flex w-full flex-col items-center justify-between py-4 lg:hidden",
+            "transform-gpu transition-[background-color,border-color,box-shadow] duration-300 ease-out",
+            floating
+              ? "border-b border-line/60 bg-[#161617]/90 backdrop-blur-md shadow-md"
+              : "border-b border-transparent bg-transparent shadow-none"
+          )}
         >
           <div className="flex w-full flex-row items-center justify-between px-4 sm:px-6">
             <Wordmark />
@@ -200,7 +201,7 @@ export function Navbar({ pinned = false }: { pinned?: boolean }) {
               </button>
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Mobile drawer */}
         <AnimatePresence>

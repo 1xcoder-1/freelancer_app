@@ -21,7 +21,7 @@ interface WorkspaceCurrencyContextValue {
 
 const WorkspaceCurrencyContext = createContext<WorkspaceCurrencyContextValue>({
   currency: "USD",
-  setCurrency: () => {},
+  setCurrency: () => { },
   ready: false,
 });
 
@@ -71,7 +71,8 @@ export function WorkspaceCurrencyProvider({ children }: { children: React.ReactN
     readStoredCurrency,
     getServerCurrency
   );
-  const [ready, setReady] = useState(false);
+  // Ready immediately if already cached in localStorage
+  const [ready, setReady] = useState(() => Boolean(readStoredCurrency()));
 
   useEffect(() => {
     let mounted = true;
@@ -81,6 +82,7 @@ export function WorkspaceCurrencyProvider({ children }: { children: React.ReactN
         const ws = await getWorkspaceSettings(token);
         if (mounted && ws?.currency) writeStoredCurrency(ws.currency);
       } catch (err) {
+        // Non-blocking: local storage fallback is already active
         logHandledError("Failed to load workspace currency:", err);
       } finally {
         if (mounted) setReady(true);

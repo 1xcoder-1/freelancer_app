@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Dict, Any, Optional
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/booking", tags=["Booking & Consultation Calendar"])
 # to talk to the freelancer (B3). Also the ceiling on how far the open-slot
 # generator will look ahead in one request, so a huge max_advance_days never
 # turns a 15s poll into an unbounded scan.
-MAX_RESCHEDULES = 3
+MAX_RESCHEDULES = 1
 _SLOT_HORIZON_CAP = 30
 _MAX_SLOTS_PER_RESPONSE = 200
 
@@ -698,6 +698,7 @@ async def get_public_slots(
 async def schedule_public_appointment(
     token: str,
     payload: PublicAppointmentCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
     """B1: every slot is re-validated server-side inside this transaction, and
@@ -757,17 +758,21 @@ async def schedule_public_appointment(
     await db.commit()
     await db.refresh(appointment)
 
-    # Durable "reminder 24h before" + a 1h nudge (B6).
-    await emit("booking.scheduled", {
-        "appointment_id": appointment.id,
-        "consultation_id": consultation.id,
-        "workspace_id": consultation.workspace_id,
-        "client_name": appointment.client_name,
-        "client_email": appointment.client_email,
-        "appointment_time": appointment.appointment_time.isoformat(),
-        "meeting_link": appointment.meeting_link,
-        "consultation_title": consultation.title,
-    })
+    # Durable "reminder 24h before" + a 1h nudge (B6) via background tasks for instant client response.
+    background_tasks.add_task(
+        emit,
+        "booking.scheduled",
+        {
+            "appointment_id": appointment.id,
+            "consultation_id": consultation.id,
+            "workspace_id": consultation.workspace_id,
+            "client_name": appointment.client_name,
+            "client_email": appointment.client_email,
+            "appointment_time": appointment.appointment_time.isoformat(),
+            "meeting_link": appointment.meeting_link,
+            "consultation_title": consultation.title,
+        },
+    )
 
     return _appt_dict(appointment, consultation.title)
 
@@ -789,6 +794,7 @@ async def get_public_appointment(
     return PublicAppointmentOut(
         consultation_title=consultation.title if consultation else None,
         consultation_token=consultation.token if consultation else None,
+        duration_minutes=consultation.duration_minutes if consultation else 30,
         client_name=appt.client_name,
         appointment_time=appt.appointment_time,
         status=appt.status,
@@ -802,6 +808,7 @@ async def get_public_appointment(
 async def reschedule_public_appointment(
     appt_token: str,
     payload: BookingRescheduleRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
     """B3: token-scoped self-reschedule to another server-validated slot, with a
@@ -839,20 +846,25 @@ async def reschedule_public_appointment(
     await db.commit()
     await db.refresh(appt)
 
-    await emit("booking.scheduled", {
-        "appointment_id": appt.id,
-        "consultation_id": consultation.id,
-        "workspace_id": consultation.workspace_id,
-        "client_name": appt.client_name,
-        "client_email": appt.client_email,
-        "appointment_time": appt.appointment_time.isoformat(),
-        "meeting_link": appt.meeting_link,
-        "consultation_title": consultation.title,
-    })
+    background_tasks.add_task(
+        emit,
+        "booking.scheduled",
+        {
+            "appointment_id": appt.id,
+            "consultation_id": consultation.id,
+            "workspace_id": consultation.workspace_id,
+            "client_name": appt.client_name,
+            "client_email": appt.client_email,
+            "appointment_time": appt.appointment_time.isoformat(),
+            "meeting_link": appt.meeting_link,
+            "consultation_title": consultation.title,
+        },
+    )
 
     return PublicAppointmentOut(
         consultation_title=consultation.title,
         consultation_token=consultation.token,
+        duration_minutes=consultation.duration_minutes,
         client_name=appt.client_name,
         appointment_time=appt.appointment_time,
         status=appt.status,

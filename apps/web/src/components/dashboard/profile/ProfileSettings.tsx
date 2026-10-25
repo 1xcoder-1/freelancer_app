@@ -247,16 +247,98 @@ export function ProfileSettings() {
 
   if (loading) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-6">
-          <Skeleton className="w-24 h-24 rounded-2xl" />
-          <div className="space-y-2">
-            <Skeleton className="h-7 w-48" />
-            <Skeleton className="h-4 w-32" />
+      <div className="space-y-6 pb-8 sm:pb-10 animate-pulse">
+        {/* Profile Header skeleton */}
+        <div className="flex items-center gap-5 sm:gap-6">
+          <Skeleton className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shrink-0" />
+          <div className="space-y-2 min-w-0">
+            <Skeleton className="h-7 w-48 rounded-lg" />
+            <Skeleton className="h-4 w-36 rounded-md" />
+            <Skeleton className="h-3 w-48 rounded-md hidden sm:block opacity-60" />
           </div>
         </div>
-        <Skeleton className="h-10 w-full max-w-xl" />
-        <Skeleton className="h-96 w-full rounded-3xl" />
+
+        {/* Tab row skeleton */}
+        <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto scrollbar-none border-b border-line pb-3 -mx-1 px-1">
+          <Skeleton className="h-4 w-16 rounded-md" />
+          <Skeleton className="h-4 w-24 rounded-md" />
+          <Skeleton className="h-4 w-20 rounded-md" />
+          <Skeleton className="h-4 w-24 rounded-md" />
+          <Skeleton className="h-4 w-18 rounded-md" />
+          <Skeleton className="h-4 w-16 rounded-md" />
+          <Skeleton className="h-4 w-20 rounded-md" />
+        </div>
+
+        {/* Content Card skeleton */}
+        <div className="rounded-2xl border border-line/60 bg-surface/25 p-5 sm:p-7 pb-6 sm:pb-7 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+            {/* Full Name */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-20 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
+            {/* Username */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-20 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
+            {/* Bio */}
+            <div className="sm:col-span-2 space-y-2">
+              <Skeleton className="h-3.5 w-12 rounded-md" />
+              <Skeleton className="h-16 w-full rounded-lg" />
+            </div>
+
+            {/* Company / Institution */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-36 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
+            {/* Job Title */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-20 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-20 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
+            {/* App Currency */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-24 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
+            {/* Social & Professional Links Section */}
+            <div className="sm:col-span-2 pt-2 space-y-4">
+              <Skeleton className="h-4 w-44 rounded-md" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-3.5 w-16 rounded-md" />
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-3.5 w-16 rounded-md" />
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer action buttons skeleton */}
+          <div className="flex items-center justify-between gap-3 mt-6 pt-5 border-t border-line/40">
+            <Skeleton className="h-8.5 w-20 rounded-lg" />
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="h-8.5 w-28 rounded-lg" />
+              <Skeleton className="h-8.5 w-16 rounded-lg" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

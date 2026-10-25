@@ -4,7 +4,7 @@ import { logHandledError } from "@/lib/log-error";
 import { planDenialFrom } from "@/lib/plans";
 import { fetchWithDeduplication, invalidateCache } from "@/lib/cache";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,

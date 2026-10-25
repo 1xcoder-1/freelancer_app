@@ -17,5 +17,12 @@
     "concurrently": "^9.1.2",
     "cross-env": "^10.1.0",
     "wait-on": "^8.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "@sentry/cli",
+      "esbuild"
+    ]
   }
 }

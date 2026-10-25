@@ -245,16 +245,16 @@ export function ClientsPanel() {
                 ? `Client limit reached (${capacity.used}/${capacity.limit})`
                 : "Add Client"
             }
-            className={`press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer ${
+            className={`press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-medium text-xs sm:text-[13px] px-3.5 border active:scale-95 transition-all duration-150 cursor-pointer ${
               capacity.atLimit
-                ? "bg-warn/15 text-warn border border-warn/30 hover:bg-warn/20"
-                : "bg-accent hover:bg-accent-hi text-accent-fg"
+                ? "bg-warn/15 text-warn border-warn/30 hover:bg-warn/20"
+                : "bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border-orange-400/40"
             }`}
           >
             {capacity.atLimit ? (
               <Lock className="w-3.5 h-3.5" />
             ) : (
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
             )}
             <span>{capacity.atLimit ? "Upgrade plan" : "Add Client"}</span>
           </button>
@@ -287,9 +287,9 @@ export function ClientsPanel() {
           <div className="mt-5 flex justify-center">
             <button
               onClick={() => handleOpenCreate()}
-              className="press inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
+              className="press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-medium text-xs sm:text-[13px] px-4 border active:scale-95 transition-all duration-150 cursor-pointer bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border-orange-400/40"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
               <span>Add Client</span>
             </button>
           </div>

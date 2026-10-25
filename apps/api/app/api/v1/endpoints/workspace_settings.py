@@ -33,8 +33,7 @@ async def get_workspace(
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
     _, workspace = await get_or_create_user_workspace(db, current_user)
-    fresh = await db.execute(select(Workspace).where(Workspace.id == workspace.id))
-    return fresh.scalar_one()
+    return workspace
 
 
 @router.put("", response_model=WorkspaceOut)

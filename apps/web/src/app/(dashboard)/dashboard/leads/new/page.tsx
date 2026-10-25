@@ -275,29 +275,40 @@ export default function NewLeadPage() {
   const stageObj = STAGES.find((s) => s.key === stage) || STAGES[0];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
+        <Link
+          href="/dashboard/leads"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Leads</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">New Lead</span>
+        </Link>
+      </div>
+
+      {/* Main Header Card: Title & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-4 sm:px-6 sm:py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Link
-            href="/dashboard/leads"
-            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors mb-1"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Leads</span>
-          </Link>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-fg capitalize">
             Add New Lead
           </h1>
+          <p className="text-xs text-muted/90 font-normal mt-0.5">
+            Capture deal contact details, pipeline stage, priority, and estimated value.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
             type="button"
             variant="outline"
             onClick={() => guard.guardedPush("/dashboard/leads")}
             disabled={saving}
-            className="text-xs rounded-xl h-9 px-4 border-line"
+            className="border-line text-fg bg-card hover:bg-surface text-xs rounded-xl h-9 px-4 cursor-pointer"
           >
             Cancel
           </Button>
@@ -306,11 +317,11 @@ export default function NewLeadPage() {
             type="submit"
             form="lead-form"
             disabled={saving || !name.trim()}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-medium text-xs rounded-xl h-9 px-5 shadow-xs"
+            className="bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border border-orange-400/40 font-medium text-xs rounded-xl h-9 px-5 transition-all duration-150 cursor-pointer disabled:opacity-50"
           >
             {saving ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin text-white" />
                 <span>Saving...</span>
               </>
             ) : (

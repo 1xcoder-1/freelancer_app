@@ -161,14 +161,13 @@ export function IntakePanel() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
 
-          <Button
-            size="sm"
+          <button
             onClick={() => handleOpenCreate()}
-            className="rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-medium text-xs px-4 h-9 shadow-xs cursor-pointer"
+            className="press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-medium text-xs sm:text-[13px] px-3.5 border active:scale-95 transition-all duration-150 cursor-pointer bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border-orange-400/40"
           >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Questionnaire
-          </Button>
+            <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
+            <span>Add Questionnaire</span>
+          </button>
         </div>
       </div>
 
@@ -195,13 +194,15 @@ export function IntakePanel() {
           <p className="text-sm text-muted mt-1 max-w-md mx-auto">
             Build customized client questionnaires to collect requirements before kicking off projects.
           </p>
-          <Button
-            onClick={() => handleOpenCreate()}
-            className="mt-6 bg-accent hover:bg-accent-hi text-accent-fg font-semibold rounded-xl"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Create First Questionnaire
-          </Button>
+          <div className="mt-6 flex justify-center">
+            <button
+              onClick={() => handleOpenCreate()}
+              className="press group relative inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-medium text-xs sm:text-[13px] px-4 border active:scale-95 transition-all duration-150 cursor-pointer bg-gradient-to-b from-[#ff7a29] to-[#ea580c] hover:from-[#ff883d] hover:to-[#f97316] text-white shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25),0_0_12px_rgba(234,88,12,0.3)] hover:shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.35),0_0_16px_rgba(234,88,12,0.45)] border-orange-400/40"
+            >
+              <Plus className="w-3.5 h-3.5 text-white transition-transform duration-200 group-hover:rotate-90" />
+              <span>Create First Questionnaire</span>
+            </button>
+          </div>
         </Card>
       ) : (
         /* Categorized Cards with Sliding Pagination (20 cards per page) */

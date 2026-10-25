@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Caveat, Geist, Geist_Mono, IBM_Plex_Mono, Inter, Schibsted_Grotesk } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { BackToTop } from "@/components/common/BackToTop";
@@ -124,10 +125,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${plexMono.variable} ${inter.variable} ${schibsted.variable} ${caveat.variable} dark h-full antialiased`}
       >
         <head>
-          {/* Apply saved theme before first paint (no flash). Default: dark. */}
-          <script
+          {/* Enforce permanent dark mode across the application. */}
+          <Script
+            id="theme-init"
+            strategy="beforeInteractive"
             dangerouslySetInnerHTML={{
-              __html: `try{var t=localStorage.getItem('fb-theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}`,
+              __html: `try{localStorage.removeItem('fb-theme');document.documentElement.classList.add('dark')}catch(e){document.documentElement.classList.add('dark')}`,
             }}
           />
           <script

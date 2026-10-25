@@ -135,80 +135,113 @@ export default function InvoiceDetailPage() {
   const isSent = invoice.status === "sent";
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar max-w-7xl mx-auto pb-16">
-      {/* Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-line/60">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/invoices"
-              className="inline-flex items-center text-xs font-semibold text-muted hover:text-fg transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              Invoices & Billing
-            </Link>
-            <span className="text-muted text-xs">•</span>
-            <span className="text-xs text-accent font-semibold font-mono">{invoice.invoice_number}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg font-mono">
-              {invoice.invoice_number}
-            </h1>
-            <span
-              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold border capitalize ${
-                isPaid
-                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
-                  : isOverdue
-                  ? "bg-rose-500/15 text-rose-400 border-rose-500/25"
-                  : isSent
-                  ? "bg-sky-500/15 text-sky-400 border-sky-500/25"
-                  : "bg-surface text-muted border-line"
-              }`}
-            >
-              {isPaid ? "★ Paid & Settled" : isOverdue ? "Overdue" : isSent ? "Sent to Client" : "Draft"}
-            </span>
-          </div>
-        </div>
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between">
+        <Link
+          href="/dashboard/invoices"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Invoices</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium font-mono">{invoice.invoice_number}</span>
+        </Link>
+      </div>
 
-        <div className="flex items-center gap-2">
-          {!isPaid && (
+      {/* Main Header Card: Title, Status & Sleek Action Toolbar */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg font-mono">
+                {invoice.invoice_number}
+              </h1>
+
+              {/* Status Pill with Ambient Glow */}
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border capitalize ${
+                  isPaid
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)]"
+                    : isOverdue
+                    ? "bg-rose-500/10 text-rose-400 border-rose-500/25 shadow-[0_0_12px_rgba(244,63,94,0.12)]"
+                    : isSent
+                    ? "bg-sky-500/10 text-sky-400 border-sky-500/25 shadow-[0_0_12px_rgba(14,165,233,0.12)]"
+                    : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? "bg-emerald-500" : isOverdue ? "bg-rose-500" : isSent ? "bg-sky-500" : "bg-zinc-400"}`} />
+                <span>{isPaid ? "Paid & Settled" : isOverdue ? "Overdue" : isSent ? "Sent to Client" : "Draft"}</span>
+              </span>
+
+              <span className="inline-flex items-center font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-accent/10 border border-accent/25 text-accent">
+                {formatMoney(invoice.total_amount, currency, 0)}
+              </span>
+            </div>
+            {invoice.client_name && (
+              <p className="text-xs sm:text-sm text-muted font-normal">
+                Client: <strong className="text-fg font-medium">{invoice.client_name}</strong>
+              </p>
+            )}
+          </div>
+
+          {/* Unified Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0">
+            {!isPaid && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleStatusChange("paid")}
+                disabled={busy}
+                className="h-9 px-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-400 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Mark as Paid</span>
+              </Button>
+            )}
+
             <Button
+              variant="outline"
               size="sm"
-              onClick={() => handleStatusChange("paid")}
-              disabled={busy}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs h-9 px-3.5 rounded-xl gap-1.5 shadow-xs"
+              onClick={handleCopyLink}
+              className="h-9 px-3.5 rounded-xl border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] group cursor-pointer"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Mark as Paid</span>
+              {copied ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-accent animate-in zoom-in-50 duration-200" />
+                  <span className="font-semibold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
+                  <span>Payment Link</span>
+                </>
+              )}
             </Button>
-          )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyLink}
-            className="border-line text-xs font-semibold h-9 rounded-xl gap-1.5"
-          >
-            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-accent" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Link Copied" : "Payment Link"}
-          </Button>
+            <Link href={`/dashboard/invoices/${invoice.id}/edit`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5 text-muted group-hover:text-fg transition-colors" />
+                <span>Edit</span>
+              </Button>
+            </Link>
 
-          <Link href={`/dashboard/invoices/${invoice.id}/edit`}>
-            <Button variant="outline" size="sm" className="border-line text-xs font-semibold h-9 rounded-xl gap-1.5">
-              <Edit className="w-3.5 h-3.5" />
-              <span>Edit</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDelete}
+              className="h-9 w-9 p-0 rounded-xl text-muted/60 hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 transition-all active:scale-[0.96] cursor-pointer"
+              title="Delete Invoice"
+            >
+              <Trash2 className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
             </Button>
-          </Link>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDelete}
-            className="text-xs text-muted hover:text-danger hover:bg-danger/10 h-9 px-2 rounded-xl"
-            title="Delete Invoice"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          </div>
         </div>
       </div>
 

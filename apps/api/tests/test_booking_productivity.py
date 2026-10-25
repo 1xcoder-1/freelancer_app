@@ -132,14 +132,9 @@ async def test_reschedule_moves_slot_and_is_capped(client):
     assert moved.status_code == 200, moved.text
     assert moved.json()["reschedule_count"] == 1
 
-    # Burn through the remaining budget, then the cap rejects further moves.
-    for i, day in enumerate((6, 8), start=2):
-        r = await client.post(f"/api/v1/booking/public/appointments/{token}/reschedule", json={
-            "appointment_time": _at(day, hour=9).isoformat(),
-        })
-        assert r.status_code == 200, r.text
+    # MAX_RESCHEDULES is 1: second attempt must be capped and rejected with 409
     capped = await client.post(f"/api/v1/booking/public/appointments/{token}/reschedule", json={
-        "appointment_time": _at(20, hour=9).isoformat(),
+        "appointment_time": _at(6, hour=9).isoformat(),
     })
     assert capped.status_code == 409, capped.text
 

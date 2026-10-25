@@ -40,7 +40,7 @@ function AppShowcase() {
           className="relative z-10 w-full [perspective:2800px]"
         >
           <div
-            className="mk-tilt w-full"
+            className="mk-tilt w-full transform-gpu will-change-transform"
             style={{
               transformOrigin: "50% 42%",
               maskImage: "linear-gradient(to bottom, black 78%, transparent 99%)",

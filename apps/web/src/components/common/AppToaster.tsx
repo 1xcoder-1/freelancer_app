@@ -4,24 +4,12 @@ import * as React from "react";
 import { Toaster } from "sonner";
 
 /**
- * Sonner toaster that follows the app's dark/light theme (the <html> class
- * toggled before paint and by ThemeToggle), not the OS setting.
+ * Sonner toaster locked to dark theme.
  */
 export function AppToaster() {
-  const [theme, setTheme] = React.useState<"dark" | "light">("dark");
-
-  React.useEffect(() => {
-    const sync = () =>
-      setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <Toaster
-      theme={theme}
+      theme="dark"
       position="top-center"
       richColors
       closeButton

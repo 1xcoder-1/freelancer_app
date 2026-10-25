@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
+import { TextMorph } from "torph/react";
 import {
   ArrowLeft,
   Loader2,
@@ -554,58 +555,66 @@ export default function ProjectDetailPage() {
     : "";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
-      {/* Top Header */}
-      <div className="space-y-4 pb-4 border-b border-line">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav (Matching Booking) */}
+      <div className="flex items-center justify-between">
         <Link
           href="/dashboard/projects"
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Projects</span>
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Projects</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{project.title}</span>
         </Link>
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            {/* Soft colorful pill tags */}
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1 capitalize">
+      {/* Main Header Card: Title, Status, Metadata & Sleek Action Toolbar (Matching Booking) */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
                 {project.title}
               </h1>
 
-              {/* Status Pill */}
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${
-                  isCompleted
-                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                    : "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25"
-                }`}
-              >
-                {isCompleted ? "★ Completed" : project.status === "in_progress" ? "In Progress" : project.status}
-              </span>
+              {/* Status Pill with Ambient Glow */}
+              {isCompleted ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span>Completed</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/25 shadow-[0_0_12px_rgba(14,165,233,0.12)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                  <span>In Progress</span>
+                </span>
+              )}
 
               {/* Category Pill */}
-              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25 capitalize">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-surface/80 text-muted border-line capitalize">
                 {category}
               </span>
 
               {/* Priority Pill */}
               <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border capitalize ${
                   priority === "high"
-                    ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25"
+                    ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
                     : priority === "medium"
-                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25"
-                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                 }`}
               >
                 {priority} Priority
               </span>
 
-              {/* P2 deadline verdict pill (from the real due_date, not note text) */}
+              {/* Deadline verdict pill */}
               {dl && verdictMeta[dl.verdict] && (
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border ${verdictMeta[dl.verdict].cls}`}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border ${verdictMeta[dl.verdict].cls}`}
                   title={dl.due_date ? `Due ${new Date(dl.due_date).toLocaleDateString()}` : undefined}
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -615,115 +624,208 @@ export default function ProjectDetailPage() {
                   )}
                 </span>
               )}
+            </div>
 
-              {/* P1 unbilled-hours chip -> bill these hours */}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted/90 pt-0.5">
+              {project.client_name && (
+                <span className="flex items-center gap-1.5 font-medium text-fg">
+                  <Building2 className="w-3.5 h-3.5 text-accent" />
+                  {project.client_name}
+                </span>
+              )}
+              {(project.due_date || deadline) && (
+                <span className="flex items-center gap-1.5 font-mono">
+                  <Calendar className="w-3.5 h-3.5 text-accent" />
+                  Due {new Date(project.due_date || deadline).toLocaleDateString()}
+                </span>
+              )}
               {unbilledHours > 0 && (
-                <Link href="/dashboard/invoices/new">
-                  <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border bg-accent-soft text-accent border-accent/20 cursor-pointer">
-                    <Receipt className="w-3.5 h-3.5" />
-                    Unbilled {unbilledHours.toFixed(1)}h = {currency} {Math.round(unbilledValue).toLocaleString("en-US")}
-                  </span>
+                <Link href="/dashboard/invoices/new" className="hover:underline flex items-center gap-1 text-accent font-medium">
+                  <Receipt className="w-3.5 h-3.5" />
+                  Unbilled: {unbilledHours.toFixed(1)}h ({currency} {Math.round(unbilledValue).toLocaleString("en-US")})
                 </Link>
               )}
             </div>
 
-            {project.client_name && (
-              <p className="text-xs text-muted font-normal flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-accent" />
-                <span className="text-fg font-medium">{project.client_name}</span>
-                <>
-                  <span>•</span>
-                  <span className="text-muted flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-accent" /> Due{" "}
-                    {project.due_date
-                      ? new Date(project.due_date).toLocaleDateString()
-                      : deadline
-                      ? new Date(deadline).toLocaleDateString()
-                      : "Not set"}
-                  </span>
-                </>
+            {rawDescription && (
+              <p className="text-xs sm:text-sm text-muted/90 font-normal max-w-2xl leading-relaxed pt-1">
+                {rawDescription}
               </p>
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Unified Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0">
+            {project.share_token && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyPortal}
+                  className="h-9 px-3.5 rounded-xl border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] group cursor-pointer"
+                  title="Copy client portal link"
+                >
+                  {copiedPortal ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-accent animate-in zoom-in-50 duration-200" />
+                      <span className="font-semibold">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
+                      <span>Copy Portal</span>
+                    </>
+                  )}
+                </Button>
+
+                <a
+                  href={`/portal/${project.share_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group shrink-0"
+                  title="Open client portal"
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110 text-muted group-hover:text-fg" />
+                  <span>Portal</span>
+                </a>
+              </>
+            )}
+
+            {/* Edit */}
             <Link href={`/dashboard/projects/${project.id}/edit`}>
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs rounded-xl h-9 px-3.5 border-line cursor-pointer"
+                className="h-9 px-3.5 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
               >
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Edit Project
+                <Pencil className="w-3.5 h-3.5 text-muted group-hover:text-fg transition-colors" />
+                <span>Edit</span>
               </Button>
             </Link>
 
+            {/* Archive / Restore */}
             <Button
               variant="outline"
               size="sm"
               onClick={handleToggleArchive}
               disabled={busyAction === "archive"}
-              className="text-xs rounded-xl h-9 px-3 border-line"
-              title={isCompleted ? "Restore Project to Active" : "Archive Project"}
+              className="h-9 px-3 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-2xs group cursor-pointer"
+              title={isCompleted ? "Restore Project" : "Archive Project"}
             >
-              {isCompleted ? <RotateCcw className="w-3.5 h-3.5 mr-1" /> : <Archive className="w-3.5 h-3.5 mr-1" />}
-              {isCompleted ? "Restore" : "Archive"}
+              {isCompleted ? (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
+                  <span>Restore</span>
+                </>
+              ) : (
+                <>
+                  <Archive className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
+                  <span>Archive</span>
+                </>
+              )}
             </Button>
 
+            {/* Delete */}
             <Button
               variant="ghost"
               size="sm"
               onClick={handleDeleteProject}
               disabled={deleting}
-              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10"
+              className="h-9 w-9 p-0 rounded-xl text-muted/60 hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/25 transition-all active:scale-[0.96] cursor-pointer"
               title="Delete Project"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" />
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Metric Strip (3 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* 1. Project Budget */}
-        <div className="p-5 rounded-2xl bg-card border border-line flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-xs font-medium text-muted">Agreed Project Budget</span>
-            <div className="text-2xl font-mono font-medium text-fg">
-              {currency} {(project.budget || 0).toLocaleString("en-US")}
+      {/* 4 Metric Cards with TextMorph (Matching Booking) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+        {/* Card 1: Agreed Budget */}
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">Budget</span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+              <Receipt className="w-4 h-4" />
             </div>
           </div>
-          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-emerald-500/15 text-emerald-400 border-emerald-500/25">
-            Budget
-          </span>
+          <div className="relative z-10 my-2.5">
+            <div className="font-display text-2xl sm:text-3xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+              <span className="font-mono text-xl sm:text-2xl mr-1">{currency}</span>
+              <TextMorph numbers className="tabular-nums">{(project.budget || 0).toLocaleString("en-US")}</TextMorph>
+            </div>
+          </div>
+          <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+            <span>Agreed project budget</span>
+          </div>
         </div>
 
-        {/* 2. Tracked Work Value */}
-        <div className="p-5 rounded-2xl bg-card border border-line flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-xs font-medium text-muted">Tracked Time Value</span>
-            <div className="text-2xl font-mono font-medium text-accent">
-              {currency} {Math.round(workValue).toLocaleString("en-US")}
+        {/* Card 2: Tracked Value */}
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">Tracked Value</span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+              <Clock className="w-4 h-4" />
             </div>
           </div>
-          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-accent-soft text-accent border-accent/20">
-            {totalTrackedHours.toFixed(1)} hrs
-          </span>
+          <div className="relative z-10 my-2.5">
+            <div className="font-display text-2xl sm:text-3xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+              <span className="font-mono text-xl sm:text-2xl mr-1">{currency}</span>
+              <TextMorph numbers className="tabular-nums">{Math.round(workValue).toLocaleString("en-US")}</TextMorph>
+            </div>
+          </div>
+          <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" />
+            <span>{totalTrackedHours.toFixed(1)} hrs tracked</span>
+          </div>
         </div>
 
-        {/* 3. Progress */}
-        <div className="p-5 rounded-2xl bg-card border border-line flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-xs font-medium text-muted">Deliverable Progress</span>
-            <div className="text-2xl font-mono font-medium text-fg">
-              {project.progress_pct ?? 0}%
+        {/* Card 3: Phases */}
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-accent/5 blur-2xl group-hover:bg-accent/15 transition-all duration-500 pointer-events-none" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">Milestones</span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-accent group-hover:border-accent/30 transition-all duration-200">
+              <Building2 className="w-4 h-4" />
             </div>
           </div>
-          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-sky-500/15 text-sky-400 border-sky-500/25">
-            {completedMilestones}/{milestonesList.length} Phases
-          </span>
+          <div className="relative z-10 my-2.5">
+            <div className="font-display text-2xl sm:text-3xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+              <TextMorph numbers className="tabular-nums">{completedMilestones}</TextMorph>
+              <span className="text-muted text-lg sm:text-xl font-normal ml-1">/ {milestonesList.length}</span>
+            </div>
+          </div>
+          <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 inline-block shrink-0" />
+            <span>{milestonesList.length - completedMilestones} remaining</span>
+          </div>
+        </div>
+
+        {/* Card 4: Progress */}
+        <div className="group relative p-5 rounded-2xl border border-line/70 bg-gradient-to-b from-card via-card to-surface/20 hover:border-line-strong hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-default select-none shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-500/5 blur-2xl group-hover:bg-emerald-500/15 transition-all duration-500 pointer-events-none" />
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted font-medium">Progress</span>
+            <div className="w-8 h-8 rounded-xl bg-surface/80 border border-line/60 flex items-center justify-center text-muted group-hover:text-emerald-400 group-hover:border-emerald-500/30 transition-all duration-200">
+              <Check className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="relative z-10 my-2.5">
+            <div className="font-display text-2xl sm:text-3xl font-normal tracking-tight text-fg transition-transform duration-300 group-hover:translate-x-0.5">
+              <TextMorph numbers className="tabular-nums">
+                {project.progress_pct ?? (milestonesList.length > 0 ? Math.round((completedMilestones / milestonesList.length) * 100) : 0)}
+              </TextMorph>
+              <span className="text-muted text-lg sm:text-xl font-normal ml-0.5">%</span>
+            </div>
+          </div>
+          <div className="relative z-10 flex items-center gap-1.5 pt-1 text-xs text-muted font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+            <span>{completedTasks} tasks done</span>
+          </div>
         </div>
       </div>
 
@@ -752,14 +854,9 @@ export default function ProjectDetailPage() {
           {activeTab === "milestones" && (
             <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-line">
-                <div className="space-y-0.5">
-                  <h2 className="text-sm font-medium text-fg">
-                    Project Phases & Deliverable Sign-Offs
-                  </h2>
-                  <p className="text-xs text-muted">
-                    Check off completed milestones to update progress and sync client portal.
-                  </p>
-                </div>
+                <h2 className="text-sm font-medium text-fg">
+                  Project Phases & Deliverables
+                </h2>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1060,12 +1157,7 @@ export default function ProjectDetailPage() {
           {activeTab === "changes" && (
             <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-line">
-                <div className="space-y-0.5">
-                  <h2 className="text-sm font-medium text-fg">Change Requests &amp; Scope Creep Guard</h2>
-                  <p className="text-xs text-muted">
-                    Price each &ldquo;one more thing&rdquo; and let the client approve it in the portal.
-                  </p>
-                </div>
+                <h2 className="text-sm font-medium text-fg">Change Requests</h2>
                 <Button
                   size="sm"
                   variant="outline"

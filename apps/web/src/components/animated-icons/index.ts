@@ -120,7 +120,7 @@ export { Wifi } from "./icons/wifi";
 export { X } from "./icons/x";
 export { CircleX as XCircle } from "./icons/circle-x";
 export { Zap } from "./icons/zap";
-export { Edit, FileCheck, FileCheck2, FileSpreadsheet, FolderGit2, FolderKanban, FolderLock, Github, IdCard, Kanban, Linkedin, Loader2, RotateCw, Square, Twitter, Unplug, Youtube } from "lucide-react";
+export { Edit, FileCheck, FileCheck2, FileSpreadsheet, FolderGit2, FolderKanban, FolderLock, Github, IdCard, Inbox, Kanban, Linkedin, Loader2, RotateCw, Square, Twitter, Unplug, Youtube } from "lucide-react";
 // Looser than lucide's own LucideIcon: annotations written against it must also
 // accept animated icon components (and the lucide fallbacks above).
 export type LucideIcon = ComponentType<any>;

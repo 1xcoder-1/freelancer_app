@@ -313,45 +313,53 @@ export default function EditProjectPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
-        <div className="space-y-1">
-          <Link
-            href={`/dashboard/projects/${projectId}`}
-            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors mb-1"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Project</span>
-          </Link>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
+        <Link
+          href={`/dashboard/projects/${projectId}`}
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Projects</span>
+          <span className="text-faint">/</span>
+          <span className="text-muted/80">{project.title}</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">Edit</span>
+        </Link>
+      </div>
+
+      {/* Main Header Card: Title & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-4 sm:px-6 sm:py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-fg capitalize">
             Edit Project Details
           </h1>
-          <p className="text-xs text-muted">
-            Update budget, client organization, priority, and scope requirements.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
+            type="button"
             variant="outline"
-            size="sm"
             onClick={() => guard.guardedPush(`/dashboard/projects/${projectId}`)}
-            className="text-xs rounded-xl h-9 px-4 border-line"
+            disabled={saving}
+            className="h-9 px-3.5 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg font-medium text-xs transition-all active:scale-[0.97] cursor-pointer"
           >
             Cancel
           </Button>
+
           <Button
-            size="sm"
             type="submit"
             form="edit-project-form"
-            disabled={saving}
-            className="text-xs rounded-xl h-9 px-5 bg-accent hover:bg-accent-hi text-accent-fg font-medium shadow-xs"
+            disabled={saving || !title.trim()}
+            className="h-9 px-4 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] cursor-pointer disabled:opacity-50"
           >
             {saving ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                Saving...
+                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                <span>Saving...</span>
               </>
             ) : (
               <span>Save Changes</span>
@@ -365,9 +373,9 @@ export default function EditProjectPage() {
         {/* Left Column: Form Fields (7 cols) */}
         <div className="lg:col-span-7 space-y-5">
           {/* 1. General & Client Info */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
-            <h2 className="text-sm font-medium text-fg">
-              Project & Client Details
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+              Project Details
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -447,11 +455,11 @@ export default function EditProjectPage() {
                 />
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* 2. Budget & Category */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-5">
-            <h2 className="text-sm font-medium text-fg">
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-5">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
               Budget & Category
             </h2>
 
@@ -556,11 +564,11 @@ export default function EditProjectPage() {
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* 3. Scope Notes */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
-            <h2 className="text-sm font-medium text-fg">
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
               Scope & Deliverable Notes
             </h2>
 
@@ -576,7 +584,7 @@ export default function EditProjectPage() {
                 className="w-full p-3 rounded-xl border border-line bg-surface/50 text-fg placeholder:text-muted/60 text-xs sm:text-sm focus:border-accent focus:bg-card focus:outline-none transition-all resize-y"
               />
             </div>
-          </Card>
+          </div>
         </div>
 
         {/* Right Column: Live Sticky Card Preview (5 cols) */}

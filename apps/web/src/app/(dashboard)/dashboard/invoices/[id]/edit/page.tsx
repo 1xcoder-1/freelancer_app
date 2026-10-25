@@ -102,50 +102,61 @@ export default function EditInvoicePage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 no-scrollbar max-w-7xl mx-auto pb-16">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-line/60">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/dashboard/invoices/${invoiceId}`}
-              className="inline-flex items-center text-xs font-semibold text-muted hover:text-fg transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              Back to Invoice
-            </Link>
-            <span className="text-muted text-xs">•</span>
-            <span className="text-xs text-accent font-semibold font-mono">Edit State</span>
-          </div>
-          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">
+    <div className="space-y-6 max-w-5xl mx-auto pb-20 pt-2 px-3 sm:px-6 enter-stagger">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
+        <Link
+          href={`/dashboard/invoices/${invoiceId}`}
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
+        >
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Invoices</span>
+          <span className="text-faint">/</span>
+          <span className="text-muted/80">{invoice?.invoice_number}</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">Edit</span>
+        </Link>
+      </div>
+
+      {/* Main Header Card: Title & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-4 sm:px-6 sm:py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-fg capitalize">
             Edit Invoice {invoice?.invoice_number}
           </h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
+            type="button"
             variant="outline"
             onClick={() => guard.guardedPush(`/dashboard/invoices/${invoiceId}`)}
-            className="border-line text-xs font-semibold h-9 rounded-xl"
+            disabled={submitting}
+            className="h-9 px-3.5 rounded-xl border border-line bg-surface/50 hover:bg-surface-elevated hover:border-line-strong text-muted hover:text-fg font-medium text-xs transition-all active:scale-[0.97] cursor-pointer"
           >
             Cancel
           </Button>
+
           <Button
             onClick={handleSave}
             disabled={submitting}
-            className="bg-accent hover:bg-accent-hi text-accent-fg font-bold text-xs h-9 px-4 rounded-xl shadow-xs"
+            className="h-9 px-4 rounded-xl border border-accent/40 bg-accent/15 hover:bg-accent hover:text-white text-accent font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-[0.96] shadow-[0_0_16px_rgba(212,107,40,0.12)] cursor-pointer disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5 mr-1.5" />
-            {submitting ? "Saving..." : "Save Changes"}
+            <span>{submitting ? "Saving..." : "Save Changes"}</span>
           </Button>
         </div>
       </div>
 
       {/* 2-Column Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        <form onSubmit={handleSave} className="lg:col-span-7 space-y-6">
-          <Card className="bg-card border-line p-5 rounded-2xl space-y-4">
-            <span className="text-xs font-bold text-fg">Status & Notes</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <form onSubmit={handleSave} className="lg:col-span-7 space-y-5">
+          <div className="rounded-2xl border border-line/70 bg-card p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
+            <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2.5 border-b border-line/60">
+              Status & Notes
+            </h2>
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted">Invoice Status</label>
@@ -171,7 +182,7 @@ export default function EditInvoicePage() {
                 />
               </div>
             </div>
-          </Card>
+          </div>
 
           <Button
             type="submit"

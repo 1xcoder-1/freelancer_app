@@ -11,27 +11,26 @@
    Flip instantly with the .dark class on <html>.
 ------------------------------------------------------------------- */
 :root {
-  --bg: #fafaf9;
-  --fg: #171512;
-  --muted: #6b6560;
+  --bg: #0e0e0f;
+  --fg: #f0efed;
+  --muted: #a19d98;
   /* Animated icons (components/animated-icons): primary parts inherit the
-     surrounding text color, accent parts pick up the brand orange. Resolved
-     at use time, so .dark's --accent follows automatically. */
+     surrounding text color, accent parts pick up the brand orange. */
   --icon-accent: var(--accent);
-  --faint: #9a938c;
-  --card: #ffffff;
-  --surface: #f4f3f1;
-  --line: #ebe9e6;
-  --line-strong: #dcd8d3;
-  --accent: #c85a17;
-  --accent-hi: #b34d10;
-  --accent-soft: #fbf0e8;
+  --faint: #6f6b66;
+  --card: #161617;
+  --surface: #1d1d1f;
+  --line: #28282a;
+  --line-strong: #38383b;
+  --accent: #d46b28;
+  --accent-hi: #e07730;
+  --accent-soft: #261912;
   --accent-fg: #ffffff;
-  --ok: #15803d;
-  --warn: #a16207;
-  --danger: #cc3b31;
-  --info: #3563a8;
-  --violet: #7c53c3;
+  --ok: #3fbf6f;
+  --warn: #e3a83a;
+  --danger: #ef6f5f;
+  --info: #6ea8dc;
+  --violet: #b18ce0;
   --brand: #d25611;
   --brand-light: #e8804a;
   --brand-dark: #9e400a;
@@ -86,9 +85,14 @@
 }
 
 html {
-  scroll-behavior: smooth;
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(:target) {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -531,9 +535,15 @@ input[type="number"] {
    softened to a straight lean-back on small screens */
 .mk-tilt {
   transform: rotateX(32deg) rotateY(-11deg) rotateZ(14deg);
+  will-change: transform;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 .mk-tilt-flip {
   transform: rotateX(32deg) rotateY(11deg) rotateZ(-14deg);
+  will-change: transform;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 @media (max-width: 640px) {
   .mk-tilt,
@@ -715,5 +725,32 @@ input[type="number"] {
 
 .dark.mk-docs #nd-sidebar button[aria-label*="Sidebar"] {
   margin-right: auto;
+}
+
+/* Sonner toast close button positioning: sits cleanly inside top-right corner */
+[data-sonner-toaster] [data-close-button] {
+  top: 10px !important;
+  right: 10px !important;
+  left: auto !important;
+  transform: none !important;
+  background: var(--surface, #1e2024) !important;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--muted, #94a3b8) !important;
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0.7;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  z-index: 20;
+}
+
+[data-sonner-toaster] [data-close-button]:hover {
+  opacity: 1;
+  color: #fff !important;
+  background: var(--surface-hover, #2a2d34) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
 }
 

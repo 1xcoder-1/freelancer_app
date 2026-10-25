@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as Sentry from '@sentry/nextjs';
 import { logHandledError } from "@/lib/log-error";
 import { planDenialFrom } from "@/lib/plans";
+import { fetchWithDeduplication, invalidateCache } from "@/lib/cache";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -10,7 +11,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 20000,
 });
 
 interface ApiErrorShape {
@@ -84,11 +85,13 @@ apiClient.interceptors.response.use(
     // error — mutations are never retried to avoid double writes.
     const config = error?.config;
     const code = error?.code;
+    // Transient network-level disconnects and rate limits (429) are retried with short backoff.
+    // Timeouts (ECONNABORTED) must not be loop-retried multiple times, which starves the browser's
+    // 6-connection HTTP socket pool across open tabs.
     const isTransient =
-      code === 'ECONNABORTED' ||
       code === 'ECONNREFUSED' ||
       code === 'ERR_NETWORK' ||
-      code === 'ERR_CANCELED' ||
+      code === 'ECONNRESET' ||
       error?.response?.status === 429;
     const method = String(config?.method ?? 'get').toLowerCase();
     if (
@@ -98,7 +101,7 @@ apiClient.interceptors.response.use(
       (config.__retryCount ?? 0) < 2
     ) {
       config.__retryCount = (config.__retryCount ?? 0) + 1;
-      await sleep(config.__retryCount * 2000);
+      await sleep(config.__retryCount * 1500);
       return apiClient.request(config);
     }
 
@@ -1033,8 +1036,14 @@ export interface WorkspaceSettings {
 }
 
 export const getWorkspaceSettings = async (token?: string): Promise<WorkspaceSettings> => {
-  const response = await apiClient.get<WorkspaceSettings>('/workspace', authHeaders(token));
-  return response.data;
+  return fetchWithDeduplication(
+    'workspace:settings',
+    async () => {
+      const response = await apiClient.get<WorkspaceSettings>('/workspace', authHeaders(token));
+      return response.data;
+    },
+    3 * 60 * 1000
+  );
 };
 
 export const updateWorkspaceSettings = async (
@@ -1042,6 +1051,7 @@ export const updateWorkspaceSettings = async (
   token?: string
 ): Promise<WorkspaceSettings> => {
   const response = await apiClient.put<WorkspaceSettings>('/workspace', payload, authHeaders(token));
+  invalidateCache('workspace:settings');
   return response.data;
 };
 
@@ -1610,6 +1620,7 @@ export interface BookingSlots {
 export interface PublicAppointment {
   consultation_title?: string;
   consultation_token?: string | null;
+  duration_minutes?: number;
   client_name: string;
   appointment_time: string;
   status: string;
@@ -1742,6 +1753,7 @@ export interface CalendarFeedItem {
   is_all_day: boolean;
   source: 'local' | 'google' | 'booking' | 'invoice';
   client_name?: string | null;
+  project_id?: string | null;
   meeting_link?: string | null;
   status?: string | null;
 }
@@ -1787,11 +1799,18 @@ export const getCalendarEvents = async (
   end: string,
   token?: string
 ): Promise<CalendarFeedItem[]> => {
-  const response = await apiClient.get<CalendarFeedItem[]>(
-    `/calendar/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
-    authHeaders(token)
+  const cacheKey = `calendar:events:${start}:${end}`;
+  return fetchWithDeduplication(
+    cacheKey,
+    async () => {
+      const response = await apiClient.get<CalendarFeedItem[]>(
+        `/calendar/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+        authHeaders(token)
+      );
+      return response.data;
+    },
+    20_000
   );
-  return response.data;
 };
 
 export const createCalendarEvent = async (
@@ -1799,16 +1818,34 @@ export const createCalendarEvent = async (
   token?: string
 ): Promise<CalendarEvent> => {
   const response = await apiClient.post<CalendarEvent>('/calendar/events', payload, authHeaders(token));
+  invalidateCache(/^calendar:events/);
+  invalidateCache('dashboard:today');
+  invalidateCache(/^dashboard/);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('calendar-updated'));
+  }
   return response.data;
 };
 
 export const deleteCalendarEvent = async (eventId: string, token?: string): Promise<void> => {
   await apiClient.delete(`/calendar/events/${eventId}`, authHeaders(token));
+  invalidateCache(/^calendar:events/);
+  invalidateCache('dashboard:today');
+  invalidateCache(/^dashboard/);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('calendar-updated'));
+  }
 };
 
 export const getGoogleCalendarStatus = async (token?: string): Promise<GoogleConnectionStatus> => {
-  const response = await apiClient.get<GoogleConnectionStatus>('/calendar/google/status', authHeaders(token));
-  return response.data;
+  return fetchWithDeduplication(
+    'calendar:google:status',
+    async () => {
+      const response = await apiClient.get<GoogleConnectionStatus>('/calendar/google/status', authHeaders(token));
+      return response.data;
+    },
+    30_000
+  );
 };
 
 export const startGoogleCalendarConnect = async (
@@ -1825,16 +1862,22 @@ export const completeGoogleCalendarConnect = async (
   token?: string
 ): Promise<GoogleConnectionStatus> => {
   const response = await apiClient.post<GoogleConnectionStatus>('/calendar/google/callback', payload, authHeaders(token));
+  invalidateCache('calendar:google:status');
+  invalidateCache(/^calendar:events/);
   return response.data;
 };
 
 export const syncGoogleCalendar = async (token?: string): Promise<CalendarSyncResult> => {
   const response = await apiClient.post<CalendarSyncResult>('/calendar/google/sync', {}, authHeaders(token));
+  invalidateCache('calendar:google:status');
+  invalidateCache(/^calendar:events/);
   return response.data;
 };
 
 export const disconnectGoogleCalendar = async (token?: string): Promise<void> => {
   await apiClient.delete('/calendar/google/disconnect', authHeaders(token));
+  invalidateCache('calendar:google:status');
+  invalidateCache(/^calendar:events/);
 };
 
 export const setGoogleMeetEnabled = async (

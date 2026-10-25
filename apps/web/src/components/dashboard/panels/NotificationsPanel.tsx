@@ -31,6 +31,8 @@ import {
   type NotificationItem,
 } from "@/lib/api";
 import { useApiData, invalidateCache } from "@/hooks/use-api-data";
+import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
+import { humanizeNotificationTitle, humanizeNotificationBody } from "@/lib/humanize";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 
 // Each producer in the API writes a dotted `kind`; the inbox gives it a glyph
@@ -90,6 +92,7 @@ function groupByDay(items: NotificationItem[]): { label: string; items: Notifica
 export function NotificationsPanel() {
   const { getToken } = useAuth();
   const router = useRouter();
+  const { currency } = useWorkspaceCurrency();
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -263,10 +266,10 @@ export function NotificationsPanel() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />}
-                            <p className="text-sm font-medium text-fg truncate">{n.title}</p>
+                            <p className="text-sm font-medium text-fg truncate">{humanizeNotificationTitle(n.title)}</p>
                           </div>
                           {n.body && (
-                            <p className="text-xs text-muted truncate pl-3.5 mt-0.5">{n.body}</p>
+                            <p className="text-xs text-muted truncate pl-3.5 mt-0.5">{humanizeNotificationBody(n.body, currency)}</p>
                           )}
                         </div>
 

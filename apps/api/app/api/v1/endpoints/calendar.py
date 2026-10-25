@@ -97,7 +97,7 @@ async def list_calendar_events(
             id=ev.id, title=ev.title, description=ev.description,
             event_type=ev.event_type, start_time=ev.start_time, end_time=ev.end_time,
             is_all_day=ev.is_all_day, source=ev.source,
-            client_name=ev.client_name, meeting_link=ev.meeting_link,
+            client_name=ev.client_name, project_id=ev.project_id, meeting_link=ev.meeting_link,
         ))
 
     # 2) Client-booked appointments (booking module stays the source of truth)

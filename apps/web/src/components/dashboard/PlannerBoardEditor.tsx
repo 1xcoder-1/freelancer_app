@@ -28,7 +28,6 @@ import {
 import { toast } from "sonner";
 
 import "@excalidraw/excalidraw/index.css";
-import { useThemeMode } from "@/hooks/use-theme-mode";
 
 const ExcalidrawRaw = dynamic(
   () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
@@ -47,7 +46,6 @@ type BinaryFiles = Record<string, any>;
 
 import { Button } from "@/components/ui/button";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
-import { ThemeToggle } from "@/components/common/ThemeToggle";
 import {
   getPlannerBoard,
   getPlannerBoardHead,
@@ -214,7 +212,6 @@ function TodoPlanner({
 
 export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   const { getToken } = useAuth();
-  const theme = useThemeMode();
 
   // Projects feed the per-todo link picker + row chips. Shares the cached
   // "projects:data" key with the projects panel, so it's usually one request.
@@ -629,7 +626,6 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
             <Share2 className="w-4 h-4 mr-1" />
             <span className="hidden sm:inline">Share</span>
           </Button>
-          <ThemeToggle />
         </div>
       </div>
 
@@ -860,7 +856,7 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
             onChange={handleChange}
             initialData={{ elements: [], files: {}, appState: { viewModeEnabled: false } }}
             langCode="en"
-            theme={theme}
+            theme="dark"
             name={name}
           />
         </div>

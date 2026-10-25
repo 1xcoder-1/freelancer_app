@@ -291,7 +291,8 @@ export const FEATURES: FeatureDef[] = [
     description: "Calendar events and Google Calendar sync (command menu).",
     icon: Calendar,
     href: "/dashboard/calendar",
-    routes: ["/dashboard/calendar"],
+    routes: [],
+    locked: true,
     commandOnly: true,
   },
   {

@@ -19,6 +19,7 @@ import {
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getClient, deleteClient, type Client } from "@/lib/api";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
@@ -94,30 +95,36 @@ export default function ClientDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl sm:max-w-7xl mx-auto py-28 text-center space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-accent mx-auto" />
-        <p className="text-sm font-medium text-muted">Loading client profile...</p>
+      <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6">
+        <Skeleton className="h-6 w-36 rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-2xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-32 rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!client) {
     return (
-      <div className="max-w-md mx-auto py-24 text-center space-y-5">
-        <div className="w-14 h-14 rounded-2xl bg-danger/10 text-danger flex items-center justify-center mx-auto">
-          <Users className="w-7 h-7" />
-        </div>
-        <h2 className="text-xl font-bold text-fg">Client Not Found</h2>
-        <p className="text-sm text-muted">
-          This client profile might have been removed or does not exist in your workspace.
-        </p>
-        <Link href="/dashboard/clients">
-          <Button
-            className="rounded-xl px-5 bg-accent hover:bg-accent-hi text-accent-fg font-semibold"
+      <div className="max-w-5xl mx-auto pt-6 px-3 sm:px-6">
+        <Card className="bg-card border-dashed border-line rounded-2xl p-12 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 text-danger flex items-center justify-center mx-auto">
+            <Users className="w-6 h-6" />
+          </div>
+          <h3 className="font-display text-xl font-medium text-fg">Client not found</h3>
+          <p className="text-muted text-sm max-w-sm mx-auto">
+            This client profile might have been removed or does not exist in your workspace.
+          </p>
+          <Link
+            href="/dashboard/clients"
+            className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline font-medium"
           >
-            Back to Clients
-          </Button>
-        </Link>
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Clients
+          </Link>
+        </Card>
       </div>
     );
   }
@@ -213,72 +220,82 @@ export default function ClientDetailPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 pt-2 px-3 sm:px-6 enter-stagger">
-      {/* Top Navigation & Header */}
-      <div className="space-y-4 pb-4 border-b border-line">
+      {/* Top Breadcrumb & Quick Nav */}
+      <div className="flex items-center justify-between pb-1">
         <Link
           href="/dashboard/clients"
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg transition-colors"
+          className="group inline-flex items-center gap-2 text-xs font-medium text-muted hover:text-fg transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Clients</span>
+          <span className="w-6 h-6 rounded-lg bg-surface border border-line/70 flex items-center justify-center transition-all group-hover:bg-surface-elevated group-hover:border-line-strong group-hover:-translate-x-0.5">
+            <ArrowLeft className="w-3.5 h-3.5 text-muted group-hover:text-fg" />
+          </span>
+          <span className="text-muted/80">Clients</span>
+          <span className="text-faint">/</span>
+          <span className="text-fg font-medium capitalize">{client.name}</span>
         </Link>
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            {/* Colorful soft pill tags matching reference image */}
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg mr-1">
-                {client.name}
-              </h1>
+      {/* Main Header Card: Title, Status & Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-b from-card to-card/90 p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-fg capitalize">
+              {client.name}
+            </h1>
 
-              {/* Status Pill */}
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border capitalize ${isVip
-                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25"
-                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                  }`}
-              >
-                {isVip ? "★ VIP Client" : client.status || "Active Client"}
-              </span>
-
-              {/* Category Pill */}
-              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/25">
-                {category}
-              </span>
-            </div>
-
-            {client.company_name && (
-              <p className="text-xs text-muted font-normal flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-accent" />
-                <span className="text-fg font-medium">{client.company_name}</span>
-              </p>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Link href={`/dashboard/clients/${client.id}/edit`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs rounded-xl h-9 px-3.5 border-line cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Edit Profile
-              </Button>
-            </Link>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="text-xs rounded-xl h-9 px-2.5 text-muted hover:text-danger hover:bg-danger/10"
-              title="Delete Client"
+            {/* Status Pill with Ambient Glow */}
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border capitalize ${
+                isVip
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.12)]"
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.12)]"
+              }`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isVip ? "bg-amber-400" : "bg-emerald-400 animate-pulse"
+                }`}
+              />
+              <span>{isVip ? "★ VIP Client" : client.status || "Active Client"}</span>
+            </span>
+
+            {/* Category Pill */}
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-sky-500/10 text-sky-400 border-sky-500/20">
+              {category}
+            </span>
           </div>
+
+          {client.company_name && (
+            <p className="text-xs text-muted font-normal flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-accent" />
+              <span className="text-fg font-medium">{client.company_name}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Action Buttons Toolbar */}
+        <div className="flex items-center gap-2.5 shrink-0 self-start lg:self-center">
+          <Link href={`/dashboard/clients/${client.id}/edit`}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-line text-fg bg-card hover:bg-surface text-xs rounded-xl h-9 px-3.5 cursor-pointer flex items-center gap-1.5 shadow-xs"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Edit Profile</span>
+            </Button>
+          </Link>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="border-line text-muted hover:text-danger hover:bg-danger/10 text-xs rounded-xl h-9 w-9 p-0 flex items-center justify-center cursor-pointer transition-colors"
+            title="Delete Client"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
 
@@ -290,7 +307,7 @@ export default function ClientDetailPage() {
         {/* Left Column: Billing Overview & Notes (8 cols) */}
         <div className="lg:col-span-8 space-y-5">
           {/* Billing Rate Card */}
-          <div className="p-5 rounded-2xl bg-card border border-line flex items-center justify-between">
+          <div className="p-5 rounded-2xl bg-gradient-to-b from-card to-card/90 border border-line/70 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-xs font-medium text-muted">Agreed Billing Rate</span>
               <div className="text-2xl font-mono font-medium text-fg">
@@ -303,7 +320,7 @@ export default function ClientDetailPage() {
           </div>
 
           {/* Scope & Notes */}
-          <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-3.5">
+          <Card className="p-5 sm:p-6 rounded-2xl border-line/70 bg-gradient-to-b from-card to-card/90 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-3.5">
             <div className="flex items-center gap-2 pb-2.5 border-b border-line">
               <FileText className="w-4 h-4 text-accent" />
               <h2 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg">
@@ -325,7 +342,7 @@ export default function ClientDetailPage() {
 
         {/* Right Column: Key Contact & Metadata (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
-          <Card className="p-5 rounded-2xl border-line bg-card space-y-4">
+          <Card className="p-5 rounded-2xl border-line/70 bg-gradient-to-b from-card to-card/90 shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.03)] space-y-4">
             <h2 className="font-display text-base font-medium tracking-wide text-fg pb-2 border-b border-line">
               Contact Details
             </h2>

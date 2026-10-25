@@ -148,10 +148,11 @@ async def add_security_headers(request: Request, call_next):
     response.headers.update(rate_headers(request))
     return response
 
-# Set up CORS middleware (Strict origin filtering)
+# Set up CORS middleware (Strict origin filtering + Vercel domains)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -185,6 +186,8 @@ if settings.INNGEST_ENABLED:
     inngest.fast_api.serve(app, inngest_client, functions)
 
 @app.get("/")
+@app.get("/api")
+@app.get("/api/index.py")
 async def root():
     return {
         "status": "online",

@@ -136,7 +136,8 @@ function socialIconOf(item: LinkPageRenderItem): string {
   return item.icon || detectPlatformFromUrl(item.url)?.icon || "globe";
 }
 
-/* The compact round icon row every reference design shows under the links. */
+/* The compact round icon row every reference design shows — sits ABOVE the
+   link cards so icon-only platform links lead the page. */
 function SocialRow({
   items,
   color,
@@ -152,7 +153,7 @@ function SocialRow({
 }) {
   if (items.length === 0) return null;
   return (
-    <div className="flex items-center justify-center gap-5 pt-7">
+    <div className="flex items-center justify-center gap-5 pb-6">
       {items.slice(0, 8).map((item) => (
         <a
           key={item.id}
@@ -182,8 +183,11 @@ function EmptyState({ text }: { text: string }) {
 }
 
 /* One full-width link row. Variants feed the six designs; thumbs render when
-   the item carries an image_url (e.g. "latest video" cards). */
+   the item carries an image_url (e.g. "latest video" cards). Two layouts:
+   "bar"  — classic single-line button (text left, arrow right)
+   "card" — big stacked card with the platform icon ON TOP of the title */
 interface RowStyle {
+  /* bar layout */
   height?: number;
   radius: number;
   bg: string;
@@ -198,21 +202,139 @@ interface RowStyle {
   hoverBorder?: string;
   shadow?: string;
   clipPath?: string;
-  iconChip?: { bg: string; color: string } | null;
+  /* card layout */
+  layout?: "bar" | "card";
+  padding?: string;
+  titleSizeCard?: string;
+  descFont?: string;
+  iconBoxSize?: number;
+  iconBg?: string;
+  iconColor?: string;
+}
+
+function LinkIconChip({
+  item,
+  style,
+  size = 28,
+  className = "",
+}: {
+  item: LinkPageRenderItem;
+  style: RowStyle;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`flex items-center justify-center shrink-0 select-none ${className}`}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.round(size * 0.32),
+        background: style.iconBg ?? "rgba(0,0,0,0.06)",
+        color: style.iconColor ?? style.textColor,
+      }}
+    >
+      <PlatformIconRenderer icon={item.icon} className="w-[55%] h-[55%]" />
+    </span>
+  );
 }
 
 function LinkRow({
   item,
   style,
+  tilt,
   onLinkClick,
   inert,
 }: {
   item: LinkPageRenderItem;
   style: RowStyle;
+  tilt?: number;
   onLinkClick?: (item: LinkPageRenderItem) => void;
   inert?: boolean;
 }) {
   const thumb = item.image_url;
+  const hasIcon = Boolean(item.icon);
+
+  const hoverHandlers = {
+    onMouseEnter: (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (style.hoverBg) e.currentTarget.style.background = style.hoverBg;
+      if (style.hoverBorder) e.currentTarget.style.borderColor = style.hoverBorder;
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (style.hoverBg) e.currentTarget.style.background = style.bg;
+      if (style.hoverBorder) e.currentTarget.style.borderColor = style.border || "transparent";
+    },
+  };
+
+  const baseStyle: React.CSSProperties = {
+    background: style.bg,
+    border: style.border ? `1px solid ${style.border}` : undefined,
+    color: style.textColor,
+    boxShadow: style.shadow,
+    clipPath: style.clipPath,
+    filter: style.clipPath ? "drop-shadow(0 1px 2px rgba(0,0,0,0.18))" : undefined,
+  };
+
+  /* Big stacked card: platform icon sits on TOP, title and description below. */
+  if (style.layout === "card") {
+    return (
+      <a
+        href={inert ? undefined : safeHref(item.url)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={guard(inert, () => onLinkClick?.(item))}
+        className="group relative flex flex-col items-start w-full select-none transition-all duration-150 hover:-translate-y-px"
+        style={{
+          ...baseStyle,
+          borderRadius: style.radius,
+          padding: style.padding ?? "14px 16px",
+          transform: tilt ? `rotate(${tilt}deg)` : undefined,
+        }}
+        {...hoverHandlers}
+      >
+        {thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumb}
+            alt=""
+            className="rounded-lg object-cover select-none mb-2.5"
+            style={{ width: style.iconBoxSize ?? 34, height: style.iconBoxSize ?? 34 }}
+            draggable={false}
+          />
+        ) : hasIcon ? (
+          <LinkIconChip item={item} style={style} size={style.iconBoxSize ?? 34} className="mb-2.5" />
+        ) : null}
+
+        <span
+          className={`block ${style.titleSizeCard ?? "text-[14px]"} leading-snug break-words`}
+          style={{
+            fontFamily: style.titleFont,
+            fontWeight: style.titleWeight ?? 600,
+            color: style.textColor,
+          }}
+        >
+          {item.label}
+        </span>
+        {item.description && (
+          <span
+            className="block text-[11px] mt-1 leading-snug"
+            style={{ color: style.descriptionColor, fontFamily: style.descFont }}
+          >
+            {item.description}
+          </span>
+        )}
+
+        <span
+          className="absolute top-2.5 right-3 text-xs opacity-50 group-hover:opacity-100 transition-opacity"
+          style={{ color: style.arrowColor }}
+        >
+          ↗
+        </span>
+      </a>
+    );
+  }
+
+  /* Classic single-line bar. */
   return (
     <a
       href={inert ? undefined : safeHref(item.url)}
@@ -221,23 +343,11 @@ function LinkRow({
       onClick={guard(inert, () => onLinkClick?.(item))}
       className="group relative flex items-center w-full px-4 select-none transition-all duration-150 hover:-translate-y-px"
       style={{
+        ...baseStyle,
         minHeight: style.height ?? 44,
-        background: style.bg,
-        border: style.border ? `1px solid ${style.border}` : undefined,
         borderRadius: style.radius,
-        color: style.textColor,
-        boxShadow: style.shadow,
-        clipPath: style.clipPath,
-        filter: style.clipPath ? "drop-shadow(0 1px 2px rgba(0,0,0,0.18))" : undefined,
       }}
-      onMouseEnter={(e) => {
-        if (style.hoverBg) e.currentTarget.style.background = style.hoverBg;
-        if (style.hoverBorder) e.currentTarget.style.borderColor = style.hoverBorder;
-      }}
-      onMouseLeave={(e) => {
-        if (style.hoverBg) e.currentTarget.style.background = style.bg;
-        if (style.hoverBorder) e.currentTarget.style.borderColor = style.border || "transparent";
-      }}
+      {...hoverHandlers}
     >
       {thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -247,19 +357,11 @@ function LinkRow({
           className="w-8 h-8 rounded-lg object-cover shrink-0 mr-3 select-none"
           draggable={false}
         />
-      ) : style.iconChip ? (
-        <span
-          className="absolute left-2 w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-          style={{ background: style.iconChip.bg, color: style.iconChip.color }}
-        >
-          <PlatformIconRenderer icon={item.icon} className="w-4 h-4" />
-        </span>
+      ) : hasIcon ? (
+        <LinkIconChip item={item} style={style} size={26} className="mr-3" />
       ) : null}
 
-      <div
-        className={`min-w-0 ${style.iconChip ? "px-9" : ""} w-full`}
-        style={{ textAlign: style.iconChip ? "center" : "left" }}
-      >
+      <div className="min-w-0 w-full">
         <span
           className={`block truncate ${style.titleSize ?? "text-[13px]"}`}
           style={{
@@ -280,14 +382,12 @@ function LinkRow({
         )}
       </div>
 
-      {!style.iconChip && (
-        <span
-          className="ml-2 text-xs opacity-70 group-hover:opacity-100 transition-opacity shrink-0"
-          style={{ color: style.arrowColor }}
-        >
-          ↗
-        </span>
-      )}
+      <span
+        className="ml-2 text-xs opacity-70 group-hover:opacity-100 transition-opacity shrink-0"
+        style={{ color: style.arrowColor }}
+      >
+        ↗
+      </span>
     </a>
   );
 }
@@ -332,14 +432,19 @@ function useRows(data: LinkPageRenderData) {
 function FreshPress({ data, onLinkClick, inert }: TemplateProps) {
   const { rows, socials } = useRows(data);
   const rowStyle: RowStyle = {
-    radius: 999,
+    layout: "card",
+    radius: 18,
     bg: "#C9CDC4",
     textColor: "#33402C",
     descriptionColor: "#5C6B54",
     arrowColor: "#33402C",
     hoverBg: "#D6DAD1",
-    height: 46,
-    titleWeight: "500",
+    padding: "15px 18px 14px",
+    titleSizeCard: "text-[15px]",
+    titleWeight: "600",
+    iconBoxSize: 36,
+    iconBg: "#5F6B57",
+    iconColor: "#FFFFFF",
   };
   return (
     <TemplateShell data={data} background="linear-gradient(180deg, #5F6B57 0%, #525E49 100%)">
@@ -357,7 +462,9 @@ function FreshPress({ data, onLinkClick, inert }: TemplateProps) {
           </p>
         )}
 
-        <div className="mt-7 space-y-3">
+        <SocialRow items={socials} color="#FFFFFF" hoverColor="#D6DAD1" onLinkClick={onLinkClick} inert={inert} />
+
+        <div className="mt-1 space-y-4">
           {rows.map((item) => {
             const role = itemRole(item);
             if (role === "header") {
@@ -378,8 +485,6 @@ function FreshPress({ data, onLinkClick, inert }: TemplateProps) {
           })}
           {rows.length === 0 && socials.length === 0 && <EmptyState text="No links added yet." />}
         </div>
-
-        <SocialRow items={socials} color="#FFFFFF" hoverColor="#D6DAD1" onLinkClick={onLinkClick} inert={inert} />
       </div>
     </TemplateShell>
   );
@@ -401,6 +506,8 @@ function Honeyed({ data, onLinkClick, inert }: TemplateProps) {
     height: 42,
     titleFont: MONO,
     titleWeight: "500",
+    iconBg: "rgba(43,58,165,0.08)",
+    iconColor: "#2B3AA5",
   };
   return (
     <TemplateShell data={data} background="#E9EAF3">
@@ -426,7 +533,9 @@ function Honeyed({ data, onLinkClick, inert }: TemplateProps) {
           </p>
         )}
 
-        <div className="mt-7 space-y-2.5">
+        <SocialRow items={socials} color="#2B3AA5" hoverColor="#F2827B" onLinkClick={onLinkClick} inert={inert} />
+
+        <div className="mt-1 space-y-2.5">
           {rows.map((item) => {
             const role = itemRole(item);
             if (role === "header") {
@@ -450,8 +559,6 @@ function Honeyed({ data, onLinkClick, inert }: TemplateProps) {
           })}
           {rows.length === 0 && socials.length === 0 && <EmptyState text="No links added yet." />}
         </div>
-
-        <SocialRow items={socials} color="#2B3AA5" hoverColor="#F2827B" onLinkClick={onLinkClick} inert={inert} />
       </div>
     </TemplateShell>
   );
@@ -485,18 +592,27 @@ function CloudDoodle({
   );
 }
 
+const HAND = "var(--font-signature), 'Segoe Script', 'Bradley Hand', cursive";
+
 function StudioCloud({ data, onLinkClick, inert }: TemplateProps) {
   const { rows, socials } = useRows(data);
   const rowStyle: RowStyle = {
-    radius: 999,
+    layout: "card",
+    /* Hand-cut paper edges instead of a machined radius. */
+    radius: 14,
     bg: "#FFFFFF",
-    border: "#3D4EC7B3",
+    border: "#3D4EC780",
     hoverBorder: "#3D4EC7",
     textColor: "#3D4EC7",
     descriptionColor: "#6A75D6",
     arrowColor: "#3D4EC7",
-    height: 42,
-    titleWeight: "500",
+    padding: "12px 16px 11px",
+    titleFont: HAND,
+    titleSizeCard: "text-[19px]",
+    titleWeight: "600",
+    iconBoxSize: 30,
+    iconBg: "#EEF0FB",
+    iconColor: "#3D4EC7",
   };
   return (
     <TemplateShell data={data} background="#F3F2F8">
@@ -508,11 +624,11 @@ function StudioCloud({ data, onLinkClick, inert }: TemplateProps) {
 
       <div className="max-w-xs mx-auto w-full text-center flex flex-col grow">
         <Avatar data={data} size={80} ring="#C9CFEE" fallbackBg="#DDE2F5" fg="#3D4EC7" />
-        <h1 className="text-[17px] font-medium mt-4" style={{ color: "#3D4EC7" }}>
+        <h1 className="text-2xl mt-4" style={{ fontFamily: HAND, color: "#3D4EC7" }}>
           {data.display_name}
         </h1>
         {data.headline && (
-          <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "#3D4EC799" }}>
+          <p className="text-sm mt-1 leading-relaxed" style={{ fontFamily: HAND, color: "#3D4EC799" }}>
             {data.headline}
           </p>
         )}
@@ -522,13 +638,15 @@ function StudioCloud({ data, onLinkClick, inert }: TemplateProps) {
           </p>
         )}
 
-        <div className="mt-6 space-y-3">
-          {rows.map((item) => {
+        <SocialRow items={socials} color="#3D4EC7" hoverColor="#1D2A8A" onLinkClick={onLinkClick} inert={inert} />
+
+        <div className="mt-1 space-y-3.5">
+          {rows.map((item, idx) => {
             const role = itemRole(item);
             if (role === "header") {
               return (
                 <div key={item.id} className="pt-3 pb-0.5">
-                  <span className="text-xs font-medium" style={{ color: "#3D4EC7" }}>
+                  <span className="text-lg" style={{ fontFamily: HAND, color: "#3D4EC7" }}>
                     {item.label}
                   </span>
                 </div>
@@ -538,13 +656,18 @@ function StudioCloud({ data, onLinkClick, inert }: TemplateProps) {
               return <div key={item.id} className="my-2 h-px" style={{ background: "#3D4EC733" }} />;
             }
             return (
-              <LinkRow key={item.id} item={item} style={rowStyle} onLinkClick={onLinkClick} inert={inert} />
+              <LinkRow
+                key={item.id}
+                item={item}
+                style={rowStyle}
+                tilt={idx % 2 === 0 ? -0.5 : 0.45}
+                onLinkClick={onLinkClick}
+                inert={inert}
+              />
             );
           })}
           {rows.length === 0 && socials.length === 0 && <EmptyState text="No links added yet." />}
         </div>
-
-        <SocialRow items={socials} color="#3D4EC7" hoverColor="#1D2A8A" onLinkClick={onLinkClick} inert={inert} />
       </div>
     </TemplateShell>
   );
@@ -553,17 +676,24 @@ function StudioCloud({ data, onLinkClick, inert }: TemplateProps) {
 /* ---------------------------------------------------------------------------
    4. Hardwave — stage-light orange burning into charcoal grain
 --------------------------------------------------------------------------- */
+/* Sawtooth teeth cut into the top edge of every white bar. */
+const ZIGZAG_TOP =
+  "polygon(0% 8px, 3.5% 0px, 7% 8px, 10.5% 0px, 14% 8px, 17.5% 0px, 21% 8px, 24.5% 0px, 28% 8px, 31.5% 0px, 35% 8px, 38.5% 0px, 42% 8px, 45.5% 0px, 49% 8px, 52.5% 0px, 56% 8px, 59.5% 0px, 63% 8px, 66.5% 0px, 70% 8px, 73.5% 0px, 77% 8px, 80.5% 0px, 84% 8px, 87.5% 0px, 91% 8px, 94.5% 0px, 98% 8px, 100% 2px, 100% 100%, 0% 100%)";
+
 function Hardwave({ data, onLinkClick, inert }: TemplateProps) {
   const { rows, socials } = useRows(data);
   const rowStyle: RowStyle = {
+    height: 54,
     radius: 10,
     bg: "#FFFFFF",
     textColor: "#1A1815",
     descriptionColor: "#6B6560",
     arrowColor: "#1A1815",
     hoverBg: "#F2EFEA",
-    height: 44,
     titleWeight: "600",
+    clipPath: ZIGZAG_TOP,
+    iconBg: "#F5EFE8",
+    iconColor: "#1A1815",
   };
   return (
     <TemplateShell
@@ -585,7 +715,9 @@ function Hardwave({ data, onLinkClick, inert }: TemplateProps) {
           </p>
         )}
 
-        <div className="mt-7 space-y-3">
+        <SocialRow items={socials} color="#FFFFFF" hoverColor="#D2702F" onLinkClick={onLinkClick} inert={inert} />
+
+        <div className="mt-1 space-y-3.5">
           {rows.map((item) => {
             const role = itemRole(item);
             if (role === "header") {
@@ -606,8 +738,6 @@ function Hardwave({ data, onLinkClick, inert }: TemplateProps) {
           })}
           {rows.length === 0 && socials.length === 0 && <EmptyState text="No links added yet." />}
         </div>
-
-        <SocialRow items={socials} color="#FFFFFF" hoverColor="#D2702F" onLinkClick={onLinkClick} inert={inert} />
       </div>
     </TemplateShell>
   );
@@ -619,15 +749,20 @@ function Hardwave({ data, onLinkClick, inert }: TemplateProps) {
 function Prism({ data, onLinkClick, inert }: TemplateProps) {
   const { rows, socials } = useRows(data);
   const rowStyle: RowStyle = {
-    radius: 10,
-    bg: "rgba(255,255,255,0.92)",
-    border: "#9AA8E8",
-    hoverBorder: "#5F6FD0",
+    layout: "card",
+    radius: 20,
+    bg: "rgba(255,255,255,0.9)",
     textColor: "#23222E",
     descriptionColor: "#5A5968",
     arrowColor: "#5F6FD0",
-    height: 44,
+    hoverBg: "#FFFFFF",
+    padding: "15px 18px 14px",
+    titleSizeCard: "text-[15px]",
     titleWeight: "600",
+    shadow: "0 12px 32px -14px rgba(90, 80, 140, 0.4)",
+    iconBoxSize: 36,
+    iconBg: "#F1EFFB",
+    iconColor: "#5F6FD0",
   };
   return (
     <TemplateShell
@@ -650,7 +785,9 @@ function Prism({ data, onLinkClick, inert }: TemplateProps) {
           </p>
         )}
 
-        <div className="mt-7 space-y-3">
+        <SocialRow items={socials} color="#FFFFFF" hoverColor="#23222E" onLinkClick={onLinkClick} inert={inert} />
+
+        <div className="mt-1 space-y-4">
           {rows.map((item) => {
             const role = itemRole(item);
             if (role === "header") {
@@ -671,8 +808,6 @@ function Prism({ data, onLinkClick, inert }: TemplateProps) {
           })}
           {rows.length === 0 && socials.length === 0 && <EmptyState text="No links added yet." />}
         </div>
-
-        <SocialRow items={socials} color="#FFFFFF" hoverColor="#23222E" onLinkClick={onLinkClick} inert={inert} />
       </div>
     </TemplateShell>
   );
@@ -697,6 +832,8 @@ function Paper({ data, onLinkClick, inert }: TemplateProps) {
     titleFont: SERIF,
     titleWeight: "700",
     clipPath: TORN_CLIP,
+    iconBg: "#ECEAE3",
+    iconColor: "#22211D",
   };
   return (
     <TemplateShell data={data} background="#B7B4AD" grain={0.12}>
@@ -719,7 +856,9 @@ function Paper({ data, onLinkClick, inert }: TemplateProps) {
           </p>
         )}
 
-        <div className="mt-7 space-y-3.5">
+        <SocialRow items={socials} color="#191813" hoverColor="#6B6960" onLinkClick={onLinkClick} inert={inert} />
+
+        <div className="mt-1 space-y-3.5">
           {rows.map((item) => {
             const role = itemRole(item);
             if (role === "header") {
@@ -743,8 +882,6 @@ function Paper({ data, onLinkClick, inert }: TemplateProps) {
           })}
           {rows.length === 0 && socials.length === 0 && <EmptyState text="No links added yet." />}
         </div>
-
-        <SocialRow items={socials} color="#191813" hoverColor="#6B6960" onLinkClick={onLinkClick} inert={inert} />
       </div>
     </TemplateShell>
   );

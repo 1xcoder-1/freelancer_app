@@ -1363,7 +1363,7 @@ class PlannerTodoOut(BaseModel):
     text: str
     is_done: bool
     due_date: Optional[_Date] = None
-    priority: str = "medium"
+    priority: Optional[str] = None
     project_id: Optional[str] = None
     recurrence: Optional[str] = None
     date: Optional[_Date] = None
@@ -1437,13 +1437,19 @@ class PlannerBoardRename(BaseModel):
         return value
 
 class PlannerBoardFullOut(BaseModel):
-    """Whole board for the editor: scene + todos. Fetched once on open."""
+    """Whole board for the editor: scene + todos. Fetched once on open.
+
+    Carries the owner's share state too, so a reopened editor can show the
+    live link instead of assuming the board is unshared."""
     id: str
     name: str
     revision: int
     elements: List[Dict[str, Any]] = []
     files: Dict[str, Dict[str, Any]] = {}
     todos: List[PlannerTodoOut] = []
+    is_public: bool = False
+    share_token: Optional[str] = None
+    expires_at: Optional[datetime] = None
 
 class PlannerBoardHeadOut(BaseModel):
     """Cheap real-time poll payload: revision + todos, but NOT the scene.
@@ -1510,5 +1516,323 @@ class FeatureFlagUpdate(BaseModel):
     key: str = Field(..., min_length=1, max_length=64)
     visible: Optional[bool] = None
     label_override: Optional[str] = Field(None, max_length=80)
+
+
+# ------------------------------------------------------------------------------
+# Task Management (Trello-style kanban boards)
+# ------------------------------------------------------------------------------
+TaskBackgroundKind = Literal["unsplash", "gradient"]
+TaskPriority = Literal["low", "medium", "high", "urgent"]
+
+
+def _clean_tag_list(value: Optional[List[str]]) -> Optional[List[str]]:
+    """Strip and de-empty tags; hard-cap each so a JSONB array can't balloon
+    (mirrors the drawer's MAX_TAGS/TAG_MAX_LENGTH limits)."""
+    if value is None:
+        return None
+    cleaned = []
+    for tag in value:
+        tag = str(tag).strip()[:30]
+        if tag:
+            cleaned.append(tag)
+    return cleaned
+
+
+# The starter board name. A fresh workspace is lazily seeded with it on the
+# first GET /tasks/boards, and a POST /tasks/boards with a blank/omitted name
+# falls back to it server-side (the client may send "" and expect a board).
+DEFAULT_TASK_BOARD_NAME = "My Tasks"
+
+
+class TaskBoardCreate(BaseModel):
+    """Create a board; the endpoint seeds its three default lists. The name is
+    optional/blank-tolerant: omitted, null, empty or whitespace-only falls back
+    to DEFAULT_TASK_BOARD_NAME ("My Tasks") instead of a 422, so the client's
+    "just create it" flow needs no local default."""
+    name: Optional[str] = Field(None, max_length=200, validate_default=True)
+    background_url: Optional[str] = Field(None, max_length=2000)
+    background_kind: Optional[TaskBackgroundKind] = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: Optional[str]) -> str:
+        return (value or "").strip() or DEFAULT_TASK_BOARD_NAME
+
+
+class TaskBoardPatch(BaseModel):
+    """All-optional board edit. `name` must be non-blank when sent;
+    `background_url`/`background_kind` sent as null clear the background."""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    background_url: Optional[str] = Field(None, max_length=2000)
+    background_kind: Optional[TaskBackgroundKind] = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value):
+        if value is None:
+            raise ValueError("name must not be blank")
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
+
+class TaskBoardSummary(BaseModel):
+    """List-row metadata: the board plus its ONE-query rollup counts."""
+    id: str
+    workspace_id: str
+    name: str
+    background_url: Optional[str] = None
+    background_kind: Optional[str] = None
+    revision: int = 0
+    list_count: int = 0
+    card_count: int = 0
+    done_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskSubtaskOut(BaseModel):
+    id: str
+    card_id: str
+    text: str
+    is_done: bool = False
+    position: float = 0.0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TaskAttachmentOut(BaseModel):
+    id: str
+    card_id: str
+    kind: str
+    url: Optional[str] = None
+    file_key: Optional[str] = None
+    file_name: str
+    content_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TaskCardOut(BaseModel):
+    """One card. `subtasks`/`attachments` are populated on the nested
+    payloads (/full, board create) and empty on single-card responses —
+    mutations bump the board revision, so open tabs re-pull /full anyway."""
+    id: str
+    list_id: str
+    board_id: str
+    workspace_id: str
+    title: str
+    description: str = ""
+    completed: bool = False
+    priority: Optional[str] = None
+    due_date: Optional[_Date] = None
+    position: float = 0.0
+    project_id: Optional[str] = None
+    tags: List[str] = []
+    subtasks: List[TaskSubtaskOut] = []
+    attachments: List[TaskAttachmentOut] = []
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TaskListOut(BaseModel):
+    id: str
+    board_id: str
+    name: str
+    position: float = 0.0
+    created_at: datetime
+    cards: List[TaskCardOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class TaskBoardFullOut(BaseModel):
+    """The whole board the UI opens with: board + lists + cards + subtasks +
+    attachments, fetched in ~one database roundtrip."""
+    id: str
+    workspace_id: str
+    name: str
+    background_url: Optional[str] = None
+    background_kind: Optional[str] = None
+    revision: int = 0
+    lists: List[TaskListOut] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskBoardHeadOut(BaseModel):
+    """Cheap poll target: only the revision (changed revision => re-pull /full)."""
+    revision: int
+
+
+class TaskListCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
+
+class TaskListPatch(BaseModel):
+    """Rename a list and/or re-order it. `position` is the list's own float
+    slot among its board's lists (columns are rare; no midpoint math needed)."""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    position: Optional[float] = Field(None, ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value):
+        if value is None:
+            raise ValueError("name must not be blank")
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
+
+class TaskCardCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=300)
+    description: str = Field("", max_length=10_000)
+    priority: Optional[TaskPriority] = None
+    due_date: Optional[_Date] = None
+    tags: List[str] = Field(default_factory=list, max_length=10)
+    project_id: Optional[str] = Field(None, max_length=36)
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
+
+    @field_validator("tags")
+    @classmethod
+    def _clean_tags(cls, value: List[str]) -> List[str]:
+        return _clean_tag_list(value) or []
+
+
+class TaskCardPatch(BaseModel):
+    """Partial card update, including kanban moves.
+
+    Move contract (the ONE the backend implements): the client sends `list_id`
+    (destination list) plus `before_card_id` and/or `after_card_id` — the ids
+    of the cards that must sit directly BEFORE and/or AFTER the moved card at
+    its new slot. Either anchor may be omitted, and both may be omitted to
+    append at the end:
+
+      - both anchors       -> new position = midpoint of the two neighbours
+      - only before_card_id -> dropped just below that card
+      - only after_card_id  -> floated just above that card
+      - neither            -> appended at the end of the destination list
+
+    The raw `position` value is never sent by the client. If the gap between
+    the neighbours is too small to split (< 0.0001) the destination list's
+    positions are renormalised to 1..n in the same transaction. Anchors must
+    belong to the destination list, and moves across boards are rejected
+    (card.project_id etc. travel with the card). Explicit nulls clear
+    priority/due_date/project_id (project_id must belong to the workspace);
+    explicit null `tags` empties the list."""
+    title: Optional[str] = Field(None, min_length=1, max_length=300)
+    description: Optional[str] = Field(None, max_length=10_000)
+    completed: Optional[bool] = None
+    priority: Optional[TaskPriority] = None
+    due_date: Optional[_Date] = None
+    tags: Optional[List[str]] = Field(None, max_length=10)
+    project_id: Optional[str] = Field(None, max_length=36)
+    # Move contract (see docstring).
+    list_id: Optional[str] = Field(None, max_length=36)
+    before_card_id: Optional[str] = Field(None, max_length=36)
+    after_card_id: Optional[str] = Field(None, max_length=36)
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, value):
+        if value is None:
+            raise ValueError("title must not be blank")
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
+
+    @field_validator("tags")
+    @classmethod
+    def _clean_tags(cls, value):
+        return _clean_tag_list(value)
+
+
+class TaskSubtaskCreate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("text")
+    @classmethod
+    def _strip_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("text must not be blank")
+        return value
+
+
+class TaskSubtaskPatch(BaseModel):
+    """Patch one checklist line; a field left out is left untouched."""
+    text: Optional[str] = Field(None, min_length=1, max_length=500)
+    is_done: Optional[bool] = None
+
+    @field_validator("text")
+    @classmethod
+    def _strip_text(cls, value):
+        if value is None:
+            raise ValueError("text must not be blank")
+        value = value.strip()
+        if not value:
+            raise ValueError("text must not be blank")
+        return value
+
+
+class TaskAttachmentCreate(BaseModel):
+    """Attachment METADATA only — binaries are uploaded to Cloudinary via the
+    existing /storage endpoints first; `file_key` is the returned public id."""
+    kind: Literal["link", "image", "document"]
+    url: Optional[str] = Field(None, max_length=2000)
+    file_key: Optional[str] = Field(None, max_length=512)
+    file_name: str = Field(..., min_length=1, max_length=300)
+    content_type: Optional[str] = Field(None, max_length=100)
+    size_bytes: Optional[int] = Field(None, ge=0)
+
+    @model_validator(mode="after")
+    def _require_payload(self):
+        if self.kind == "link" and not (self.url or "").strip():
+            raise ValueError("url is required for link attachments")
+        if self.kind in ("image", "document") and not (self.file_key or "").strip():
+            raise ValueError("file_key is required for image/document attachments (upload the file first)")
+        return self
+
+
+class TaskAttachmentFileOut(BaseModel):
+    """Resolvable URLs for an attachment's file: `url` for full size and
+    `thumb_url` (images only) for grids/lists."""
+    url: str
+    thumb_url: Optional[str] = None
+
+
+class ProjectTaskCardOut(TaskCardOut):
+    """TaskCardOut enriched for the project detail page: which board/list the
+    card lives on, from a single joined query."""
+    board_name: str = ""
+    list_name: str = ""
 
 

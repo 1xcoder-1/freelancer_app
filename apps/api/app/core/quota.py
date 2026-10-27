@@ -171,9 +171,10 @@ async def enforce_capacity(
 ) -> int:
     """Raise 402 when the workspace has no room left for one more row.
 
-    `used` lets a caller that already loaded the list skip the COUNT query; the
-    "portfolios" dimension has no COUNT query at all (it is an array inside the
-    report-card document), so it always passes `used`.
+    `used` lets a caller that already loaded the list skip the COUNT query;
+    the "portfolios" dimension counts across workspaces via clerk_id (one
+    report_cards row per account), so its endpoints pass `used` or rely on
+    _portfolio_count.
 
     Owner accounts are exempt from capacity — not from meters. The difference is
     deliberate: a capacity number counts rows an account accumulated before any
@@ -312,16 +313,14 @@ async def bump_meter(db: AsyncSession, ctx: PlanContext, kind: str) -> None:
 # Live usage snapshot (billing page + dashboard meters)
 # ---------------------------------------------------------------------------
 async def _portfolio_count(db: AsyncSession, clerk_id: str) -> int:
-    """Portfolios have no row of their own: the report card's project list IS the
-    public portfolio, so the plan's cap counts entries inside one JSON column."""
-    content = (
-        await db.execute(
-            select(ReportCard.content)
-            .join(User, ReportCard.user_id == User.id)
-            .where(User.clerk_id == clerk_id)
-        )
-    ).scalar_one_or_none()
-    return len((content or {}).get("projects") or [])
+    """One portfolio card per account on every plan — the report_cards row IS
+    the portfolio, so the cap counts rows, not entries inside the JSON."""
+    res = await db.execute(
+        select(func.count(ReportCard.id))
+        .join(User, ReportCard.user_id == User.id)
+        .where(User.clerk_id == clerk_id)
+    )
+    return int(res.scalar_one() or 0)
 
 
 async def usage_snapshot(

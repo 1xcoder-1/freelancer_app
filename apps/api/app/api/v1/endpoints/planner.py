@@ -65,6 +65,7 @@ async def _bump(db: AsyncSession, board: PlannerBoard) -> None:
     """Any todo mutation moves the revision so every open tab/device re-pulls
     the (small) head payload — the same real-time mechanism the canvas uses."""
     board.revision = (board.revision or 0) + 1
+    board.updated_at = datetime.utcnow()
 
 
 async def _todo_counts(db: AsyncSession, board_id: str) -> Dict[str, int]:
@@ -206,7 +207,9 @@ async def get_board(
             .order_by(PlannerTodo.created_at.asc())
         )
     ).scalars().all()
-    return {**_scene(board), "todos": todos}
+    # Owner view: include the share state so a reopened editor shows the live
+    # link (the anonymous public view never sees these fields).
+    return {**_scene(board), "todos": todos, **_share_out(board)}
 
 
 @router.get("/boards/{board_id}/head", response_model=PlannerBoardHeadOut)
@@ -259,6 +262,7 @@ async def save_board(
     board.elements = payload.elements
     board.files = payload.files
     board.revision = (board.revision or 0) + 1
+    board.updated_at = datetime.utcnow()
 
     # PL4 daily snapshot: capture the day's plan at most once per board, so a
     # past day stays reviewable. Insert-only (never overwrite) keeps it cheap.
@@ -295,6 +299,7 @@ async def rename_board(
     _, workspace = await get_or_create_user_workspace(db, current_user)
     board = await _owned_board(db, workspace.id, board_id)
     board.name = payload.name
+    board.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(board)
     today = datetime.utcnow().date()
@@ -466,6 +471,7 @@ async def restore_snapshot(
     board.elements = snap.elements if isinstance(snap.elements, list) else []
     board.files = snap.files if isinstance(snap.files, dict) else {}
     board.revision = (board.revision or 0) + 1
+    board.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(board)
     return {"revision": board.revision}

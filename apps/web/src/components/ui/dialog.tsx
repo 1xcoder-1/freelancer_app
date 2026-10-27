@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { X } from "@/components/animated-icons";
 import { cn } from "@/lib/utils";
@@ -48,9 +49,11 @@ export function Dialog({
 export function DialogContent({
   children,
   className,
+  hideCloseButton,
 }: {
   children: React.ReactNode;
   className?: string;
+  hideCloseButton?: boolean;
 }) {
   const context = React.useContext(DialogContext);
   if (!context) throw new Error("DialogContent must be used within Dialog");
@@ -71,7 +74,7 @@ export function DialogContent({
     }
   }, [open, mounted]);
 
-  if (!mounted) return null;
+  if (!mounted || typeof document === "undefined") return null;
 
   // Under reduced motion only the cross-fade runs (no rise, scale or blur).
   const panelVisible = {
@@ -81,14 +84,14 @@ export function DialogContent({
     filter: open ? "blur(0px)" : reduceMotion ? "blur(0px)" : "blur(4px)",
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       style={{ pointerEvents: open ? undefined : "none" }}
       role="dialog"
       aria-modal="true"
     >
-      {/* Backdrop — cross-fade both ways */}
+      {/* Backdrop — cross-fade both ways across full screen */}
       <motion.div
         initial={false}
         animate={{ opacity: open ? 1 : 0 }}
@@ -102,20 +105,25 @@ export function DialogContent({
         animate={panelVisible}
         transition={{ duration: (open ? ENTER_MS : EXIT_MS) / 1000, ease: "easeOut" }}
         className={cn(
-          "dialog-scroll relative z-50 w-full rounded-xl bg-card border border-line p-6 shadow-2xl",
+          "relative z-[100] w-full rounded-xl bg-card border border-line p-6 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain scrollbar-none",
           className
         )}
       >
-        <button
-          onClick={() => context.onOpenChange(false)}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:text-fg hover:bg-surface transition-colors"
-        >
-          <X className="w-4 h-4" />
-          <span className="sr-only">Close</span>
-        </button>
+        {!hideCloseButton && (
+          <button
+            type="button"
+            onClick={() => context.onOpenChange(false)}
+            className="absolute right-4 top-4 z-[110] rounded-lg p-1.5 text-muted hover:text-fg hover:bg-surface/80 transition-all cursor-pointer pointer-events-auto"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+            <span className="sr-only">Close</span>
+          </button>
+        )}
         {children}
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

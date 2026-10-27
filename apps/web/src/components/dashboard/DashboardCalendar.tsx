@@ -209,7 +209,7 @@ export function DashboardCalendar() {
     } catch {
       setGoogle(null);
     }
-  }, []);
+  }, [getToken]);
   useEffect(() => {
     void loadGoogleStatus();
   }, [loadGoogleStatus]);
@@ -465,18 +465,7 @@ function GoogleBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  if (!status) return null;
-  if (!status.configured) {
-    return (
-      <span
-        className="hidden xl:inline text-[10px] font-mono text-faint border border-line/60 rounded-md px-2 py-1"
-        title="Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in apps/api/.env to enable Google Calendar"
-      >
-        Google: unconfigured
-      </span>
-    );
-  }
-  if (!status.connected) {
+  if (!status?.connected) {
     return (
       <button
         onClick={onConnect}

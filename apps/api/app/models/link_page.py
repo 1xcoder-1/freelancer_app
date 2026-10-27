@@ -64,6 +64,9 @@ class LinkItem(Base, TimestampMixin):
     # 'link' | 'header' | 'divider' — replaces the isHeadingItem icon/url
     # guessing game; validated in the endpoint schema.
     item_type: Mapped[str] = mapped_column(String(16), default="link", nullable=False)
+    # 'icon' forces the round social-icon row, 'card' forces a full-width card;
+    # NULL lets the template auto-route (social platforms → icons).
+    display: Mapped[str] = mapped_column(String(16), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Lifetime clicks on this item (the windowed stats come from link_events).

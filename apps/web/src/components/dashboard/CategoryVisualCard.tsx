@@ -53,6 +53,7 @@ interface CategoryVisualCardProps {
   icon?: React.ReactNode;
   className?: string;
   hidePrefix?: boolean;
+  bottomContent?: React.ReactNode;
 }
 
 export function CategoryVisualCard({
@@ -66,6 +67,7 @@ export function CategoryVisualCard({
   icon,
   className = "",
   hidePrefix = false,
+  bottomContent,
 }: CategoryVisualCardProps) {
   const safeTitle =
     typeof title === "string" && title.trim() ? title.trim() : "Client Profile";
@@ -134,16 +136,22 @@ export function CategoryVisualCard({
 
       {/* Bottom Section: Subtitle & Icon */}
       <div className="relative z-10 flex items-center justify-between gap-3 pt-3 mt-auto border-t border-line/40 dark:border-white/5">
-        <span
-          className={`text-[13px] sm:text-sm text-fg/80 dark:text-[#d4d4d8] font-normal tracking-[0.02em] leading-relaxed truncate flex-1 min-w-0 group-hover:text-fg transition-colors ${
-            hidePrefix ? "" : "capitalize"
-          }`}
-        >
-          {displaySubtitle}
-        </span>
-        <div className="shrink-0 transition-transform duration-300 ease-out group-hover:scale-110">
-          {icon || <ChaiCupIcon className="w-7 h-7" />}
-        </div>
+        {bottomContent ? (
+          bottomContent
+        ) : (
+          <>
+            <span
+              className={`text-[13px] sm:text-sm text-fg/80 dark:text-[#d4d4d8] font-normal tracking-[0.02em] leading-relaxed truncate flex-1 min-w-0 group-hover:text-fg transition-colors ${
+                hidePrefix ? "" : "capitalize"
+              }`}
+            >
+              {displaySubtitle}
+            </span>
+            <div className="shrink-0 transition-transform duration-300 ease-out group-hover:scale-110">
+              {icon || <ChaiCupIcon className="w-7 h-7" />}
+            </div>
+          </>
+        )}
       </div>
     </SpotlightCard>
   );

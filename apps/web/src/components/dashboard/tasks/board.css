@@ -1,0 +1,117 @@
+/* ------------------------------------------------------------------
+   Task board scrollbars:
+   - Bottom x-axis: shortened length (centered with track margins),
+     decreased height (4px), sleek rounded pill thumb, subtle glow on
+     hover, zero native arrow buttons, cleared when drawer is open.
+   - Y-axis: completely hidden visually while keeping smooth scrolling
+     functional (mouse wheel, touch, touchpad, drag auto-scroll).
+------------------------------------------------------------------- */
+
+/* Scope scrollbar-color strictly to non-webkit browsers (Firefox) so Chromium
+   never falls back to native Windows OS scrollbar widgets */
+@supports not selector(::-webkit-scrollbar) {
+  .taskboard-scroll-x {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  }
+}
+
+.taskboard-scroll-x {
+  overscroll-behavior: contain;
+}
+
+/* Decreased height (4px) & shortened length via centered track margins */
+.taskboard-scroll-x::-webkit-scrollbar {
+  height: 4px;
+  width: 0px;
+}
+
+.taskboard-scroll-x::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.taskboard-scroll-x::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9999px;
+  margin: 0 max(80px, 20vw); /* Shortens length & centers the bar */
+}
+
+/* When the card detail drawer is open, clear the right 460px so the bar never runs under the drawer */
+.taskboard-scroll-x.taskboard-drawer-open::-webkit-scrollbar-track {
+  margin-right: 480px;
+  margin-left: max(40px, 8vw);
+}
+
+.taskboard-scroll-x::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.28);
+  border-radius: 9999px;
+  min-width: 48px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.taskboard-scroll-x::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+  box-shadow: 0 0 10px rgba(212, 107, 40, 0.6);
+}
+
+.taskboard-scroll-x::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Y-axis scrollbars — completely hidden visually while retaining smooth vertical scrolling */
+.taskboard-scroll-y,
+.taskboard-root,
+.taskboard-root *::-webkit-scrollbar:vertical {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.taskboard-scroll-y {
+  overscroll-behavior: contain;
+}
+
+.taskboard-scroll-y::-webkit-scrollbar,
+.taskboard-root::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.taskboard-scroll-y::-webkit-scrollbar-button,
+.taskboard-root::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* ------------------------------------------------------------------
+   Board canvas texture layers — static film-grain noise (over gradient
+   backgrounds) and a soft vignette (over photo backgrounds). Nothing
+   animates, so prefers-reduced-motion is respected by construction.
+------------------------------------------------------------------- */
+
+.taskboard-default-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+.taskboard-default-vignette {
+  background: radial-gradient(130% 100% at 50% 0%, transparent 52%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* While a card or column drag is live: grab cursor everywhere and no
+   accidental text selection (the class is toggled on <body>). */
+body.taskboard-dragging,
+body.taskboard-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* Drag handles (column headers) must own their pointer gestures on touch
+   devices; card bodies keep default scrolling so touch scroll still works. */
+.taskboard-drag-handle {
+  touch-action: none;
+}

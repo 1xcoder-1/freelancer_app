@@ -141,26 +141,37 @@ input[type="number"] {
    page-level y-axis scrollbars stay visible app-wide per the Leads/Clients
    scrollbar reversal) */
 .no-scrollbar,
-.scrollbar-none {
+.scrollbar-none,
+.scrollbar-hide {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
 .no-scrollbar::-webkit-scrollbar,
-.scrollbar-none::-webkit-scrollbar {
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Eliminate native scrollbar arrow buttons on all platforms (especially Windows) */
+::-webkit-scrollbar-button {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
 }
 
 /* Visible sleek scrollbar styling (Cross-browser: Firefox + Chromium + Safari) */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -752,5 +763,37 @@ input[type="number"] {
   color: #fff !important;
   background: var(--surface-hover, #2a2d34) !important;
   border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Excalidraw canvas clean UI:
+   - Hide bottom panning hint text
+   - Hide library button
+   - Hide bottom-right help button (? icon)
+   - Hide "Find on canvas" & "Help" from hamburger menu
+   - Hide Excalidraw promotional links (GitHub, Follow us, Discord) in the hamburger menu
+*/
+.excalidraw .HintViewer,
+.excalidraw .sidebar-trigger__label-element,
+.excalidraw .sidebar-trigger,
+.excalidraw label:has(input[aria-label="Library"]),
+.excalidraw [data-testid="library-button"],
+.excalidraw .help-icon,
+.excalidraw [aria-label="Help"]:not(.dropdown-menu-item),
+.excalidraw [data-testid="search-menu-button"],
+.excalidraw [data-testid="help-menu-item"],
+.excalidraw button[aria-label="Find on canvas"],
+.excalidraw button[aria-label="Help"],
+.excalidraw .dropdown-menu-group:has(a[href*="excalidraw"]),
+.excalidraw .dropdown-menu-group:has(a[href*="github.com/excalidraw"]),
+.excalidraw .dropdown-menu-group:has(a[href*="discord.gg"]),
+.excalidraw .dropdown-menu-item[href*="github.com/excalidraw"],
+.excalidraw .dropdown-menu-item[href*="x.com/excalidraw"],
+.excalidraw .dropdown-menu-item[href*="discord.gg"],
+.excalidraw .dropdown-menu-group:has(a[href*="excalidraw"]) + div[style*="height"],
+.planner-canvas-wrapper .HintViewer,
+.planner-canvas-wrapper .sidebar-trigger__label-element,
+.planner-canvas-wrapper .sidebar-trigger,
+.planner-canvas-wrapper .help-icon {
+  display: none !important;
 }
 

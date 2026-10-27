@@ -104,3 +104,20 @@ export async function compressBackground(file: File): Promise<CompressionResult>
   }
   return result;
 }
+
+/**
+ * Task-attachment preset: WebP capped at 1600px (matches the drawer's
+ * full-size lightbox delivery at w_1600) starting at quality 0.8, degrading
+ * until the blob fits under 500KB. A board of 50-60 cards with image
+ * attachments stays light: a 4-6MP phone photo (~2-4MB) typically lands at
+ * 150-300KB.
+ */
+export async function compressTaskImage(file: File): Promise<CompressionResult> {
+  const MAX_BYTES = 500 * 1024;
+  let result = await compressImage(file, 1600, 0.8);
+  for (const q of [0.65, 0.5]) {
+    if (result.compressedSize <= MAX_BYTES) return result;
+    result = await compressImage(file, 1600, q);
+  }
+  return result;
+}

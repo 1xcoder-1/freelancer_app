@@ -7,6 +7,7 @@ import re
 import secrets
 import time
 from app.models.workspace import User, Workspace, Membership
+from app.models.planner import PlannerBoard
 
 # ------------------------------------------------------------------------------
 # Per-user workspace cache
@@ -116,6 +117,12 @@ async def _get_or_create_user_and_workspace(db: AsyncSession, clerk_id: str, ema
     user, user_created = await _get_or_create_user(db, clerk_id, email, full_name)
     workspace, workspace_created = await _get_or_create_workspace(db, user, email, full_name)
 
+    if workspace_created:
+        # New accounts start with one sketch board, so the Planner page is
+        # never empty on first open. Same commit as the provisioning — no
+        # extra round trip, and the provisioning race can't double-seed (the
+        # loser re-fetches the workspace with created=False).
+        db.add(PlannerBoard(workspace_id=workspace.id))
     if user_created or workspace_created:
         await db.commit()
     return user, workspace

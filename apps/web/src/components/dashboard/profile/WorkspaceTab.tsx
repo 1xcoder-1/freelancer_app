@@ -239,16 +239,14 @@ export function WorkspaceTab() {
               <div className="text-xs text-muted truncate">
                 {google === null
                   ? "Checking connection…"
-                  : !google.configured
-                    ? "Not configured on this server."
-                    : google.connected
-                      ? (google.google_email || "Google account")
-                      : "Sync events and bookings with your Google account."}
+                  : google.connected
+                    ? (google.google_email || "Google account")
+                    : "Sync events and bookings with your Google account."}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {google?.configured && !google.connected && (
+            {!google?.connected && (
               <Button
                 size="sm"
                 variant="outline"

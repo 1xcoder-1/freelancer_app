@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
-import { toast } from "sonner";
 import { showWelcomeToast } from "@/components/dashboard/WelcomeToast";
+
+
 import {
   Clock,
   DollarSign,
@@ -15,12 +16,13 @@ import {
   RefreshCw,
   LayoutGrid,
   CalendarDays,
+  Check,
+  CheckSquare,
   ChevronRight,
   TrendingDown,
   Users,
   AlertTriangle,
   Inbox,
-  MessageSquare,
   Video,
 } from "@/components/animated-icons";
 
@@ -43,7 +45,9 @@ import {
   type CalendarFeedItem,
   type Project,
   type Client,
+  type TodayTaskItem,
 } from "@/lib/api";
+import { PRIORITY_META, dueStatus, formatDueDate } from "@/components/dashboard/tasks/task-ui";
 import { useApiData } from "@/hooks/use-api-data";
 import { useLiveNotifications } from "@/hooks/use-live-notifications";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
@@ -66,7 +70,7 @@ import {
 type TabKey = "today" | "projects" | "invoices";
 
 export default function DashboardPage() {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const [tab, setTab] = useState<TabKey>("today");
   const [selectedEventDetail, setSelectedEventDetail] = useState<CalendarFeedItem | null>(null);
 
@@ -119,6 +123,12 @@ export default function DashboardPage() {
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const recurringExpenses = expenses.filter((e) => e.is_recurring).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const now = new Date();
+  // Local-date "YYYY-MM-DD" snapshot for due-chip tinting (same clock basis
+  // the task board pages inject into dueStatus()).
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  // Task Management cards due today / overdue — comes inside the overview
+  // payload, so it shares the dashboard fetch (no separate request).
+  const todayTasks: TodayTaskItem[] = overview?.today_tasks ?? [];
   const thisMonthExpenses = expenses
     .filter((e) => {
       if (!e.created_at) return false;
@@ -185,20 +195,12 @@ export default function DashboardPage() {
     return () => window.removeEventListener("calendar-updated", handleCalendarUpdate);
   }, [refreshToday]);
 
-  // When a user opens the dashboard page, display a polished welcome toast
-  const hasGreetedRef = useRef(false);
+  // Show welcome greeting once per session upon entering the dashboard
   useEffect(() => {
-    if (hasGreetedRef.current) return;
-    if (user === undefined) return;
-    hasGreetedRef.current = true;
-
-    const timer = setTimeout(() => {
-      const name = (user?.firstName || user?.fullName || "").trim();
-      showWelcomeToast(name);
-    }, 600);
-
-    return () => clearTimeout(timer);
-  }, [user]);
+    if (!isLoaded) return;
+    const name = (user?.firstName || user?.fullName || "").trim();
+    showWelcomeToast(name);
+  }, [isLoaded, user]);
 
   const { currency } = useWorkspaceCurrency();
   const usd = (n: number | undefined) => formatMoney(n ?? 0, currency, 0);
@@ -346,6 +348,10 @@ export default function DashboardPage() {
           <span className="font-semibold">{String(pendingBookingsCount)}</span>
           <span>Pending bookings</span>
         </StatChip>
+        <StatChip tone="amber" href="/dashboard/planner/tasks">
+          <span className="font-semibold">{String(todayTasks.length)}</span>
+          <span>Tasks due</span>
+        </StatChip>
         {unreadCount > 0 && (
           <StatChip tone="amber" href="/dashboard/inbox">
             <Inbox className="w-3.5 h-3.5" />
@@ -447,15 +453,16 @@ export default function DashboardPage() {
           >
             {tab === "today" && (
               <div className="space-y-3">
-                {todayLoading ? (
+                {todayLoading || loading ? (
                   <div className="space-y-2">
-                    {[1, 2].map((i) => (
-                      <Skeleton key={i} className="h-16 rounded-xl" />
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-14 rounded-xl" />
                     ))}
                   </div>
-                ) : todayEvents && todayEvents.length > 0 ? (
+                ) : (todayEvents && todayEvents.length > 0) || todayTasks.length > 0 ? (
                   <div className="space-y-2.5">
-                    {todayEvents.map((ev) => {
+                    {/* Calendar feed events */}
+                    {todayEvents?.map((ev) => {
                       const isDeadline = ev.event_type === "deadline";
                       const isMeeting = ev.event_type === "meeting";
                       const isClientWork = ev.event_type === "client_work";
@@ -527,6 +534,85 @@ export default function DashboardPage() {
                             <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
                           </div>
                         </div>
+                      );
+                    })}
+
+                    {/* Tasks due today */}
+                    {todayTasks.map((t) => {
+                      const status = dueStatus(t.due_date, todayIso, t.completed);
+                      const priority = t.priority ? PRIORITY_META[t.priority] : null;
+
+                      const dueChip =
+                        status === "overdue"
+                          ? "bg-rose-500/10 text-rose-400 border-rose-500/25"
+                          : status === "today"
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                            : "bg-surface border-line text-muted";
+
+                      return (
+                        <Link
+                          key={t.id}
+                          href={`/dashboard/planner/tasks/${t.board_id}`}
+                          className="group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-line/70 bg-surface/30 hover:bg-surface/70 hover:border-line transition-all select-none"
+                          title={`Open board: ${t.board_name}`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {/* Completed-checkbox visual */}
+                            <span
+                              className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-all ${
+                                t.completed
+                                  ? "bg-accent border-accent text-accent-fg"
+                                  : "border-line-strong bg-surface"
+                              }`}
+                              aria-hidden="true"
+                            >
+                              {t.completed && <Check className="w-3 h-3" />}
+                            </span>
+
+                            <p
+                              className={`text-sm font-medium truncate group-hover:text-accent transition-colors ${
+                                t.completed ? "line-through text-muted" : "text-fg"
+                              }`}
+                            >
+                              {t.title}
+                            </p>
+
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium border shrink-0 bg-amber-500/10 text-amber-400 border-amber-500/25">
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
+                              Task
+                            </span>
+
+                            {priority && (
+                              <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium shrink-0 ${priority.text}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priority.dot}`} />
+                                {priority.label}
+                              </span>
+                            )}
+
+                            {t.due_date && (
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md border shrink-0 ${dueChip}`}>
+                                <Calendar className="w-3 h-3" />
+                                <span>{formatDueDate(t.due_date)}</span>
+                              </span>
+                            )}
+
+                            {t.list_name && (
+                              <span className="hidden md:inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0 truncate max-w-[140px]">
+                                {t.list_name}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            {t.board_name && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-line text-muted shrink-0 truncate max-w-[140px]">
+                                <LayoutGrid className="w-3 h-3 text-muted" />
+                                <span>{t.board_name}</span>
+                              </span>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-faint group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+                          </div>
+                        </Link>
                       );
                     })}
                   </div>

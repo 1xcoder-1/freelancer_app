@@ -85,7 +85,7 @@ export function CardLoadError({
         <AlertCircle className="w-6 h-6" />
       </div>
       <h2 className="text-base font-semibold text-fg">
-        Couldn&apos;t load your report card
+        Couldn&apos;t load your portfolio
       </h2>
       <p className="text-sm text-muted mt-1.5 max-w-md">{message}</p>
       <button

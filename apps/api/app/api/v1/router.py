@@ -22,6 +22,7 @@ from app.api.v1.endpoints import (
     feature_flags,
     report_card,
     planner,
+    task_boards,
     notifications,
     testimonials,
     reports,
@@ -57,6 +58,7 @@ api_router.include_router(calendar.router)
 api_router.include_router(feature_flags.router)
 api_router.include_router(report_card.router, prefix="/report-card", tags=["Report Card"])
 api_router.include_router(planner.router)
+api_router.include_router(task_boards.router)
 api_router.include_router(notifications.router)
 api_router.include_router(testimonials.router)
 api_router.include_router(reports.router)

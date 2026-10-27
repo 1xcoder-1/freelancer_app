@@ -17,6 +17,7 @@ export interface PreviewPageItemState {
   icon?: string | null;
   description?: string | null;
   image_url?: string | null;
+  display?: string | null;
   active: boolean;
 }
 

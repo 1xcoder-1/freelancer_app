@@ -1,29 +1,16 @@
 "use client";
 
-/* eslint-disable react-hooks/exhaustive-deps */
-
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import {
-  Plus,
-  Trash2,
   PenLine,
   Loader2,
-  Check,
   ArrowLeft,
   PencilLine,
   Share2,
   History,
-  Link2,
-  X,
-  Clock,
-  Calendar,
-  CalendarClock,
-  AlertCircle,
-  RotateCcw,
-  Folder,
 } from "@/components/animated-icons";
 import { toast } from "sonner";
 
@@ -33,8 +20,8 @@ const ExcalidrawRaw = dynamic(
   () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
   { ssr: false, loading: () => <CanvasSkeleton /> }
 );
-// next/dynamic erases the forwardRef signature; restore a permissive component
-// type so the imperative-API `ref` callback below type-checks.
+// next/dynamic's wrapper drops component refs, so the imperative API comes
+// through the excalidrawAPI callback prop instead (see the <Excalidraw> mount).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Excalidraw = ExcalidrawRaw as React.ComponentType<any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,66 +32,47 @@ type SceneElements = any[];
 type BinaryFiles = Record<string, any>;
 
 import { Button } from "@/components/ui/button";
-import { confirmDialog } from "@/components/common/ConfirmDialog";
 import {
   getPlannerBoard,
   getPlannerBoardHead,
   savePlannerBoard,
-  createPlannerTodo,
-  updatePlannerTodo,
-  deletePlannerTodo,
-  carryOverPlannerTodos,
   renamePlannerBoard,
   enablePlannerShare,
   rotatePlannerShareToken,
   disablePlannerShare,
-  listPlannerSnapshots,
   restorePlannerSnapshot,
-  getProjects,
-  type Project,
-  type PlannerTodo,
-  type PlannerTodoPayload,
   type PlannerShare,
-  type PlannerSnapshotSummary,
   type ApiError,
 } from "@/lib/api";
-import { useApiData } from "@/hooks/use-api-data";
+import { PlannerShareDialog } from "@/components/dashboard/PlannerShareDialog";
+import { PlannerHistoryDialog } from "@/components/dashboard/PlannerHistoryDialog";
 
-// Real-time cadence. The poll hits the cheap /head endpoint (revision + todos
-// only), so it stays fast and never moves scene bytes unless the revision
+// Real-time cadence. The poll hits the cheap /head endpoint (revision only for
+// the UI), so it stays fast and never moves scene bytes unless the revision
 // actually changed — this is what stops the old "timeout of 15000ms exceeded"
 // that the whole-scene-every-4s poll triggered on a cold DB.
 const POLL_MS = 3_500;
 const SAVE_DEBOUNCE_MS = 900;
 
-function todoBoxPosition(index: number) {
-  return { x: 120 + (index % 4) * 260, y: 120 + Math.floor(index / 4) * 150 };
-}
+// Fingerprint of the exact scene content. We filter out deleted elements and
+// sort so that internal Excalidraw element re-ordering or transient deleted flags
+// do not cause false-positive saves.
+const sceneFingerprint = (elements: SceneElements, files: BinaryFiles) => {
+  const nonDeleted = (elements ?? []).filter((el: any) => !el?.isDeleted);
+  const elStr = nonDeleted
+    .map((el: any) => `${el.id}:${el.version}`)
+    .sort()
+    .join(",");
+  const fileStr = Object.keys(files ?? {}).sort().join(",");
+  return `${elStr}|${fileStr}`;
+};
 
-// Format a 0..1439 minute-of-day into HH:MM without touching the wall clock
-// (the purity rule forbids Date.now()/new Date() during render).
-function fmtMinute(min: number | null | undefined): string {
-  if (min == null) return "";
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function parseMinute(value: string): number | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
-  if (!m) return null;
-  const h = Number(m[1]);
-  const mm = Number(m[2]);
-  if (h > 23 || mm > 59) return null;
-  return h * 60 + mm;
-}
-
-// Compare two ISO "YYYY-MM-DD" dates lexically (safe, timezone-free, no clock).
-function isoDayDiff(iso: string | null | undefined, today: string | null): number | null {
-  if (!iso || !today) return null;
-  if (iso === today) return 0;
-  return iso < today ? -1 : 1;
-}
+// The fingerprint of the scene the server last confirmed (via a remote apply
+// or a successful save). Module-level rather than a ref on purpose: dev Fast
+// Refresh can leave a zombie closure attached to the still-mounted Excalidraw
+// whose per-instance refs would bypass an instance-level guard. One board
+// editor exists per page, so a single module slot is safe.
+const reconciledFp: { current: string | null } = { current: null };
 
 function CanvasSkeleton() {
   return (
@@ -117,135 +85,28 @@ function CanvasSkeleton() {
   );
 }
 
-// PL1/PL2/PL3 — inline per-todo planner (no modal): due date, priority,
-// recurrence, project link and a timebox block (day + start + duration).
-// Saved through the same PATCH endpoint the tick uses, so the revision bump
-// propagates live.
-function TodoPlanner({
-  todo,
-  projects,
-  onSave,
-  onCancel,
-}: {
-  todo: PlannerTodo;
-  projects: Project[];
-  onSave: (patch: PlannerTodoPayload) => void;
-  onCancel: () => void;
-}) {
-  const [dueDate, setDueDate] = useState(todo.due_date ?? "");
-  const [priority, setPriority] = useState(todo.priority || "medium");
-  const [recurrence, setRecurrence] = useState(todo.recurrence ?? "");
-  const [projectId, setProjectId] = useState(todo.project_id ?? "");
-  const [day, setDay] = useState(todo.date ?? "");
-  const [start, setStart] = useState(todo.start_minute != null ? fmtMinute(todo.start_minute) : "");
-  const [duration, setDuration] = useState(todo.duration_minutes != null ? String(todo.duration_minutes) : "");
-
-  const save = () => {
-    const patch: PlannerTodoPayload = {
-      due_date: dueDate || null,
-      priority: priority as PlannerTodoPayload["priority"],
-      recurrence: (recurrence || null) as PlannerTodoPayload["recurrence"],
-      project_id: projectId || null,
-      date: day || null,
-      start_minute: start ? parseMinute(start) : null,
-      duration_minutes: duration ? Math.max(0, Number(duration) || 0) : null,
-    };
-    onSave(patch);
-  };
-
-  const field = "px-2 py-1.5 rounded-lg bg-card border border-line text-xs text-fg focus:outline-none focus:border-accent";
-  return (
-    <div className="mx-2 mb-2 p-2.5 rounded-lg bg-surface border border-line space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Due date
-          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Priority
-          <select value={priority} onChange={(e) => setPriority(e.target.value)} className={field}>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-            <option value="urgent">urgent</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Repeat
-          <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} className={field}>
-            <option value="">none</option>
-            <option value="daily">daily</option>
-            <option value="weekly">weekly</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Project
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={field}>
-            <option value="">no project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Timebox day
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Start
-          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wide">
-          Minutes
-          <input type="number" min={0} max={1440} value={duration} onChange={(e) => setDuration(e.target.value)} className={field} />
-        </label>
-      </div>
-      <div className="flex items-center justify-end gap-2">
-        <button onClick={onCancel} className="px-2.5 py-1 rounded-lg text-xs text-muted hover:text-fg">Cancel</button>
-        <button onClick={save} className="px-3 py-1 rounded-lg text-xs font-semibold bg-accent hover:bg-accent-hi text-accent-fg">Save plan</button>
-      </div>
-    </div>
-  );
-}
-
 export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   const { getToken } = useAuth();
 
-  // Projects feed the per-todo link picker + row chips. Shares the cached
-  // "projects:data" key with the projects panel, so it's usually one request.
-  const { data: projectsData } = useApiData<Project[]>(
-    "projects:data",
-    async (token) => await getProjects(token),
-    { reportContext: "planner-board-projects" }
-  );
-  const projects = projectsData ?? [];
-  const projectName = useCallback(
-    (id: string) => projects.find((p) => p.id === id)?.title ?? null,
-    [projects]
-  );
-
   const [api, setApi] = useState<ExcalidrawAPI | null>(null);
   const [name, setName] = useState("Board");
-  const [todos, setTodos] = useState<PlannerTodo[]>([]);
-  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const [today, setToday] = useState<string | null>(null);
-  const [planningId, setPlanningId] = useState<string | null>(null);
+  // Render mirror of revisionRef (refs must not be read during render).
+  const [revision, setRevision] = useState(0);
   const [share, setShare] = useState<PlannerShare | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [snapOpen, setSnapOpen] = useState(false);
-  const [snapshots, setSnapshots] = useState<PlannerSnapshotSummary[]>([]);
-  const [carrying, setCarrying] = useState(false);
+  const initialData = useMemo(() => ({ elements: [], files: {}, appState: { viewModeEnabled: false } }), []);
 
   const revisionRef = useRef(0);
   const dirtyRef = useRef(false); // unsaved local canvas edits pending
-  const applyingRemoteRef = useRef(false); // guard so remote-apply doesn't re-save
+  const savingRef = useRef(false); // a whole-scene PUT is in flight
+  const resaveRef = useRef(false); // an edit landed while the PUT was in flight
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const lastSavedFpRef = useRef<string | null>(null);
+  const inFlightFpRef = useRef<string | null>(null);
   // Last scene pulled from the server, applied onto the canvas once Excalidraw
   // finishes its async mount (the first fetch can resolve before it exists).
   const headSceneRef = useRef<{ elements: SceneElements; files: BinaryFiles } | null>(null);
@@ -254,15 +115,18 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   // Apply a freshly fetched scene onto the canvas + revision.
   const applyRemoteScene = useCallback((elements: SceneElements, files: BinaryFiles, rev: number) => {
     headSceneRef.current = { elements, files };
+    const fp = sceneFingerprint(elements, files);
+    lastSavedFpRef.current = fp;
+    reconciledFp.current = fp;
     if (!canvasReadyRef.current || !api) {
       // Canvas not mounted yet; the [api] effect paints it on ready.
       revisionRef.current = rev;
+      setRevision(rev);
       return;
     }
-    applyingRemoteRef.current = true;
     api.updateScene({ elements, files });
-    applyingRemoteRef.current = false;
     revisionRef.current = rev;
+    setRevision(rev);
   }, [api]);
 
   // Full scene load — only called on open and when another session advanced
@@ -273,7 +137,11 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
       const board = await getPlannerBoard(boardId, token);
       if (!mountedRef.current) return;
       setName(board.name);
-      setTodos(board.todos);
+      setShare({
+        is_public: board.is_public,
+        share_token: board.share_token ?? null,
+        expires_at: board.expires_at ?? null,
+      });
       if (!dirtyRef.current) {
         applyRemoteScene(board.elements, board.files, board.revision);
       }
@@ -282,15 +150,13 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     }
   }, [boardId, getToken, applyRemoteScene]);
 
-  // Cheap real-time poll: revision + todos. Todos land live; the scene is only
+  // Cheap real-time poll: the revision is all this UI needs. The scene is only
   // re-downloaded when the revision has genuinely moved ahead of ours.
   const pollHead = useCallback(async () => {
     try {
       const token = (await getToken()) || undefined;
       const head = await getPlannerBoardHead(boardId, token);
       if (!mountedRef.current) return;
-      setTodos(head.todos);
-      if (head.today) setToday(head.today);
       if (!dirtyRef.current && head.revision > revisionRef.current) {
         await pullScene();
       }
@@ -301,44 +167,83 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
   }, [boardId, getToken, pullScene]);
 
   // Debounced save of the whole scene, guarded by revision for safe merges.
-  const doSave = useCallback(async () => {
-    if (!api) return;
-    const scene = { elements: api.getSceneElements() as SceneElements, files: api.getFiles() as BinaryFiles };
-    setSyncing(true);
-    try {
-      const token = (await getToken()) || undefined;
-      const res = await savePlannerBoard(boardId, scene, revisionRef.current, token);
-      revisionRef.current = res.revision;
-      dirtyRef.current = false;
-    } catch (err) {
-      const status = (err as ApiError)?.status;
-      if (status === 409) {
-        // Another session wrote first: pull their head scene, our next stroke
-        // saves on top of it. Never force-overwrite a teammate's drawing.
-        dirtyRef.current = false;
-        await pullScene();
-        toast.info("Board updated elsewhere — synced to the latest version.");
-      } else {
-        toast.error(err instanceof Error ? err.message : "Failed to save the board");
-      }
-    } finally {
-      setSyncing(false);
-    }
-  }, [api, boardId, getToken, pullScene]);
-
+  // scheduleSave reaches doSave through doSaveRef so doSave can queue a
+  // follow-up save without a dependency cycle.
+  const doSaveRef = useRef<() => Promise<void>>(async () => {});
   const scheduleSave = useCallback(() => {
     dirtyRef.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      void doSave();
+      void doSaveRef.current();
     }, SAVE_DEBOUNCE_MS);
-  }, [doSave]);
+  }, []);
 
-  // Excalidraw fires onChange for local edits AND our remote-apply; ignore the
-  // latter so applying someone else's scene doesn't echo a save back.
-  const handleChange = useCallback(() => {
-    if (applyingRemoteRef.current) return;
+  const doSave = useCallback(async () => {
+    if (!api) return;
+    if (savingRef.current) {
+      // An existing save is in flight. Flag resave so that changes that happened
+      // during the in-flight save are written after it completes.
+      resaveRef.current = true;
+      return;
+    }
+    const scene = { elements: api.getSceneElements() as SceneElements, files: api.getFiles() as BinaryFiles };
+    const fp = sceneFingerprint(scene.elements, scene.files);
+
+    // If canvas content matches what was already saved, no PUT is necessary.
+    if (fp === lastSavedFpRef.current) {
+      dirtyRef.current = false;
+      return;
+    }
+
+    inFlightFpRef.current = fp;
+    savingRef.current = true;
+    setSyncing(true);
+    try {
+      const token = (await getToken()) || undefined;
+      const res = await savePlannerBoard(boardId, scene, revisionRef.current, token);
+      revisionRef.current = res.revision;
+      setRevision(res.revision);
+      dirtyRef.current = false;
+      lastSavedFpRef.current = fp;
+      reconciledFp.current = fp;
+    } catch (err) {
+      const status = (err as ApiError)?.status;
+      if (status === 409) {
+        dirtyRef.current = false;
+        await pullScene();
+        toast.info("Board updated elsewhere — synced to latest version.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to save the board");
+      }
+    } finally {
+      savingRef.current = false;
+      inFlightFpRef.current = null;
+      setSyncing(false);
+      if (resaveRef.current && mountedRef.current) {
+        resaveRef.current = false;
+        scheduleSave();
+      }
+    }
+  }, [api, boardId, getToken, pullScene, scheduleSave]);
+  useEffect(() => {
+    doSaveRef.current = doSave;
+  });
+
+  // Excalidraw fires onChange for local edits AND on re-renders/mounts.
+  // We compare fingerprints to guarantee that identical states, remote-applied scenes,
+  // in-flight saves, or empty starter canvases never trigger a save cycle.
+  const handleChange = useCallback((elements: SceneElements, _appState: unknown, files: BinaryFiles) => {
+    const fp = sceneFingerprint(elements, files);
+    if (
+      fp === lastSavedFpRef.current ||
+      fp === inFlightFpRef.current ||
+      (reconciledFp.current !== null && fp === reconciledFp.current)
+    ) {
+      return;
+    }
+    const nonDeleted = (elements ?? []).filter((el: any) => !el?.isDeleted);
+    if (revisionRef.current === 0 && nonDeleted.length === 0) return;
     scheduleSave();
   }, [scheduleSave]);
 
@@ -348,17 +253,18 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     canvasReadyRef.current = true;
     const head = headSceneRef.current;
     if (head) {
-      applyingRemoteRef.current = true;
+      const fp = sceneFingerprint(head.elements, head.files);
+      lastSavedFpRef.current = fp;
+      reconciledFp.current = fp;
       api.updateScene({ elements: head.elements, files: head.files });
-      applyingRemoteRef.current = false;
     }
   }, [api]);
 
   // Initial load + real-time poll.
   useEffect(() => {
     mountedRef.current = true;
-    setLoading(true);
-    void pullScene().finally(() => mountedRef.current && setLoading(false));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount; setState fires inside the async loader
+    void pullScene();
     const poll = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (!dirtyRef.current) void pollHead();
@@ -371,87 +277,6 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [pullScene, pollHead]);
-
-  // ---- todo actions ----
-  const addTodo = async () => {
-    const text = draft.trim();
-    if (!text) return;
-    try {
-      const token = (await getToken()) || undefined;
-      const todo = await createPlannerTodo(boardId, { text }, token);
-      setTodos((prev) => [...prev, todo]);
-      setDraft("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add todo");
-    }
-  };
-
-  const toggleTodo = async (todo: PlannerTodo) => {
-    const next = !todo.is_done;
-    setTodos((prev) => prev.map((t) => (t.id === todo.id ? { ...t, is_done: next } : t)));
-    try {
-      const token = (await getToken()) || undefined;
-      await updatePlannerTodo(todo.id, { is_done: next }, token);
-    } catch (err) {
-      setTodos((prev) => prev.map((t) => (t.id === todo.id ? { ...t, is_done: todo.is_done } : t)));
-      toast.error(err instanceof Error ? err.message : "Failed to update todo");
-    }
-  };
-
-  const removeTodo = async (todo: PlannerTodo) => {
-    if (!(await confirmDialog({ message: `Delete "${todo.text}"?`, danger: true, confirmLabel: "Delete" }))) return;
-    const before = todos;
-    setTodos((prev) => prev.filter((t) => t.id !== todo.id));
-    try {
-      const token = (await getToken()) || undefined;
-      await deletePlannerTodo(todo.id, token);
-    } catch (err) {
-      setTodos(before);
-      toast.error(err instanceof Error ? err.message : "Failed to delete todo");
-    }
-  };
-
-  // PL7: one tap pulls every unfinished item dated before today onto today.
-  const carryOver = async () => {
-    setCarrying(true);
-    try {
-      const token = (await getToken()) || undefined;
-      const res = await carryOverPlannerTodos(boardId, token);
-      if (res.moved) {
-        await pullScene();
-        toast.success(`${res.moved} unfinished ${res.moved === 1 ? "item" : "items"} moved to today`);
-      } else {
-        toast.message("Nothing to carry over");
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not re-plan the board");
-    } finally {
-      setCarrying(false);
-    }
-  };
-
-  // The merged action: drop a todo onto the sketch board as a labelled card.
-  const sketchTodo = async (todo: PlannerTodo, index: number) => {
-    if (!api) {
-      toast.error("Board is still loading");
-      return;
-    }
-    const mod = await import("@excalidraw/excalidraw");
-    const { x, y } = todoBoxPosition(index);
-    const created = mod.convertToExcalidrawElements([
-      {
-        type: "rectangle",
-        x,
-        y,
-        width: 220,
-        height: 70,
-        label: { text: `${todo.is_done ? "✓ " : ""}${todo.text}` },
-      },
-    ]);
-    api.updateScene({ elements: [...(api.getSceneElements() as SceneElements), ...created] });
-    scheduleSave();
-    toast.success("Added to the board");
-  };
 
   const commitRename = async (value: string) => {
     setRenaming(false);
@@ -466,32 +291,15 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     }
   };
 
-  // PL1/PL2/PL3 — apply an inline plan edit to one todo (optimistic).
-  const saveTodoPlan = async (todo: PlannerTodo, patch: PlannerTodoPayload) => {
-    const before = todos;
-    setTodos((prev) => prev.map((t) => (t.id === todo.id ? { ...t, ...patch } : t)));
-    try {
-      const token = (await getToken()) || undefined;
-      const updated = await updatePlannerTodo(todo.id, patch, token);
-      setTodos((prev) => prev.map((t) => (t.id === todo.id ? updated : t)));
-      setPlanningId(null);
-    } catch (err) {
-      setTodos(before);
-      toast.error(err instanceof Error ? err.message : "Failed to update todo");
-    }
-  };
-
   // PL5 — read-only share link lifecycle (enable / copy / rotate / disable).
-  const openShare = () => {
-    setSnapOpen(false);
-    setShareOpen((v) => !v);
-  };
+  // The dialogs own their busy states and confirmations; these handlers only
+  // talk to the API and keep the editor's share mirror up to date.
+  const openShare = () => setShareOpen(true);
 
   const enableShare = async (expiresIso: string | null) => {
     try {
       const token = (await getToken()) || undefined;
-      const res = await enablePlannerShare(boardId, expiresIso, token);
-      setShare(res);
+      setShare(await enablePlannerShare(boardId, expiresIso, token));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to enable sharing");
     }
@@ -516,49 +324,24 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
     }
   };
 
-  const copyShare = () => {
-    if (!share?.share_token) return;
-    const url = `${window.location.origin}/planner/share/${share.share_token}`;
-    void navigator.clipboard?.writeText(url).then(
-      () => toast.success("Read-only link copied"),
-      () => toast.error(url)
-    );
-  };
-
-  // PL4 — time travel: list captured days and restore one into the live board.
-  const openHistory = async () => {
-    setShareOpen(false);
-    const next = !snapOpen;
-    setSnapOpen(next);
-    if (!next) return;
-    try {
-      const token = (await getToken()) || undefined;
-      setSnapshots(await listPlannerSnapshots(boardId, token));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load history");
-    }
-  };
+  // PL4 — time travel. The history dialog lists + previews the captured days;
+  // a restore lands here, repaints the canvas immediately and other tabs pick
+  // it up through the revision poll.
+  const openHistory = () => setSnapOpen(true);
 
   const restoreDay = async (capturedOn: string) => {
-    if (!(await confirmDialog({ message: `Restore the plan from ${capturedOn}? The current board will be replaced.`, confirmLabel: "Restore" }))) return;
     try {
       const token = (await getToken()) || undefined;
       const res = await restorePlannerSnapshot(boardId, capturedOn, token);
       revisionRef.current = res.revision;
+      setRevision(res.revision);
       dirtyRef.current = false;
       await pullScene();
-      setSnapOpen(false);
       toast.success(`Restored ${capturedOn}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to restore");
     }
   };
-
-  const overdue = today ? todos.filter((t) => !t.is_done && isoDayDiff(t.due_date, today) === -1).length : 0;
-  const dueToday = today ? todos.filter((t) => !t.is_done && isoDayDiff(t.due_date, today) === 0).length : 0;
-  const pendingCount = todos.filter((t) => !t.is_done).length;
-  // Items still parked on a past day on the grid — what carry-over collects.
-  const strandedCount = today ? todos.filter((t) => !t.is_done && t.date && t.date < today).length : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -591,275 +374,78 @@ export function PlannerBoardEditor({ boardId }: { boardId: string }) {
             ) : (
               <button
                 onClick={() => setRenaming(true)}
-                className="group flex items-center gap-1.5 min-w-0"
+                className="group flex items-center gap-1.5 min-w-0 cursor-pointer"
                 title="Rename board"
               >
                 <h2 className="font-display font-bold text-[15px] text-fg leading-tight truncate">{name}</h2>
                 <PencilLine className="w-3.5 h-3.5 text-faint opacity-0 group-hover:opacity-100 shrink-0" />
               </button>
             )}
-            <p className="text-[11px] text-muted">Todo list + sketch board · synced live</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-muted">
-            <span className={`w-2 h-2 rounded-full ${syncing ? "bg-warn animate-pulse" : "bg-ok"}`} />
-            {syncing ? "Saving…" : `Rev ${revisionRef.current}`}
-          </span>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div
+            className="hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-surface/60 border border-line/70 text-[11px] font-medium text-muted/90 shadow-2xs select-none"
+            title={`Revision ${revision} · All changes synced`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                syncing
+                  ? "bg-amber-400 animate-pulse shadow-[0_0_6px_rgba(251,191,36,0.6)]"
+                  : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]"
+              }`}
+            />
+            <span>{syncing ? "Saving…" : `Saved · v${revision}`}</span>
+          </div>
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => void openHistory()}
-            className="rounded-lg border-line text-fg"
+            size="icon"
+            onClick={openHistory}
+            className="w-9 h-9 rounded-lg border-line text-fg hover:bg-surface cursor-pointer"
             title="Day history"
+            aria-label="Day history"
           >
-            <History className="w-4 h-4 mr-1" />
-            <span className="hidden sm:inline">History</span>
+            <History className="w-4 h-4" />
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
             onClick={openShare}
-            className="rounded-lg border-line text-fg"
-            title="Share read-only"
+            className="w-9 h-9 rounded-lg border-line text-fg hover:bg-surface cursor-pointer"
+            title="Share board"
+            aria-label="Share board"
           >
-            <Share2 className="w-4 h-4 mr-1" />
-            <span className="hidden sm:inline">Share</span>
+            <Share2 className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* PL5 share / PL4 history inline panels (no popups) */}
-      {shareOpen && (
-        <div className="px-4 sm:px-6 py-3 border-b border-line bg-surface/40 flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-semibold text-fg">Read-only share link</span>
-          {share?.share_token ? (
-            <>
-              <code className="px-2 py-1 rounded-md bg-card border border-line text-xs text-muted truncate max-w-[280px]">
-                {`${typeof window !== "undefined" ? window.location.origin : ""}/planner/share/${share.share_token}`}
-              </code>
-              {share.expires_at && (
-                <span className="text-[11px] text-faint">expires {share.expires_at.slice(0, 10)}</span>
-              )}
-              <Button size="sm" variant="outline" onClick={copyShare} className="rounded-lg border-line text-fg">
-                <Link2 className="w-3.5 h-3.5 mr-1" />Copy
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => void rotateShare()} className="rounded-lg border-line text-fg">
-                Rotate
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => void turnOffShare()} className="rounded-lg border-line text-danger">
-                Turn off
-              </Button>
-            </>
-          ) : (
-            <span className="flex items-center gap-2">
-              <label className="text-xs text-muted">Expires (optional)</label>
-              <input type="date" id="share-expiry" className="px-2 py-1 rounded-lg bg-card border border-line text-sm text-fg" />
-              <Button
-                size="sm"
-                onClick={() => {
-                  const el = document.getElementById("share-expiry") as HTMLInputElement | null;
-                  const iso = el?.value ? new Date(`${el.value}T23:59:59`).toISOString() : null;
-                  void enableShare(iso);
-                }}
-                className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg"
-              >
-                Enable
-              </Button>
-            </span>
-          )}
-          <button onClick={() => setShareOpen(false)} className="ml-auto p-1 rounded-md text-muted hover:text-fg">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      {snapOpen && (
-        <div className="px-4 sm:px-6 py-3 border-b border-line bg-surface/40">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-fg text-sm">Day history (auto-captured once per day)</span>
-            <button onClick={() => setSnapOpen(false)} className="p-1 rounded-md text-muted hover:text-fg">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {snapshots.length === 0 ? (
-            <p className="text-xs text-faint">No snapshots yet — one is saved the first time you edit the board each day.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {snapshots.map((s) => (
-                <button
-                  key={s.captured_on}
-                  onClick={() => void restoreDay(s.captured_on)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-card border border-line text-xs text-fg hover:border-accent"
-                  title="Restore this day"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-muted" />{s.captured_on}
-                  <span className="font-mono text-[10px] text-faint">rev {s.revision}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* PL5 share modal + PL4 history modal */}
+      <PlannerShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        share={share}
+        onEnable={enableShare}
+        onRotate={rotateShare}
+        onDisable={turnOffShare}
+      />
+      <PlannerHistoryDialog
+        open={snapOpen}
+        onOpenChange={setSnapOpen}
+        boardId={boardId}
+        onRestore={restoreDay}
+      />
 
-      {/* Body: two panes */}
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-        {/* Todos */}
-        <div className="lg:w-[340px] shrink-0 border-b lg:border-b-0 lg:border-r border-line flex flex-col min-h-0 bg-card">
-          <div className="p-4 border-b border-line">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-muted uppercase tracking-wide">Todos</span>
-              <span className="text-[11px] font-mono text-faint">{pendingCount} open</span>
-            </div>
-            {today && (overdue > 0 || dueToday > 0) && (
-              <div className="mb-2 flex flex-wrap gap-1.5 text-[11px]">
-                {overdue > 0 && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-danger/10 text-danger">
-                    <AlertCircle className="w-3 h-3" />{overdue} overdue
-                  </span>
-                )}
-                {dueToday > 0 && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warn/10 text-warn">
-                    <Calendar className="w-3 h-3" />{dueToday} due today
-                  </span>
-                )}
-              </div>
-            )}
-            {today && strandedCount > 0 && (
-              <button
-                onClick={() => void carryOver()}
-                disabled={carrying}
-                title="Move every unfinished item dated before today onto today"
-                className="mb-2 w-full inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-warn/30 bg-warn/10 text-warn text-[11px] font-semibold hover:bg-warn/20 transition-colors disabled:opacity-60"
-              >
-                {carrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                Carry {strandedCount} unfinished {strandedCount === 1 ? "item" : "items"} to today
-              </button>
-            )}
-            <div className="flex items-center gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void addTodo(); }}
-                placeholder="What needs doing?"
-                maxLength={500}
-                className="flex-1 px-3 py-2 rounded-lg bg-surface border border-line text-sm text-fg placeholder:text-faint focus:outline-none focus:border-accent"
-              />
-              <Button
-                size="sm"
-                onClick={() => void addTodo()}
-                disabled={!draft.trim()}
-                className="rounded-lg bg-accent hover:bg-accent-hi text-accent-fg px-2.5"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {loading ? (
-              <div className="flex items-center justify-center h-24 text-muted text-sm">
-                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading…
-              </div>
-            ) : todos.length === 0 ? (
-              <p className="text-center text-xs text-faint py-10 px-4">
-                No todos yet. Add one above, then sketch it on the board.
-              </p>
-            ) : (
-              todos.map((todo, i) => {
-                const diff = isoDayDiff(todo.due_date, today);
-                const overdueRow = !todo.is_done && diff === -1;
-                const dueTodayRow = !todo.is_done && diff === 0;
-                const planning = planningId === todo.id;
-                return (
-                  <div key={todo.id} className="rounded-lg hover:bg-surface">
-                    <div className="group flex items-center gap-2 px-2 py-1.5">
-                      <button
-                        onClick={() => toggleTodo(todo)}
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                          todo.is_done ? "bg-accent border-accent text-accent-fg" : "border-line-strong text-transparent hover:border-accent"
-                        }`}
-                        aria-label={todo.is_done ? "Mark not done" : "Mark done"}
-                      >
-                        <Check className="w-3 h-3" />
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <span className={`block text-sm truncate ${todo.is_done ? "line-through text-faint" : "text-fg"}`}>
-                          {todo.text}
-                        </span>
-                        {(todo.due_date || todo.start_minute != null || todo.recurrence || (todo.priority && todo.priority !== "medium") || (todo.project_id && projectName(todo.project_id))) && (
-                          <div className="flex flex-wrap items-center gap-1 text-[10px] mt-0.5">
-                            {todo.project_id && projectName(todo.project_id) && (
-                              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-accent/10 text-accent" title="Linked project">
-                                <Folder className="w-2.5 h-2.5" />{projectName(todo.project_id)}
-                              </span>
-                            )}
-                            {todo.priority && todo.priority !== "medium" && (
-                              <span className="px-1 py-0.5 rounded bg-surface text-muted capitalize">{todo.priority}</span>
-                            )}
-                            {todo.due_date && (
-                              <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded ${overdueRow ? "bg-danger/10 text-danger" : dueTodayRow ? "bg-warn/10 text-warn" : "bg-surface text-muted"}`}>
-                                <Calendar className="w-2.5 h-2.5" />{todo.due_date}
-                              </span>
-                            )}
-                            {todo.start_minute != null && (
-                              <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-info/10 text-info">
-                                <Clock className="w-2.5 h-2.5" />{fmtMinute(todo.start_minute)}{todo.duration_minutes ? `–${fmtMinute((todo.start_minute + todo.duration_minutes) % 1440)}` : ""}
-                              </span>
-                            )}
-                            {todo.recurrence && (
-                              <span className="px-1 py-0.5 rounded bg-surface text-muted">↻ {todo.recurrence}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => setPlanningId(planning ? null : todo.id)}
-                        title="Plan (date, priority, project, timebox)"
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-accent shrink-0"
-                      >
-                        <CalendarClock className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => sketchTodo(todo, i)}
-                        title="Add to board"
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-accent shrink-0"
-                      >
-                        <PenLine className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => removeTodo(todo)}
-                        title="Delete"
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-danger shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {planning && (
-                      <TodoPlanner
-                        todo={todo}
-                        projects={projects}
-                        onSave={(p) => void saveTodoPlan(todo, p)}
-                        onCancel={() => setPlanningId(null)}
-                      />
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Canvas */}
-        <div className="flex-1 min-h-0 relative">
-          <Excalidraw
-            ref={setApi}
-            onChange={handleChange}
-            initialData={{ elements: [], files: {}, appState: { viewModeEnabled: false } }}
-            langCode="en"
-            theme="dark"
-            name={name}
-          />
-        </div>
+      {/* Canvas — owns the full remaining height */}
+      <div className="flex-1 min-h-0 relative planner-canvas-wrapper">
+        <Excalidraw
+          excalidrawAPI={(api: ExcalidrawAPI) => setApi(api)}
+          onChange={handleChange}
+          initialData={initialData}
+          langCode="en"
+          theme="dark"
+          name={name}
+        />
       </div>
     </div>
   );

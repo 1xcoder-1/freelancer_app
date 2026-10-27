@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import { FEATURES, type FeatureSubItem } from "@/lib/features";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useLiveNotifications } from "@/hooks/use-live-notifications";
+import { resetWelcomeSession } from "@/components/dashboard/WelcomeToast";
 
 // Precise active detection: handles both the ?tab= URL style used by the
 // panels/command menu and the legacy standalone routes (/dashboard/leads…).
@@ -117,8 +118,16 @@ function LogOutButton({ onDone }: { onDone: () => void }) {
   const handleLogOut = async () => {
     setBusy(true);
     try {
-      await clerk.signOut();
-      router.push("/sign-in");
+      resetWelcomeSession();
+      if (typeof window !== "undefined") {
+        Object.keys(window.sessionStorage).forEach((key) => {
+          if (key.startsWith("fb_welcome_")) {
+            window.sessionStorage.removeItem(key);
+          }
+        });
+      }
+      await clerk.signOut({ redirectUrl: "/" });
+      router.push("/");
     } finally {
       onDone();
       setBusy(false);
@@ -159,10 +168,16 @@ export function DashboardSidebar() {
         title: labelFor(f.key, f.title),
         href: f.href,
         icon: f.icon,
-        children: f.subItems?.map((s) => ({
-          ...s,
-          title: labelFor(s.id, s.title),
-        })),
+        // A sub-item with its own flagKey (Planner → Task Management) gates
+        // independently of the parent feature; the rest follow the feature's
+        // flag. Filtering here covers the expanded accordion and the portalled
+        // collapsed flyout, which both render from this children list.
+        children: f.subItems
+          ?.filter((s) => canSee(s.flagKey ?? f.key))
+          .map((s) => ({
+            ...s,
+            title: labelFor(s.id, s.title),
+          })),
       })),
     [ready, canSee, labelFor]
   );

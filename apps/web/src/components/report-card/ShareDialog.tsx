@@ -13,6 +13,7 @@ import {
   Clock,
 } from "@/components/animated-icons";
 import { Button } from "@/components/ui/button";
+import { CustomSelect } from "@/components/ui/custom-select";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +29,20 @@ import {
 
 type Expiration = "never" | "1m" | "1h" | "24h" | "7d" | "30d";
 
+const EXPIRATION_OPTIONS = [
+  { value: "never", label: "Never expires" },
+  { value: "1m", label: "1 minute" },
+  { value: "1h", label: "1 hour" },
+  { value: "24h", label: "24 hours" },
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+];
+
 interface ShareDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   share: ShareStatusResponse;
   username: string;
-  fullName: string;
   onShareChanged: () => void;
 }
 
@@ -56,19 +65,18 @@ function describeCountdown(expiresAt?: number | null): string {
  * now talking to the DB-backed /report-card/share endpoints).
  */
 export function ShareDialog(props: ShareDialogProps) {
-  const { open, onOpenChange, share, username, fullName } = props;
+  const { open, onOpenChange, share } = props;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-full p-6">
+      <DialogContent className="max-w-md w-full p-6 sm:p-7 rounded-2xl border-line/80 bg-card/95 backdrop-blur-xl shadow-2xl overflow-visible scrollbar-none">
         <DialogHeader className="space-y-1.5 text-left">
           <div className="flex items-center gap-2">
             <Globe className="w-5 h-5 text-fg" />
-            <DialogTitle className="text-base">Share Report Card</DialogTitle>
+            <DialogTitle className="text-base">Share Portfolio</DialogTitle>
           </div>
           <DialogDescription>
-            Create a public link to share &ldquo;{fullName || username}&apos;s
-            Report Card&rdquo; with anyone.
+            Publish a public link to your portfolio.
           </DialogDescription>
         </DialogHeader>
 
@@ -209,7 +217,7 @@ function ShareDialogBody({
               onChange={(e) => setIncludeStyling(e.target.checked)}
               className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
             />
-            <span>Include styling (fonts, colors, layout)</span>
+            <span>Include styling</span>
           </label>
 
           <div className="space-y-2 pt-2">
@@ -219,7 +227,7 @@ function ShareDialogBody({
               className="w-full py-2.5 px-4 rounded-xl bg-surface hover:bg-card border border-danger/30 text-danger font-semibold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? "Revoking..." : "Remove Share Link"}</span>
+              <span>{isSubmitting ? "Removing..." : "Remove link"}</span>
             </button>
             <button
               onClick={() => onOpenChange(false)}
@@ -232,18 +240,6 @@ function ShareDialogBody({
       ) : (
         /* Screen 2 — nothing shared yet */
         <div className="space-y-4 pt-2">
-          <div className="bg-surface/70 border border-dashed border-line rounded-xl p-6 text-center flex flex-col items-center justify-center space-y-2">
-            <div className="w-12 h-12 rounded-full bg-card border border-line flex items-center justify-center mb-1">
-              <Globe className="w-6 h-6 text-muted" />
-            </div>
-            <h4 className="text-sm font-bold text-fg tracking-tight">
-              This report card is not shared yet
-            </h4>
-            <p className="text-xs text-muted max-w-xs">
-              Create a share link to let anyone view this report card
-            </p>
-          </div>
-
           <label className="flex items-center gap-2.5 cursor-pointer text-xs text-fg font-medium select-none">
             <input
               type="checkbox"
@@ -251,27 +247,19 @@ function ShareDialogBody({
               onChange={(e) => setIncludeStyling(e.target.checked)}
               className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
             />
-            <span>Include styling (fonts, colors, layout)</span>
+            <span>Include styling</span>
           </label>
 
           <div>
             <label className="text-xs font-semibold text-fg block mb-1.5">
               Link Expiration
             </label>
-            <select
+            <CustomSelect
               value={selectedExpiration}
-              onChange={(e) =>
-                setSelectedExpiration(e.target.value as Expiration)
-              }
-              className="w-full bg-surface border border-line rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent cursor-pointer font-medium"
-            >
-              <option value="never">Never expires</option>
-              <option value="1m">1 minute (live test expiry)</option>
-              <option value="1h">1 hour</option>
-              <option value="24h">24 hours</option>
-              <option value="7d">7 days</option>
-              <option value="30d">30 days</option>
-            </select>
+              onChange={(v) => setSelectedExpiration(v as Expiration)}
+              options={EXPIRATION_OPTIONS}
+              buttonClassName="w-full h-10 bg-surface/60"
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-3">
@@ -289,7 +277,7 @@ function ShareDialogBody({
               className="py-2.5 px-5 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs flex items-center gap-2 transition-all disabled:opacity-50"
             >
               <Globe className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? "Creating..." : "Create Share Link"}</span>
+              <span>{isSubmitting ? "Creating..." : "Create link"}</span>
             </button>
           </div>
         </div>

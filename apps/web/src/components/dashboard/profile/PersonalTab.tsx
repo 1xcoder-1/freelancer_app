@@ -35,12 +35,12 @@ export function PersonalTab({
   onCurrencyChange: (next: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 sm:gap-x-12 gap-y-7 sm:gap-y-8">
       <ProfileField label="Full Name" required>
         <UnderlineInput
           value={fullName}
           onChange={(e) => onFullNameChange(e.target.value)}
-          placeholder="Your name"
+          placeholder="Enter your full name"
         />
       </ProfileField>
 
@@ -48,7 +48,7 @@ export function PersonalTab({
         <UnderlineInput
           value={personal.username}
           onChange={(e) => onChange({ username: e.target.value })}
-          placeholder="e.g. abdullah_dev"
+          placeholder="Enter your username"
         />
       </ProfileField>
 
@@ -60,17 +60,17 @@ export function PersonalTab({
         />
       </ProfileField>
 
-      <ProfileField label="Company / Institution">
+      <ProfileField label="Company">
         <UnderlineInput
-          value={personal.company || personal.institution || ""}
-          onChange={(e) => onChange({ company: e.target.value, institution: e.target.value })}
-          placeholder="Enter your company or college/university"
+          value={personal.company || ""}
+          onChange={(e) => onChange({ company: e.target.value })}
+          placeholder="Enter your company"
         />
       </ProfileField>
 
       <ProfileField label="Job Title">
         <UnderlineInput
-          value={personal.job_title}
+          value={personal.job_title || ""}
           onChange={(e) => onChange({ job_title: e.target.value })}
           placeholder="Enter your job title"
         />
@@ -78,9 +78,17 @@ export function PersonalTab({
 
       <ProfileField label="Location">
         <UnderlineInput
-          value={personal.location}
+          value={personal.location || ""}
           onChange={(e) => onChange({ location: e.target.value })}
           placeholder="City, Country (e.g., Jaipur, India)"
+        />
+      </ProfileField>
+
+      <ProfileField label="Institution">
+        <UnderlineInput
+          value={personal.institution || ""}
+          onChange={(e) => onChange({ institution: e.target.value })}
+          placeholder="Enter your college/university"
         />
       </ProfileField>
 
@@ -94,13 +102,15 @@ export function PersonalTab({
         />
       </ProfileField>
 
-      <div className="sm:col-span-2">
+      <div className="hidden sm:block" aria-hidden="true" />
+
+      <div className="sm:col-span-2 pt-2">
         <ProfileSectionTitle>Social & Professional Links</ProfileSectionTitle>
       </div>
 
       <ProfileField label="Website">
         <UnderlineInput
-          value={personal.website}
+          value={personal.website || ""}
           onChange={(e) => onChange({ website: e.target.value })}
           placeholder="https://example.com"
           type="url"
@@ -109,7 +119,7 @@ export function PersonalTab({
 
       <ProfileField label="GitHub">
         <UnderlineInput
-          value={personal.github}
+          value={personal.github || ""}
           onChange={(e) => onChange({ github: e.target.value })}
           placeholder="https://github.com/username"
           type="url"
@@ -118,7 +128,7 @@ export function PersonalTab({
 
       <ProfileField label="LinkedIn">
         <UnderlineInput
-          value={personal.linkedin}
+          value={personal.linkedin || ""}
           onChange={(e) => onChange({ linkedin: e.target.value })}
           placeholder="https://linkedin.com/in/username"
           type="url"
@@ -127,7 +137,7 @@ export function PersonalTab({
 
       <ProfileField label="Twitter / X">
         <UnderlineInput
-          value={personal.twitter}
+          value={personal.twitter || ""}
           onChange={(e) => onChange({ twitter: e.target.value })}
           placeholder="https://twitter.com/username"
           type="url"

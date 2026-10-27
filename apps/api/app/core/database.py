@@ -83,7 +83,11 @@ async def init_db():
             quote = engine.dialect.identifier_preparer.quote
             # Retired columns (features removed from the models) are dropped here
             # once; DROP COLUMN IF EXISTS keeps it a no-op on fresh databases.
-            for _table, _column in (("projects", "budgeted_hours"), ("clients", "health_score")):
+            for _table, _column in (
+                ("projects", "budgeted_hours"),
+                ("clients", "health_score"),
+                ("report_cards", "views_count"),
+            ):
                 await conn.execute(text(
                     f"ALTER TABLE {quote(_table)} DROP COLUMN IF EXISTS {quote(_column)};"
                 ))

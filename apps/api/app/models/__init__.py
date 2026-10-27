@@ -11,6 +11,13 @@ from app.models.booking import BookingConsultation, BookingAppointment, BookingB
 from app.models.calendar import CalendarEvent, GoogleCalendarConnection
 from app.models.report_card import ReportCard
 from app.models.planner import PlannerBoard, PlannerTodo, PlannerSnapshot
+from app.models.task_management import (
+    TaskAttachment,
+    TaskBoard,
+    TaskCard,
+    TaskList,
+    TaskSubtask,
+)
 from app.models.interaction import Interaction
 from app.models.notification import Notification
 from app.models.testimonial import Testimonial
@@ -55,6 +62,11 @@ __all__ = [
     "PlannerBoard",
     "PlannerTodo",
     "PlannerSnapshot",
+    "TaskBoard",
+    "TaskList",
+    "TaskCard",
+    "TaskSubtask",
+    "TaskAttachment",
     "Interaction",
     "Notification",
     "Testimonial",

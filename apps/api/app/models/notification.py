@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, DateTime, Boolean, Text, ForeignKey, Index
+from sqlalchemy import String, DateTime, Boolean, Text, ForeignKey, Index, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
@@ -27,6 +27,12 @@ class Notification(Base, TimestampMixin):
     # In-app destination, e.g. '/dashboard/projects?tab=invoices' — the inbox
     # row navigates straight to the thing that happened.
     link: Mapped[str] = mapped_column(String(255), nullable=True)
+    # Idempotency key for producers whose trigger is a STATE (not a transition),
+    # e.g. 'task-due:<card_id>:task.overdue:<due_date>' from the hourly scan.
+    # Task cards never flip status the way invoices do, so the scan would
+    # re-alert every hour without this. One row per key (unique partial index
+    # below); NULL for the classic one-shot producers, which stay unkeyed.
+    dedupe_key: Mapped[str] = mapped_column(String(150), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, index=True,
@@ -34,4 +40,13 @@ class Notification(Base, TimestampMixin):
 
     __table_args__ = (
         Index("ix_notifications_workspace_read", "workspace_id", "is_read", "occurred_at"),
+        # Partial unique: only keyed rows participate, so the classic producers
+        # (dedupe_key NULL) are untouched by the constraint.
+        Index(
+            "ux_notifications_dedupe_key",
+            "dedupe_key",
+            unique=True,
+            postgresql_where=text("dedupe_key IS NOT NULL"),
+            sqlite_where=text("dedupe_key IS NOT NULL"),
+        ),
     )

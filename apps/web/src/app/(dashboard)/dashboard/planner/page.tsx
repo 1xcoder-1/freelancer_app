@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import {
@@ -9,10 +10,9 @@ import {
   Trash2,
   PencilLine,
   Loader2,
-  CheckSquare,
+  Kanban,
   RefreshCw,
-  AlertCircle,
-  CalendarClock,
+  Share2,
   Layers,
 } from "@/components/animated-icons";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/dashboard/patterns";
 import { CategoryVisualCard, ChaiCupIcon } from "@/components/dashboard/CategoryVisualCard";
+import { NewBoardDialog } from "@/components/dashboard/NewBoardDialog";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import {
   listPlannerBoards,
@@ -32,36 +33,31 @@ import {
   type PlannerBoardSummary,
 } from "@/lib/api";
 
-// Boards are the Planner's "files": a freelancer keeps several (one per
+// Sketch boards are the Planner's "files": a freelancer keeps several (one per
 // project / idea). This page lists them; creating one drops straight into the
 // full-page editor instead of opening a popup, per the product direction.
+// (Task Management kanban boards live under /dashboard/planner/tasks.)
 
 function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const diff = Date.now() - then;
+  if (!iso) return "just now";
+  const normalized = iso.endsWith("Z") || iso.includes("+") ? iso : `${iso}Z`;
+  const then = new Date(normalized).getTime();
+  if (Number.isNaN(then)) {
+    const raw = new Date(iso).getTime();
+    if (Number.isNaN(raw)) return "recently";
+  }
+  const timestamp = Number.isNaN(then) ? new Date(iso).getTime() : then;
+  const diff = Math.max(0, Date.now() - timestamp);
+  const secs = Math.round(diff / 1000);
+  if (secs < 45) return "just now";
   const mins = Math.round(diff / 60000);
-  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return new Date(timestamp).toLocaleDateString();
 }
-
-const chip =
-  "text-[11px] font-medium px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1";
-const chipOrange =
-  "text-orange-700 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/20 dark:border-orange-500/25 font-mono";
-const chipRed =
-  "bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/20 dark:border-red-500/25 font-semibold";
-const chipAmber =
-  "bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/25 font-semibold";
-const chipAccent =
-  "bg-accent/10 text-accent border-accent/20 font-semibold";
-const chipNeutral =
-  "bg-slate-500/10 dark:bg-white/5 border-slate-200/90 dark:border-white/10 text-slate-600 dark:text-slate-300";
 
 export default function PlannerPage() {
   const router = useRouter();
@@ -70,6 +66,7 @@ export default function PlannerPage() {
   const [boards, setBoards] = useState<PlannerBoardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -85,21 +82,24 @@ export default function PlannerPage() {
   }, [getToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount; setState fires inside the async loader
     void load();
   }, [load]);
 
-  // Create a board and immediately open it — the requested "file → auto-open"
-  // flow. No name prompt: the editor has an inline rename in its header.
-  const createBoard = async () => {
+  // Create a board (from the NewBoardDialog) and immediately open it — the
+  // requested "file → auto-open" flow. The editor has an inline rename in its
+  // header, but naming at creation feels right for a popup-first flow.
+  const createBoard = async (name: string) => {
     if (creating) return;
     setCreating(true);
     try {
       const token = (await getToken()) || undefined;
-      const board = await createPlannerBoard("Untitled board", token);
+      const board = await createPlannerBoard(name, token);
       router.push(`/dashboard/planner/${board.id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create board");
       setCreating(false);
+      setNewOpen(false);
     }
   };
 
@@ -118,7 +118,7 @@ export default function PlannerPage() {
 
   const remove = async (board: PlannerBoardSummary) => {
     const ok = await confirmDialog({
-      message: `Delete "${board.name}" and all its todos? This cannot be undone.`,
+      message: `Delete "${board.name}"? This cannot be undone.`,
       danger: true,
       confirmLabel: "Delete",
     });
@@ -133,18 +133,22 @@ export default function PlannerPage() {
   };
 
   const totalBoards = boards.length;
-  const openTodos = boards.reduce((acc, b) => acc + Math.max(0, b.todos_count - b.done_count), 0);
-  const dueToday = boards.reduce((acc, b) => acc + b.due_today_count, 0);
-  const overdue = boards.reduce((acc, b) => acc + b.overdue_count, 0);
-  const timeboxedToday = boards.reduce((acc, b) => acc + b.planned_today_count, 0);
+  const sharedBoards = boards.filter((b) => b.has_share).length;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const updatedToday = boards.filter((b) => {
+    const iso = b.updated_at;
+    const normalized = iso && !iso.endsWith("Z") && !iso.includes("+") ? `${iso}Z` : iso;
+    return new Date(normalized).getTime() >= startOfToday.getTime();
+  }).length;
 
   return (
     <div className="space-y-6">
-      {/* 4 Headline Cards at the top */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 enter-stagger">
+      {/* 3 Headline Cards at the top — sketch-board stats, straight from the
+          summaries already fetched (no todo math anywhere on this page). */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 enter-stagger">
         {loading && boards.length === 0 ? (
           <>
-            <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
             <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
             <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
             <Skeleton className="h-[180px] w-full rounded-2xl bg-[#141518] border border-[#26272d]" />
@@ -157,41 +161,30 @@ export default function PlannerPage() {
               icon={Layers}
               rows={[
                 {
-                  text: `${openTodos} todo${openTodos === 1 ? "" : "s"} tracked`,
+                  text: `${sharedBoards} shared read-only`,
                   dot: "info",
                 },
               ]}
             />
             <StatCard
-              label="Open Todos"
-              value={openTodos}
-              icon={CheckSquare}
+              label="Shared Boards"
+              value={sharedBoards}
+              icon={Share2}
               rows={[
                 {
-                  text: openTodos > 0 ? "Still on the list" : "All clear",
-                  dot: openTodos > 0 ? "warn" : "ok",
+                  text: sharedBoards > 0 ? "Live read-only links" : "Nothing shared yet",
+                  dot: sharedBoards > 0 ? "ok" : "info",
                 },
               ]}
             />
             <StatCard
-              label="Due Today"
-              value={dueToday}
-              icon={CalendarClock}
+              label="Updated Today"
+              value={updatedToday}
+              icon={PenLine}
               rows={[
                 {
-                  text: dueToday > 0 ? "Scheduled for today" : "Nothing due today",
-                  dot: dueToday > 0 ? "amber" : "ok",
-                },
-              ]}
-            />
-            <StatCard
-              label="Overdue"
-              value={overdue}
-              icon={AlertCircle}
-              rows={[
-                {
-                  text: overdue > 0 ? "Needs attention" : "All caught up",
-                  dot: overdue > 0 ? "danger" : "ok",
+                  text: updatedToday > 0 ? "Sketched on today" : "No edits today",
+                  dot: updatedToday > 0 ? "ok" : "info",
                 },
               ]}
             />
@@ -205,14 +198,10 @@ export default function PlannerPage() {
           <Badge className="bg-accent-soft text-accent border-accent/20 font-mono text-xs font-semibold">
             {totalBoards} Board{totalBoards === 1 ? "" : "s"}
           </Badge>
-          {timeboxedToday > 0 && (
-            <span className="text-xs font-mono text-muted hidden sm:inline">
-              {timeboxedToday} timeboxed today
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+
           <Button
             variant="outline"
             size="sm"
@@ -225,11 +214,10 @@ export default function PlannerPage() {
           </Button>
 
           <button
-            onClick={() => void createBoard()}
-            disabled={creating}
-            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer disabled:opacity-60"
+            onClick={() => setNewOpen(true)}
+            className="press inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 h-9 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
           >
-            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            <Plus className="w-3.5 h-3.5" />
             <span>New Board</span>
           </button>
         </div>
@@ -249,16 +237,15 @@ export default function PlannerPage() {
           </div>
           <h3 className="font-display text-xl sm:text-2xl font-medium tracking-wide text-fg">No boards yet</h3>
           <p className="text-xs sm:text-sm text-muted mt-1 max-w-sm mx-auto leading-relaxed">
-            A board is a blank canvas for a project or idea — sketch it out and tick
-            off the todos as you go. Everything syncs live across your tabs.
+            A board is a blank canvas for a project or idea — sketch it out
+            freely. Everything syncs live across your tabs.
           </p>
           <div className="mt-5 flex justify-center">
             <button
-              onClick={() => void createBoard()}
-              disabled={creating}
-              className="press inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer disabled:opacity-60"
+              onClick={() => setNewOpen(true)}
+              className="press inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg font-semibold text-xs sm:text-sm shadow-xs hover:shadow-sm cursor-pointer"
             >
-              {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              <Plus className="w-3.5 h-3.5" />
               <span>Create your first board</span>
             </button>
           </div>
@@ -267,23 +254,6 @@ export default function PlannerPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 stagger-grid">
           {boards.map((board) => {
             const updated = relativeTime(board.updated_at);
-
-            const statusBadge =
-              board.overdue_count > 0 ? (
-                <span className={`${chip} ${chipRed}`}>
-                  <AlertCircle className="w-3 h-3" />
-                  {board.overdue_count} overdue
-                </span>
-              ) : board.due_today_count > 0 ? (
-                <span className={`${chip} ${chipAmber}`}>
-                  <CalendarClock className="w-3 h-3" />
-                  {board.due_today_count} due today
-                </span>
-              ) : board.has_share ? (
-                <span className={`${chip} ${chipAccent}`}>Shared</span>
-              ) : (
-                <span className={`${chip} ${chipNeutral}`}>On track</span>
-              );
 
             return editingId === board.id ? (
               <div
@@ -307,47 +277,31 @@ export default function PlannerPage() {
               <CategoryVisualCard
                 key={board.id}
                 title={board.name}
-                subtitle={updated ? `Updated ${updated}` : "Recently updated"}
+                subtitle={updated ? `Updated ${updated}` : "Updated recently"}
                 hidePrefix
                 onClick={() => router.push(`/dashboard/planner/${board.id}`)}
                 topRightContent={
-                  <div className="flex items-center gap-1.5">
-                    {statusBadge}
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingId(board.id);
-                        }}
-                        title="Rename"
-                        className="p-1.5 rounded-md text-muted hover:text-fg hover:bg-surface cursor-pointer"
-                      >
-                        <PencilLine className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void remove(board);
-                        }}
-                        title="Delete"
-                        className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-surface cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                }
-                tags={
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className={`${chip} ${chipOrange}`}>
-                      <CheckSquare className="w-3 h-3" />
-                      {board.done_count}/{board.todos_count} done
-                    </span>
-                    {board.planned_today_count > 0 && (
-                      <span className={`${chip} ${chipAccent} font-mono`}>
-                        {board.planned_today_count} timeboxed
-                      </span>
-                    )}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingId(board.id);
+                      }}
+                      title="Rename"
+                      className="p-1.5 rounded-md text-muted hover:text-fg hover:bg-surface cursor-pointer"
+                    >
+                      <PencilLine className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void remove(board);
+                      }}
+                      title="Delete"
+                      className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-surface cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 }
               />
@@ -355,6 +309,13 @@ export default function PlannerPage() {
           })}
         </div>
       )}
+
+      <NewBoardDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        creating={creating}
+        onCreate={(name) => void createBoard(name)}
+      />
     </div>
   );
 }

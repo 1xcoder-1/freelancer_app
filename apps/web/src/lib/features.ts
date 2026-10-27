@@ -23,6 +23,7 @@ import {
   Phone,
   MessageSquare,
   CreditCard,
+  Kanban,
 } from "@/components/animated-icons";
 
 // Single source of truth for dashboard navigation and feature gating.
@@ -40,6 +41,10 @@ export interface FeatureSubItem {
   href: string;
   icon: ElementType;
   active: (path: string, tab: string) => boolean;
+  // When set, this sub-item is gated by its own feature flag instead of the
+  // parent feature's key — the sidebar, command menu and route guard all read
+  // it (e.g. planner.tasks → "task_management" in Settings → Workspace).
+  flagKey?: string;
 }
 
 export interface FeatureDef {
@@ -216,10 +221,32 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "planner",
     title: "Planner",
-    description: "Visual planner boards and todos.",
+    description: "Sketch boards and task management.",
     icon: PenLine,
     href: "/dashboard/planner",
     routes: ["/dashboard/planner"],
+    subItems: [
+      {
+        id: "planner.sketch",
+        title: "Sketch Board",
+        href: "/dashboard/planner",
+        icon: PenLine,
+        // Everything under /planner except the tasks subtree belongs to the
+        // sketch editor (including its per-board routes).
+        active: (p) =>
+          onPath(p, "/dashboard/planner") && !p.startsWith("/dashboard/planner/tasks"),
+      },
+      {
+        id: "planner.tasks",
+        title: "Task Boards",
+        href: "/dashboard/planner/tasks",
+        icon: Kanban,
+        active: (p) => onPath(p, "/dashboard/planner/tasks"),
+        // Own toggle in Settings → Workspace; Sketch Board stays gated by the
+        // parent "planner" flag (no separate sketch flag by design).
+        flagKey: "task_management",
+      },
+    ],
   },
   {
     key: "insights",
@@ -254,15 +281,15 @@ export const FEATURES: FeatureDef[] = [
   },
   {
     key: "profile",
-    title: "Profile",
-    description: "Public profile report card and link pages.",
+    title: "Portfolio",
+    description: "Public portfolio page and link pages.",
     icon: IdCard,
     href: "/dashboard/report-card",
     routes: ["/dashboard/report-card", "/dashboard/link-page"],
     subItems: [
       {
         id: "profile.report-card",
-        title: "Profile Report Card",
+        title: "Portfolio",
         href: "/dashboard/report-card",
         icon: IdCard,
         active: (p) => onPath(p, "/dashboard/report-card"),
@@ -325,6 +352,9 @@ export interface CommandItem {
   icon: ElementType;
   feature: string;
   sub?: string;
+  // Overrides the visibility gate for this row (defaults to `feature`) for
+  // entries that point at a sub-item with its own flagKey.
+  flagKey?: string;
 }
 
 export const COMMAND_ITEMS: CommandItem[] = [
@@ -341,11 +371,13 @@ export const COMMAND_ITEMS: CommandItem[] = [
   { title: "Proposals", href: "/dashboard/proposals", icon: Sparkles, feature: "proposals" },
   { title: "Calls", href: "/dashboard/booking", icon: Phone, feature: "booking", sub: "booking.calls" },
   { title: "Services", href: "/dashboard/booking/services", icon: CalendarDays, feature: "booking", sub: "booking.services" },
+  { title: "Sketch Board", href: "/dashboard/planner", icon: PenLine, feature: "planner", sub: "planner.sketch" },
+  { title: "Task Boards", href: "/dashboard/planner/tasks", icon: Kanban, feature: "planner", sub: "planner.tasks", flagKey: "task_management" },
   { title: "Reports", href: "/dashboard/reports", icon: TrendingUp, feature: "insights", sub: "insights.reports" },
   { title: "Testimonials", href: "/dashboard/testimonials", icon: Star, feature: "insights", sub: "insights.testimonials" },
   { title: "Shared Links", href: "/dashboard/links", icon: Link2, feature: "insights", sub: "insights.links" },
   { title: "Calendar", href: "/dashboard/calendar", icon: Calendar, feature: "calendar" },
-  { title: "Profile", href: "/dashboard/report-card", icon: IdCard, feature: "profile", sub: "profile.report-card" },
+  { title: "Portfolio", href: "/dashboard/report-card", icon: IdCard, feature: "profile", sub: "profile.report-card" },
   { title: "Billing", href: "/dashboard/billing", icon: CreditCard, feature: "billing" },
   { title: "Settings", href: "/dashboard/settings", icon: Settings, feature: "settings" },
 ];
@@ -359,4 +391,16 @@ export function featureForPath(pathname: string | null | undefined): FeatureDef 
     if (feature.routes.some((prefix) => onPath(pathname, prefix))) return feature;
   }
   return null;
+}
+
+// Effective visibility flag for a dashboard path (route-guard lookup): usually
+// the owning feature's key, but a sub-item carrying flagKey (Planner → Task
+// Management) gates its route prefix independently, so a hidden Task
+// Management 404s on direct URLs while the rest of Planner stays reachable.
+export function flagKeyForPath(pathname: string | null | undefined): string | null {
+  if (!pathname) return null;
+  const feature = featureForPath(pathname);
+  if (!feature) return null;
+  const sub = feature.subItems?.find((s) => s.flagKey && s.active(pathname, ""));
+  return sub?.flagKey ?? feature.key;
 }

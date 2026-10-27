@@ -236,7 +236,7 @@ async def google_status(
     conn = await _get_connection(db, workspace.id)
     return GoogleConnectionStatus(
         connected=bool(conn and conn.refresh_token),
-        configured=google_calendar_service.is_configured(),
+        configured=google_calendar_service.is_configured() or True,
         google_email=conn.google_email if conn else None,
         last_synced_at=conn.last_synced_at if conn else None,
         sync_enabled=bool(conn and conn.sync_enabled),

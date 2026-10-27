@@ -83,8 +83,8 @@ class StorageService:
         }
 
     def generate_presigned_download_url(
-        self, 
-        file_key: str, 
+        self,
+        file_key: str,
         expires_in: int = 3600
     ) -> Optional[str]:
         """
@@ -93,6 +93,25 @@ class StorageService:
         if self.cloudinary_enabled:
             clean_key = file_key.lstrip("/")
             return f"https://res.cloudinary.com/{self.cloud_name}/image/upload/{clean_key}"
+
+        return f"/api/v1/mock-files/{file_key}"
+
+    def build_delivery_url(
+        self,
+        file_key: str,
+        transformation: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Builds the public CDN delivery URL for a stored asset, optionally with
+        a Cloudinary transformation segment (e.g. "f_auto,q_auto,w_400")
+        inserted between upload/ and the key. Same URL shape as
+        generate_presigned_download_url, plus size/format negotiation so
+        image-heavy surfaces (kanban attachments) don't ship originals.
+        """
+        if self.cloudinary_enabled:
+            clean_key = file_key.lstrip("/")
+            segment = f"{transformation.strip('/')}/" if transformation else ""
+            return f"https://res.cloudinary.com/{self.cloud_name}/image/upload/{segment}{clean_key}"
 
         return f"/api/v1/mock-files/{file_key}"
 

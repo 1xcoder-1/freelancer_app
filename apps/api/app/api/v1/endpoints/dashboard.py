@@ -1,7 +1,7 @@
 import asyncio
 from fastapi import APIRouter, Depends
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload
@@ -13,6 +13,7 @@ from app.api.v1.endpoints.projects import calculate_progress
 from app.models.project import Project, Task
 from app.models.client import Client
 from app.models.finance import Invoice, TimeEntry, Expense, TimerSession
+from app.models.task_management import TaskBoard, TaskCard, TaskList
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -85,19 +86,20 @@ async def get_dashboard_overview(
     Returns LIVE categorized dashboard overview computed directly from Neon PostgreSQL database.
     Zero hardcoded mock arrays.
 
-    Performance: the three independent sections (projects, invoices, time entries)
-    run concurrently, each in its own session — a single AsyncSession cannot
-    execute queries in parallel. With remote Neon latency this turns ~8 serial
-    round trips into two parallel chains of ~2-3.
+    Performance: the four independent sections (projects, invoices, time entries,
+    today's task cards) run concurrently, each in its own session — a single
+    AsyncSession cannot execute queries in parallel. With remote Neon latency
+    this turns ~10 serial round trips into four parallel chains of ~2-3.
     """
     _, workspace = await get_or_create_user_workspace(db, user)
     workspace_id = workspace.id
 
-    recent_projects, (recent_invoices, total_paid_revenue), (recent_time_entries, total_duration_sec), active_focus_timer = await asyncio.gather(
+    recent_projects, (recent_invoices, total_paid_revenue), (recent_time_entries, total_duration_sec), active_focus_timer, today_tasks = await asyncio.gather(
         _overview_projects(workspace_id),
         _overview_invoices(workspace_id),
         _overview_time_entries(workspace_id),
         _overview_active_timer(workspace_id),
+        _overview_today_tasks(workspace_id),
     )
 
     billable_hours = round(total_duration_sec / 3600.0, 1)
@@ -113,6 +115,7 @@ async def get_dashboard_overview(
         "recent_invoices": recent_invoices,
         "recent_time_entries": recent_time_entries,
         "active_focus_timer": active_focus_timer,
+        "today_tasks": today_tasks,
     }
 
 
@@ -263,3 +266,50 @@ async def _overview_time_entries(workspace_id: str):
                 "date": t.created_at.strftime("%Y-%m-%d") if t.created_at else ""
             })
         return recent_time_entries, total_duration_sec
+
+
+async def _overview_today_tasks(workspace_id: str):
+    """Task Management cards due today or overdue (own session) for the Today tab.
+
+    One joined query — cards ⋈ their list ⋈ their board, all guarded on the
+    workspace — over uncompleted cards with a due date at or before today.
+    Oldest due date first, then priority weight (urgent → low, unprioritised
+    last), capped at 10 rows so the tab stays a glanceable snapshot."""
+    today = date.today()
+    priority_weight = case(
+        (TaskCard.priority == "urgent", 0),
+        (TaskCard.priority == "high", 1),
+        (TaskCard.priority == "medium", 2),
+        (TaskCard.priority == "low", 3),
+        else_=4,
+    )
+    async with AsyncSessionLocal() as s:
+        rows = await s.execute(
+            select(TaskCard, TaskList.name, TaskBoard.name)
+            .join(TaskList, TaskCard.list_id == TaskList.id)
+            .join(TaskBoard, TaskCard.board_id == TaskBoard.id)
+            .where(
+                TaskCard.workspace_id == workspace_id,
+                TaskList.workspace_id == workspace_id,
+                TaskBoard.workspace_id == workspace_id,
+                TaskCard.completed.is_(False),
+                TaskCard.due_date.isnot(None),
+                TaskCard.due_date <= today,
+            )
+            .order_by(TaskCard.due_date.asc(), priority_weight.asc(), TaskCard.created_at.asc())
+            .limit(10)
+        )
+        today_tasks = []
+        for card, list_name, board_name in rows.all():
+            today_tasks.append({
+                "id": card.id,
+                "title": card.title,
+                "completed": bool(card.completed),
+                "priority": card.priority,
+                "due_date": card.due_date.strftime("%Y-%m-%d") if card.due_date else "",
+                "is_overdue": bool(card.due_date and card.due_date < today),
+                "board_id": card.board_id,
+                "board_name": board_name or "",
+                "list_name": list_name or "",
+            })
+        return today_tasks

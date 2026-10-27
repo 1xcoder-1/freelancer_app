@@ -1,15 +1,14 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useAuth } from "@clerk/nextjs";
 import {
   Pencil,
   Share2,
   Link2,
   Save,
   X,
-  Layers,
   Sparkles,
   Trash2,
   Check,
@@ -20,17 +19,20 @@ import {
   CardTab,
   emptyContent,
   fontCssVar,
+  isGeneratedUserId,
   isEmptyContent,
-  starterTemplate,
   blankInspirationItem,
   blankProjectItem,
+  certificatesFromProfile,
+  experienceFromProfile,
+  projectsFromProfile,
   resolveProfileTemplate,
   type HomeSection,
 } from "./constants";
 import { SettingsPopover } from "./SettingsPopover";
 import { ShareDialog } from "./ShareDialog";
-import { StatsPanel } from "./StatsPanel";
 import {
+  ChromeProvider,
   CompanyGrid,
   DottedDivider,
   FooterSection,
@@ -39,10 +41,12 @@ import {
   ProjectGrid,
   QuoteSection,
   SectionShell,
+  WorkSection,
   WritingList,
   blankSectionItem,
   blankWritingItem,
 } from "./Sections";
+import { getProfile } from "@/lib/api";
 import { logHandledError } from "@/lib/log-error";
 
 interface ReportCardProps {
@@ -69,6 +73,7 @@ export function ReportCard({
   onSaveSettings,
 }: ReportCardProps) {
   const { user: clerkUser } = useUser();
+  const { getToken } = useAuth();
   const isOwner = variant === "owner";
 
   const [editing, setEditing] = useState(false);
@@ -78,6 +83,9 @@ export function ReportCard({
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [shareOpen, setShareOpen] = useState(false);
+  // Cheap dirty tracking: a keystroke flips a boolean instead of re-serialising
+  // the whole content tree to JSON on every render.
+  const [dirty, setDirty] = useState(false);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const draftRef = useRef<CardContent>(draft);
 
@@ -90,14 +98,9 @@ export function ReportCard({
     if (!editing) {
       setDraft(data.content || emptyContent());
       draftRef.current = data.content || emptyContent();
+      setDirty(false);
     }
   }, [data.content, editing]);
-
-  const dirty = useMemo(
-    () =>
-      JSON.stringify(draft) !== JSON.stringify(data.content || emptyContent()),
-    [draft, data.content],
-  );
 
   // Styling travels with the share link: "include styling" off => plain theme
   const styled = isOwner || data.share?.include_styling !== false;
@@ -109,14 +112,22 @@ export function ReportCard({
     ? resolveProfileTemplate(data.settings?.theme)
     : resolveProfileTemplate("default");
 
-  const displayName =
-    clerkUser?.fullName || data.full_name || data.username || "Freelancer";
+  const rawCandidate =
+    clerkUser?.fullName ||
+    clerkUser?.firstName ||
+    (!isGeneratedUserId(data.full_name) ? data.full_name : null) ||
+    (!isGeneratedUserId(data.username) ? data.username : null) ||
+    "Freelancer";
+  const displayName = isGeneratedUserId(rawCandidate) ? "Freelancer" : rawCandidate;
   const avatarUrl = isOwner
     ? clerkUser?.imageUrl || data.avatar_url || ""
     : data.avatar_url || "";
 
   const tabHref = (tab: CardTab) => {
-    const path = tab === "home" ? basePath : `${basePath}/${tab}`;
+    // The dashboard root route is the portfolio overview/landing, so the owner
+    // Home page lives at /dashboard/report-card/home; the public /u/<name> view
+    // keeps Home on the bare username route.
+    const path = tab === "home" ? (isOwner ? `${basePath}/home` : basePath) : `${basePath}/${tab}`;
     if (!isOwner && shareToken)
       return `${path}?token=${encodeURIComponent(shareToken)}`;
     return path;
@@ -126,6 +137,7 @@ export function ReportCard({
     key: K,
     value: CardContent[K],
   ) => {
+    setDirty(true);
     setDraft((prev) => {
       const next = { ...prev, [key]: value };
       draftRef.current = next;
@@ -140,6 +152,7 @@ export function ReportCard({
       try {
         await onSaveContent(contentToSave);
         setSaveStatus("saved");
+        setDirty(false);
         if (exitEditMode) {
           setEditing(false);
         }
@@ -181,39 +194,58 @@ export function ReportCard({
     };
   }, [draft, editing, dirty, saveToServer]);
 
-  // Global Ctrl + S / Cmd + S / Ctrl + Alt keyboard shortcut (VS Code style instant save)
+  // One-time autofill: sections left empty in the portfolio are seeded from the
+  // Settings page (Experience / Certifications / Projects tabs). Imported rows
+  // become ordinary editable items; anything already written is never touched.
+  const seededRef = useRef(false);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-      const isAlt = e.altKey;
-      const isKeyS = e.key.toLowerCase() === "s" || e.code === "KeyS";
+    if (!isOwner || seededRef.current || editing) return;
+    const base = data.content;
+    if (!base) return;
+    const needExperience = (base.experience?.length ?? 0) === 0;
+    const needCertificates = (base.certificates?.length ?? 0) === 0;
+    const needProjects = (base.projects?.length ?? 0) === 0;
+    if (!needExperience && !needCertificates && !needProjects) return;
+    seededRef.current = true;
+    let cancelled = false;
 
-      // Triggers on Ctrl+S, Cmd+S, Ctrl+Alt, Ctrl+Alt+S
-      if (
-        (isCtrlOrCmd && isKeyS) ||
-        (isCtrlOrCmd && isAlt) ||
-        (isAlt && isKeyS)
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (isOwner) {
-          // Cancel any pending debounce timer since we're saving immediately
-          if (autoSaveTimeoutRef.current) {
-            clearTimeout(autoSaveTimeoutRef.current);
-            autoSaveTimeoutRef.current = null;
-          }
-          saveToServer(draftRef.current, false);
+    (async () => {
+      try {
+        const token = (await getToken()) || undefined;
+        if (!token) return;
+        const profile = await getProfile(token);
+        if (cancelled || editing) return;
+        const next: CardContent = { ...base };
+        let imported = 0;
+        if (needExperience) {
+          next.experience = experienceFromProfile(profile);
+          imported += next.experience.length;
         }
+        if (needCertificates) {
+          next.certificates = certificatesFromProfile(profile);
+          imported += next.certificates.length;
+        }
+        if (needProjects) {
+          next.projects = projectsFromProfile(profile);
+          imported += next.projects.length;
+        }
+        if (imported > 0) {
+          saveToServer(next, false);
+        }
+      } catch (err) {
+        logHandledError("Profile autofill skipped:", err);
       }
-    };
+    })();
 
-    window.addEventListener("keydown", handleKeyDown, { capture: true, passive: false });
-    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [isOwner, saveToServer]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, editing, data.content, saveToServer, getToken]);
 
   const handleDiscard = () => {
     setDraft(data.content || emptyContent());
     draftRef.current = data.content || emptyContent();
+    setDirty(false);
     setEditing(false);
   };
 
@@ -221,15 +253,8 @@ export function ReportCard({
     const initial = data.content || emptyContent();
     setDraft(initial);
     draftRef.current = initial;
+    setDirty(false);
     setEditing(true);
-  };
-
-  const installTemplate = async () => {
-    const template = starterTemplate();
-    setDraft(template);
-    draftRef.current = template;
-    setEditing(true);
-    await onSaveContent(template);
   };
 
   const clearAll = async () => {
@@ -395,22 +420,12 @@ export function ReportCard({
 
   const inspirationSection = (
     <InspirationList
-      items={
-        content.inspirations && content.inspirations.length > 0
-          ? content.inspirations
-          : starterTemplate().inspirations || []
-      }
-      introParagraphs={
-        content.inspiration_intro && content.inspiration_intro.length > 0
-          ? content.inspiration_intro
-          : starterTemplate().inspiration_intro
-      }
+      items={content.inspirations || []}
+      introParagraphs={content.inspiration_intro}
       editing={editing}
       onAdd={() =>
         setSection("inspirations", [
-          ...(content.inspirations && content.inspirations.length > 0
-            ? content.inspirations
-            : starterTemplate().inspirations || []),
+          ...(content.inspirations || []),
           blankInspirationItem(),
         ])
       }
@@ -421,22 +436,12 @@ export function ReportCard({
 
   const projectSection = (
     <ProjectGrid
-      items={
-        content.projects && content.projects.length > 0
-          ? content.projects
-          : starterTemplate().projects || []
-      }
-      introParagraphs={
-        content.projects_intro && content.projects_intro.length > 0
-          ? content.projects_intro
-          : starterTemplate().projects_intro
-      }
+      items={content.projects || []}
+      introParagraphs={content.projects_intro}
       editing={editing}
       onAdd={() =>
         setSection("projects", [
-          ...(content.projects && content.projects.length > 0
-            ? content.projects
-            : starterTemplate().projects || []),
+          ...(content.projects || []),
           blankProjectItem(),
         ])
       }
@@ -445,23 +450,21 @@ export function ReportCard({
     />
   );
 
-  const statsSection = (
-    <StatsPanel
-      accent={accent}
-      currentStreak={data.current_streak || 0}
-      maxStreak={data.max_streak || 0}
-      activeDaysCount={data.active_days_count || 0}
-      viewsCount={data.views_count || 0}
-      deliveryStats={data.delivery_stats}
-      heatmap={data.heatmap || []}
-    />
-  );
-
   const quoteSection = (
     <QuoteSection
       quote={content.quote}
       editing={editing}
       onChange={(next) => setSection("quote", next)}
+    />
+  );
+
+  const workTabPage = (
+    <WorkSection
+      experience={content.experience || []}
+      certificates={content.certificates || []}
+      editing={editing}
+      onExperienceChange={(next) => setSection("experience", next)}
+      onCertificatesChange={(next) => setSection("certificates", next)}
     />
   );
 
@@ -479,7 +482,6 @@ export function ReportCard({
     things: thingsSection,
     companies: companiesSection,
     work: workSection,
-    stats: statsSection,
     quote: quoteSection,
   };
 
@@ -488,6 +490,7 @@ export function ReportCard({
       className="min-h-screen bg-bg text-fg pb-10 selection:bg-accent/25 transition-colors duration-300"
       style={{ fontFamily, ...(styled ? template.vars as React.CSSProperties : {}) }}
     >
+      <ChromeProvider value={template.chrome}>
       <div className="max-w-3xl mx-auto px-6 lg:px-0 pt-10">
         {/* Header: Clerk avatar + real name (live) + owner controls */}
         <header className="flex items-start justify-between gap-4">
@@ -504,7 +507,14 @@ export function ReportCard({
                 {(displayName || "?").charAt(0)}
               </div>
             )}
-            <h1 className="text-[22px] sm:text-[24px] leading-tight font-medium text-fg break-words flex items-center flex-wrap gap-x-2">
+            <h1
+              className="text-[22px] sm:text-[24px] leading-tight font-medium text-fg break-words flex items-center flex-wrap gap-x-2"
+              style={
+                template.chrome === "folio"
+                  ? { fontFamily: "Georgia, 'Times New Roman', serif" }
+                  : undefined
+              }
+            >
               <span className="font-semibold text-fg">{displayName}</span>
               {content.name_aka ? (
                 <span className="font-normal text-muted/70">
@@ -525,7 +535,7 @@ export function ReportCard({
                     type="button"
                     onClick={handleSaveClick}
                     disabled={saving}
-                    title="Save changes to database (Ctrl+S or Ctrl+Alt)"
+                    title="Save changes"
                     className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hi transition-all cursor-pointer shadow-xs disabled:opacity-70"
                   >
                     {saveStatus === "saved" ? (
@@ -533,15 +543,11 @@ export function ReportCard({
                     ) : (
                       <Save className="w-4 h-4" />
                     )}
-                    {saveStatus === "saving" ? (
-                      "Saving..."
-                    ) : saveStatus === "saved" ? (
-                      "Saved"
-                    ) : (
-                      <>
-                        Save <span className="text-[10px] opacity-75 font-mono">Ctrl+Alt</span>
-                      </>
-                    )}
+                    {saveStatus === "saving"
+                      ? "Saving..."
+                      : saveStatus === "saved"
+                        ? "Saved"
+                        : "Save"}
                   </button>
                   <button
                     type="button"
@@ -632,18 +638,10 @@ export function ReportCard({
               <button
                 type="button"
                 onClick={startEditing}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-surface border border-line hover:border-line-strong text-fg text-xs font-semibold transition-all"
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg text-xs font-semibold transition-all"
               >
                 <Pencil className="w-4 h-4" />
                 Start writing
-              </button>
-              <button
-                type="button"
-                onClick={installTemplate}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-accent hover:bg-accent-hi text-accent-fg text-xs font-semibold transition-all"
-              >
-                <Layers className="w-4 h-4" />
-                Install template
               </button>
             </div>
           </div>
@@ -665,6 +663,8 @@ export function ReportCard({
 
         {activeTab === "projects" && projectSection}
 
+        {activeTab === "work" && workTabPage}
+
         {activeTab === "sponsor" && (
           <>
             {workSection}
@@ -683,10 +683,10 @@ export function ReportCard({
           onOpenChange={setShareOpen}
           share={data.share}
           username={data.username}
-          fullName={displayName}
           onShareChanged={onRefresh}
         />
       )}
+      </ChromeProvider>
     </div>
   );
 }

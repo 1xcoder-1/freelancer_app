@@ -70,6 +70,7 @@ async def lifespan(app: FastAPI):
     if is_dev_env:
         from app.core.database import AsyncSessionLocal
         from app.inngest_functions.invoice_jobs import mark_overdue_invoices
+        from app.inngest_functions.task_jobs import scan_task_due_alerts
 
         async def _reconcile_overdue():
             try:
@@ -81,6 +82,25 @@ async def lifespan(app: FastAPI):
                 print(f"Overdue reconcile notice (cron will retry within the hour): {e}")
 
         await _reconcile_overdue()
+
+        # Same rationale for Task Management due-date alerts: the hourly cron
+        # may not run on a dev machine that restarts, so reconcile the inbox
+        # at boot. Idempotent — every task alert carries a notifications
+        # dedupe_key, so re-running never double-alerts; the sweep also clears
+        # alerts whose cards were completed/resolved while the app was down.
+        async def _reconcile_task_alerts():
+            try:
+                async with AsyncSessionLocal() as session:
+                    result = await scan_task_due_alerts(session)
+                if result["created"] or result["resolved"]:
+                    print(
+                        f"Startup reconcile: {result['created']} task alert(s) created, "
+                        f"{result['resolved']} resolved"
+                    )
+            except Exception as e:
+                print(f"Task alert reconcile notice (cron will retry within the hour): {e}")
+
+        await _reconcile_task_alerts()
 
     yield
 

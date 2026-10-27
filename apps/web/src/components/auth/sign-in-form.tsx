@@ -227,9 +227,6 @@ export function SignInForm() {
             Forgot your password?
           </button>
         </p>
-        {/* Clerk Smart CAPTCHA mount point — without it the widget logs an
-            error and falls back to invisible-only bot blocking. */}
-        <div id="clerk-captcha" data-cl-theme="auto" />
         <PrimaryButton loading={busy}>Login</PrimaryButton>
       </form>
     );

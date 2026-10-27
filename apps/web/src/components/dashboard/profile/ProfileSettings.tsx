@@ -270,8 +270,8 @@ export function ProfileSettings() {
         </div>
 
         {/* Content Card skeleton */}
-        <div className="rounded-2xl border border-line/60 bg-surface/25 p-5 sm:p-7 pb-6 sm:pb-7 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+        <div className="rounded-2xl border border-dashed border-neutral-800/80 bg-[#121214]/60 p-6 sm:p-8 pb-7 sm:pb-8 space-y-7">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 sm:gap-x-12 gap-y-7 sm:gap-y-8">
             {/* Full Name */}
             <div className="space-y-2">
               <Skeleton className="h-3.5 w-20 rounded-md" />
@@ -290,9 +290,9 @@ export function ProfileSettings() {
               <Skeleton className="h-16 w-full rounded-lg" />
             </div>
 
-            {/* Company / Institution */}
+            {/* Company */}
             <div className="space-y-2">
-              <Skeleton className="h-3.5 w-36 rounded-md" />
+              <Skeleton className="h-3.5 w-24 rounded-md" />
               <Skeleton className="h-9 w-full rounded-md" />
             </div>
 
@@ -308,16 +308,32 @@ export function ProfileSettings() {
               <Skeleton className="h-9 w-full rounded-md" />
             </div>
 
+            {/* Institution */}
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-24 rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+
             {/* App Currency */}
             <div className="space-y-2">
               <Skeleton className="h-3.5 w-24 rounded-md" />
               <Skeleton className="h-9 w-full rounded-md" />
             </div>
 
+            <div className="hidden sm:block" />
+
             {/* Social & Professional Links Section */}
-            <div className="sm:col-span-2 pt-2 space-y-4">
+            <div className="sm:col-span-2 pt-2 space-y-6">
               <Skeleton className="h-4 w-44 rounded-md" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 sm:gap-x-12 gap-y-7 sm:gap-y-8">
+                <div className="space-y-2">
+                  <Skeleton className="h-3.5 w-16 rounded-md" />
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-3.5 w-16 rounded-md" />
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </div>
                 <div className="space-y-2">
                   <Skeleton className="h-3.5 w-16 rounded-md" />
                   <Skeleton className="h-9 w-full rounded-md" />
@@ -331,11 +347,11 @@ export function ProfileSettings() {
           </div>
 
           {/* Footer action buttons skeleton */}
-          <div className="flex items-center justify-between gap-3 mt-6 pt-5 border-t border-line/40">
-            <Skeleton className="h-8.5 w-20 rounded-lg" />
-            <div className="flex items-center gap-2.5">
-              <Skeleton className="h-8.5 w-28 rounded-lg" />
-              <Skeleton className="h-8.5 w-16 rounded-lg" />
+          <div className="flex items-center justify-between gap-3 mt-8">
+            <Skeleton className="h-9 w-24 rounded-full" />
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-20 rounded-full" />
+              <Skeleton className="h-9 w-20 rounded-full" />
             </div>
           </div>
         </div>
@@ -358,21 +374,21 @@ export function ProfileSettings() {
       <ProfileHeader username={profile.personal.username || undefined} />
 
       {/* Tab row — underline style, accent slide indicator */}
-      <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none border-b border-line -mx-1 px-1">
+      <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto scrollbar-none border-b border-neutral-800/80 -mx-1 px-1">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            className={`relative px-3 sm:px-4 pb-3 pt-2 text-sm whitespace-nowrap transition-colors ${
-              activeTab === t.key ? "text-accent font-semibold" : "text-muted hover:text-fg"
+            className={`relative px-2 sm:px-3 pb-3 pt-2 text-sm whitespace-nowrap transition-colors ${
+              activeTab === t.key ? "text-amber-500 font-semibold" : "text-neutral-400 hover:text-neutral-200 font-normal"
             }`}
           >
             {t.label}
             {activeTab === t.key && (
               <motion.span
                 layoutId="profile-tab-underline"
-                className="absolute left-2 right-2 -bottom-px h-0.5 rounded-full bg-accent"
+                className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full bg-amber-500"
                 transition={{ duration: 0.25, ease: "easeOut" }}
               />
             )}
@@ -380,7 +396,13 @@ export function ProfileSettings() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-line/60 bg-surface/25 p-5 sm:p-7 pb-6 sm:pb-7">
+      <div
+        className={
+          ["experience", "projects", "certifications", "education"].includes(activeTab)
+            ? "space-y-6"
+            : "rounded-2xl border border-dashed border-neutral-800/80 bg-[#121214]/60 backdrop-blur-sm p-6 sm:p-8 pb-7 sm:pb-8 shadow-xl shadow-black/20"
+        }
+      >
         {activeTab === "personal" && (
           <PersonalTab
             fullName={clerkName}
@@ -442,65 +464,61 @@ export function ProfileSettings() {
         )}
         {activeTab === "workspace" && flagsReady && isOwner && <WorkspaceTab />}
 
-        {/* Reference-style footer navigation */}
+        {/* Reference-style footer navigation — no top line, matching Image 2 pill buttons */}
         {activeTab !== "workspace" && (
-          <div className="flex items-center justify-between gap-3 mt-6 pt-5 border-t border-line/40">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => goTab(-1)}
-              disabled={tabIndex === 0}
-              className="h-8.5 px-3 rounded-lg text-xs font-medium text-muted hover:text-fg hover:bg-surface-elevated disabled:opacity-30 transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-              Previous
-            </Button>
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-between gap-3 mt-8">
+            <div>
+              {tabIndex > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => goTab(-1)}
+                  className="h-9 px-5 rounded-full text-xs sm:text-[13px] font-medium text-neutral-400 hover:text-white bg-[#1c1c1f] hover:bg-[#252529] border border-neutral-800 transition-all cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                  Previous
+                </Button>
+              ) : (
+                <div />
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {tabIndex < tabs.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => goTab(1)}
+                  className="h-9 px-6 rounded-full bg-[#3d2914] hover:bg-[#4d3419] border border-[#5a3818]/40 text-[#f59e0b] hover:text-[#fbbf24] text-xs sm:text-[13px] font-semibold tracking-wide transition-all shadow-sm flex items-center justify-center cursor-pointer"
+                >
+                  Next
+                </button>
+              )}
+
               {/* Show Save actions on form tabs or whenever there are unsaved edits/feedback */}
               {(activeTab === "personal" || activeTab === "professional" || guard.dirty || saving || justSaved) && (
                 saving ? (
-                  <Button
+                  <button
                     type="button"
-                    size="sm"
                     disabled
-                    className="h-8.5 px-3.5 rounded-lg bg-accent/70 text-accent-fg text-xs font-medium shadow-2xs cursor-wait"
+                    className="h-9 px-6 rounded-full bg-[#0d2a1b] border border-[#1b5232]/40 text-[#34d399]/70 text-xs sm:text-[13px] font-semibold tracking-wide shadow-sm cursor-wait flex items-center justify-center gap-1.5"
                   >
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     Saving…
-                  </Button>
+                  </button>
                 ) : justSaved ? (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium animate-in fade-in zoom-in-95 duration-200">
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <div className="inline-flex items-center gap-1.5 h-9 px-5 rounded-full bg-[#0d2a1b] border border-[#1b5232]/50 text-[#34d399] text-xs sm:text-[13px] font-semibold tracking-wide animate-in fade-in zoom-in-95 duration-200">
+                    <Check className="w-3.5 h-3.5 text-[#34d399]" />
                     Saved
                   </div>
-                ) : guard.dirty ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleSaveProfile}
-                    className="h-8.5 px-3.5 rounded-lg bg-accent hover:bg-accent-hi text-accent-fg text-xs font-medium shadow-2xs hover:shadow-xs transition-all animate-in fade-in zoom-in-95 duration-200"
-                  >
-                    <Save className="w-3.5 h-3.5 mr-1.5" />
-                    Save Changes
-                  </Button>
                 ) : (
-                  <div className="inline-flex items-center gap-1.5 px-2 text-xs text-muted font-medium">
-                    <Check className="w-3.5 h-3.5 text-emerald-500/70" />
-                    All changes saved
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveProfile}
+                    className="h-9 px-6 rounded-full bg-[#0f3320] hover:bg-[#15452b] border border-[#1b5232]/40 text-[#22c55e] hover:text-[#4ade80] text-xs sm:text-[13px] font-semibold tracking-wide transition-all shadow-sm flex items-center justify-center cursor-pointer"
+                  >
+                    Submit
+                  </button>
                 )
-              )}
-              {tabIndex < tabs.length - 1 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => goTab(1)}
-                  className="h-8.5 px-3.5 rounded-lg bg-surface-elevated hover:bg-surface-elevated/80 border border-line hover:border-line-strong text-xs font-medium text-fg shadow-2xs transition-all"
-                >
-                  Next
-                  <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                </Button>
               )}
             </div>
           </div>

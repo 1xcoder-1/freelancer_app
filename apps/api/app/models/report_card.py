@@ -31,4 +31,3 @@ class ReportCard(Base, TimestampMixin):
     expiration: Mapped[str] = mapped_column(String(16), default="never", nullable=False)
     expires_at_ms: Mapped[int] = mapped_column(BigInteger, nullable=True)  # Unix ms (needs BIGINT: ms epoch exceeds int4)
     include_styling: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    views_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

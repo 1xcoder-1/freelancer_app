@@ -94,6 +94,7 @@ class LinkPageUpdate(BaseModel):
 
 
 _ITEM_TYPES = ("link", "header", "divider")
+_ITEM_DISPLAYS = ("icon", "card")
 
 
 class LinkItemIn(BaseModel):
@@ -103,6 +104,7 @@ class LinkItemIn(BaseModel):
     icon: Optional[str] = Field(None, max_length=40)
     description: Optional[str] = Field(None, max_length=300)
     image_url: Optional[str] = Field(None, max_length=500)
+    display: Optional[str] = Field(None, max_length=16)
     sort_order: int = 0
     active: bool = True
 
@@ -113,6 +115,16 @@ class LinkItemIn(BaseModel):
         if v not in _ITEM_TYPES:
             raise ValueError("item_type must be 'link', 'header' or 'divider'")
         return v
+
+    @field_validator("display")
+    @classmethod
+    def _check_display(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if v in _ITEM_DISPLAYS:
+            return v
+        return None
 
     @field_validator("label", "url", "image_url")
     @classmethod
@@ -204,6 +216,7 @@ def _item_payload(item: LinkItem) -> Dict[str, Any]:
         "icon": item.icon,
         "description": item.description,
         "image_url": item.image_url,
+        "display": item.display,
         "sort_order": item.sort_order,
         "active": bool(item.active),
         "clicks_count": item.clicks_count or 0,
@@ -503,6 +516,7 @@ async def replace_my_items(
             "icon": item_in.icon or None,
             "description": item_in.description or None,
             "image_url": item_in.image_url or None,
+            "display": item_in.display,
             "sort_order": idx,
             "active": item_in.active,
             "clicks_count": preserved_clicks,

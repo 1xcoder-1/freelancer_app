@@ -53,10 +53,13 @@ class ExperienceItem(BaseModel):
     company: str = Field("", max_length=255)
     employment_type: str = Field("", max_length=64)
     location: str = Field("", max_length=255)
+    location_type: str = Field("ONSITE", max_length=64)
     start_date: str = Field("", max_length=32)
     end_date: str = Field("", max_length=32)  # empty while `current` is set
     current: bool = False
     description: str = Field("", max_length=2000)
+    skills: List[str] = Field(default_factory=list)
+    attachments: List[str] = Field(default_factory=list)
 
 class CertificationItem(BaseModel):
     id: str = ""
@@ -66,24 +69,39 @@ class CertificationItem(BaseModel):
     expiry_date: str = Field("", max_length=32)
     credential_id: str = Field("", max_length=255)
     credential_url: str = Field("", max_length=500)
+    does_not_expire: bool = False
+    attachments: List[str] = Field(default_factory=list)
 
 class EducationItem(BaseModel):
     id: str = ""
     institution: str = Field("", max_length=255)
+    education_level: str = Field("BACHELORS", max_length=64)
     degree: str = Field("", max_length=255)
     field_of_study: str = Field("", max_length=255)
-    start_year: str = Field("", max_length=16)
-    end_year: str = Field("", max_length=16)
+    grading_system: str = Field("CGPA", max_length=64)
     grade: str = Field("", max_length=64)
-    description: str = Field("", max_length=1000)
+    current: bool = False
+    start_year: str = Field("", max_length=32)
+    end_year: str = Field("", max_length=32)
+    start_date: str = Field("", max_length=32)
+    end_date: str = Field("", max_length=32)
+    description: str = Field("", max_length=2000)
+    attachments: List[str] = Field(default_factory=list)
 
 class ProfileProjectItem(BaseModel):
     id: str = ""
     name: str = Field("", max_length=255)
+    project_type: str = Field("PERSONAL", max_length=64)
     description: str = Field("", max_length=2000)
     tech_stack: List[str] = Field(default_factory=list)
+    github_url: str = Field("", max_length=500)
+    live_url: str = Field("", max_length=500)
     link: str = Field("", max_length=500)
-    year: str = Field("", max_length=16)
+    current: bool = False
+    start_date: str = Field("", max_length=32)
+    end_date: str = Field("", max_length=32)
+    year: str = Field("", max_length=32)
+    attachments: List[str] = Field(default_factory=list)
 
 class ProfileContent(BaseModel):
     personal: PersonalInfo = PersonalInfo()

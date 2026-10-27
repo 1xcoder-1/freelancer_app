@@ -16,6 +16,7 @@ from app.inngest_functions.lead_jobs import lead_proposal_expiry_scan
 from app.inngest_functions.contract_jobs import contract_reminder_3d, contract_expiry_scan
 from app.inngest_functions.proposal_jobs import proposal_reminder_3d
 from app.inngest_functions.project_jobs import project_status_scan, project_task_day_scan
+from app.inngest_functions.task_jobs import task_due_alert_scan
 
 functions = [
     invoice_overdue_scan,
@@ -31,6 +32,7 @@ functions = [
     proposal_reminder_3d,
     project_status_scan,
     project_task_day_scan,
+    task_due_alert_scan,
 ]
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -33,6 +33,7 @@ import { Card } from "@/components/ui/card";
 import { SubTabs } from "@/components/dashboard/SubTabs";
 import {
   getProject,
+  getProjectTaskCards,
   updateProject,
   deleteProject,
   rotateProjectShareToken,
@@ -62,7 +63,9 @@ import {
   type TimeEntry,
   type Invoice,
   type ProjectFile,
+  type ProjectTaskCard,
 } from "@/lib/api";
+import { PRIORITY_META, dueStatus, formatDueDate } from "@/components/dashboard/tasks/task-ui";
 import { invalidateCache } from "@/hooks/use-api-data";
 import { useWorkspaceCurrency } from "@/hooks/use-workspace-currency";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
@@ -91,8 +94,18 @@ export default function ProjectDetailPage() {
 
   // Sub-tab inside project detail
   const [activeTab, setActiveTab] = useState<
-    "milestones" | "tasks" | "time" | "today" | "changes" | "contracts" | "documents" | "vault" | "notes"
+    "milestones" | "tasks" | "planner" | "time" | "today" | "changes" | "contracts" | "documents" | "vault" | "notes"
   >("milestones");
+
+  // Planner tab — workspace task cards linked to this project. Lazy-loaded:
+  // the first fetch only happens when the Planner tab is activated (not on
+  // page mount); later activations render the cached list instantly and
+  // revalidate in the background (stale-while-revalidate).
+  const [plannerCards, setPlannerCards] = useState<ProjectTaskCard[]>([]);
+  const [plannerLoading, setPlannerLoading] = useState(false);
+  const [plannerError, setPlannerError] = useState(false);
+  const plannerLoadedRef = useRef(false);
+  const plannerFetchSeq = useRef(0);
 
   // Inline forms
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -201,6 +214,39 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     loadData();
   }, [projectId]);
+
+  // Planner cards — fetched only when the Planner tab becomes active. First
+  // activation shows the skeleton; every later activation keeps the cached
+  // cards on screen and refetches in the background. The sequence ref makes a
+  // slower earlier response never overwrite a newer one.
+  useEffect(() => {
+    if (activeTab !== "planner" || !projectId) return;
+    const seq = ++plannerFetchSeq.current;
+    if (!plannerLoadedRef.current) setPlannerLoading(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = (await getToken()) || undefined;
+        // Clear a previous activation's error right before the fresh fetch
+        // (kept after the await so the effect body never sets state synchronously).
+        setPlannerError(false);
+        const cards = await getProjectTaskCards(projectId, token);
+        if (cancelled || plannerFetchSeq.current !== seq) return;
+        setPlannerCards(cards || []);
+        plannerLoadedRef.current = true;
+      } catch (err) {
+        if (cancelled || plannerFetchSeq.current !== seq) return;
+        logHandledError("Error loading planner cards:", err);
+        toast.error("Could not load planner cards");
+        setPlannerError(true);
+      } finally {
+        if (!cancelled && plannerFetchSeq.current === seq) setPlannerLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, projectId, getToken]);
 
   const afterMutation = () => {
     invalidateCache("projects:data");
@@ -838,6 +884,7 @@ export default function ProjectDetailPage() {
             tabs={[
               { value: "milestones", label: "Milestones", count: milestonesList.length },
               { value: "tasks", label: "Tasks", count: tasksList.length },
+              { value: "planner", label: "Planner", count: plannerCards.length },
               { value: "today", label: "Today", count: overdueTasks.length + dueTodayTasks.length },
               { value: "time", label: "Time Log", count: timeEntries.length },
               { value: "changes", label: "Changes", count: changeRequests.length },
@@ -1102,6 +1149,135 @@ export default function ProjectDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </Card>
+          )}
+
+          {/* TAB: PLANNER — workspace task cards linked to this project (lazy-loaded) */}
+          {activeTab === "planner" && (
+            <Card className="p-5 sm:p-6 rounded-2xl border-line bg-card space-y-4">
+              <div className="flex items-center justify-between gap-3 pb-2 border-b border-line">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-medium text-fg">
+                    Planner Cards ({plannerCards.length})
+                  </h2>
+                  <p className="text-xs text-muted">
+                    Link cards to this project from Planner → Task Management → open a card → Project
+                  </p>
+                </div>
+                <Link href="/dashboard/planner/tasks">
+                  <Button variant="outline" size="sm" className="text-xs rounded-xl h-8 px-3 border-line shrink-0">
+                    Open Task Management
+                  </Button>
+                </Link>
+              </div>
+
+              {plannerLoading ? (
+                /* First-load skeleton — pulse placeholders matching the app's loading idiom */
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" aria-busy="true">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-line bg-surface/30 space-y-2.5 animate-pulse">
+                      <div className="h-3.5 rounded bg-surface/80" style={{ width: `${64 + (i % 3) * 12}%` }} />
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-3.5 w-14 rounded bg-surface/70" />
+                        <div className="h-3.5 w-16 rounded bg-surface/50" />
+                      </div>
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <div className="h-4 w-20 rounded bg-surface/60" />
+                        <div className="h-4 w-16 rounded bg-surface/60" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : plannerCards.length === 0 ? (
+                <div className="py-4 text-center space-y-1">
+                  <p className="text-xs text-muted italic">
+                    No planner cards linked to this project yet. Link cards to this project from Planner → Task Management → open a card → Project.
+                  </p>
+                  {plannerError && (
+                    <p className="text-[11px] text-warn">Couldn&apos;t load planner cards just now — try reopening the tab.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {plannerCards.map((card) => {
+                    const stat = dueStatus(card.due_date, today || null, card.completed);
+                    const prioMeta = card.priority ? PRIORITY_META[card.priority] : null;
+                    return (
+                      <button
+                        key={card.id}
+                        type="button"
+                        onClick={() => router.push(`/dashboard/planner/tasks/${card.board_id}`)}
+                        title={`Open "${card.board_name}" board in Task Management`}
+                        className={`text-left p-3.5 rounded-xl border transition-all duration-150 cursor-pointer group space-y-2.5 ${
+                          card.completed
+                            ? "bg-surface/20 border-line/70 opacity-75 hover:opacity-100 hover:border-line-strong"
+                            : "bg-surface/30 border-line hover:border-accent/40 hover:bg-surface/60 hover:-translate-y-px"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {/* Completed checkbox visual (matches the board's card checkbox) */}
+                          <span
+                            aria-hidden
+                            className={`mt-0.5 w-[18px] h-[18px] rounded-md border flex items-center justify-center shrink-0 ${
+                              card.completed ? "bg-accent border-accent text-accent-fg" : "border-line-strong text-transparent"
+                            }`}
+                          >
+                            <Check className="w-3 h-3" strokeWidth={3} />
+                          </span>
+                          <span
+                            className={`flex-1 min-w-0 text-[13px] font-medium leading-snug break-words ${
+                              card.completed ? "line-through text-muted" : "text-fg"
+                            }`}
+                          >
+                            {card.title}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          {prioMeta && (
+                            <span className="inline-flex items-center gap-1 shrink-0" title={`Priority: ${prioMeta.label}`}>
+                              <span className={`w-2 h-2 rounded-full ${prioMeta.dot}`} />
+                              <span className={`text-[10px] font-medium ${prioMeta.text}`}>{prioMeta.label}</span>
+                            </span>
+                          )}
+                          {card.due_date && (
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 border ${
+                                stat === "overdue"
+                                  ? "bg-danger/10 text-danger border-danger/30"
+                                  : stat === "today"
+                                  ? "bg-warn/10 text-warn border-warn/30"
+                                  : "bg-surface text-muted border-line/60"
+                              }`}
+                            >
+                              <Clock className="w-2.5 h-2.5" />
+                              {formatDueDate(card.due_date)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Board / list breadcrumb — where the card lives in Task Management */}
+                        <div className="flex items-center gap-1.5 pt-0.5 border-t border-line/60 min-w-0">
+                          <span className="inline-flex min-w-0 max-w-[55%] text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line text-muted truncate" title={card.board_name}>
+                            {card.board_name}
+                          </span>
+                          <span className="text-faint text-[10px] shrink-0">/</span>
+                          <span className="inline-flex min-w-0 flex-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line text-muted truncate" title={card.list_name}>
+                            {card.list_name}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Background revalidation failed while cached cards are shown — keep them, note the failure */}
+              {plannerError && !plannerLoading && plannerCards.length > 0 && (
+                <p className="text-[11px] text-warn text-center">
+                  Couldn&apos;t refresh just now — showing the last loaded cards.
+                </p>
               )}
             </Card>
           )}

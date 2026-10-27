@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Settings2 } from "@/components/animated-icons";
-import { ACCENT_OPTIONS, FONT_OPTIONS, PROFILE_TEMPLATES } from "./constants";
+import { ACCENT_OPTIONS, FONT_OPTIONS, PROFILE_TEMPLATES, resolveProfileTemplate } from "./constants";
 import type { CardSettings } from "@/lib/api";
 
 interface SettingsPopoverProps {
@@ -61,7 +61,7 @@ export function SettingsPopover({
           <div className="text-[10px] uppercase tracking-wider text-white/45 px-1 mb-2">Template</div>
           <div className="grid grid-cols-2 gap-1.5">
             {PROFILE_TEMPLATES.map((tpl) => {
-              const active = (settings.theme || "default") === tpl.id;
+              const active = resolveProfileTemplate(settings.theme).id === tpl.id;
               return (
                 <button
                   key={tpl.id}

@@ -189,14 +189,6 @@ export function SignUpForm() {
           autoComplete="new-password"
           required
         />
-        {/*
-          Clerk Smart CAPTCHA mount point. Must exist in the DOM before
-          signUp.create() / OAuth redirects run, otherwise Clerk falls back to
-          the deprecated Invisible widget and logs a console warning. Renders
-          nothing unless the visitor is flagged as a bot. See:
-          https://clerk.com/docs/guides/development/custom-flows/bot-sign-up-protection
-        */}
-        <div id="clerk-captcha" data-cl-theme="auto" />
         <PrimaryButton loading={busy}>Create Account</PrimaryButton>
       </form>
     ) : (

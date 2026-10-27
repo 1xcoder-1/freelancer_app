@@ -2,18 +2,15 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from pydantic import BaseModel, Field
-from typing import List, Literal, Optional, Dict, Any, Literal
-from datetime import datetime, timedelta
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 
 from app.core.auth import require_authenticated_user
 from app.core.database import get_db
-from app.core.quota import enforce_capacity, plan_context
+from app.core.quota import plan_context
 from app.core.workspace import get_or_create_user_workspace
-from app.models.project import Project
-from app.models.finance import TimeEntry
-from app.models.workspace import User, Membership
+from app.models.workspace import User
 from app.models.report_card import ReportCard
 
 router = APIRouter()
@@ -53,6 +50,21 @@ class QuoteItem(BaseModel):
     author: str = ""
     emoji: str = "✨"
 
+class ExperienceItem(BaseModel):
+    id: str = ""
+    role: str = ""
+    company: str = ""
+    period: str = ""           # display string, e.g. "2022 — Present"
+    description: str = ""
+    link: Optional[str] = None
+
+class CertificateItem(BaseModel):
+    id: str = ""
+    name: str = ""
+    issuer: str = ""
+    year: str = ""
+    link: Optional[str] = None
+
 class FooterContent(BaseModel):
     signature_name: str = ""
     code_link: str = ""
@@ -71,16 +83,33 @@ class CardContent(BaseModel):
     inspiration_intro: List[str] = Field(default_factory=list)
     projects: List[ProjectItem] = Field(default_factory=list)
     projects_intro: List[str] = Field(default_factory=list)
+    experience: List[ExperienceItem] = Field(default_factory=list)
+    certificates: List[CertificateItem] = Field(default_factory=list)
+    # False until the owner picked a template on the New Portfolio screen; the
+    # dashboard landing uses it to route between picker and roster.
+    initialized: bool = False
     quote: Optional[QuoteItem] = None
     footer: Optional[FooterContent] = None
+
+# Profile templates: "classic" is the original card; "folio" is the second
+# design. Legacy theme ids saved before the rework collapse into "classic".
+_TEMPLATE_IDS = ("classic", "folio")
+_LEGACY_TEMPLATE_IDS = ("default", "editorial", "midnight", "warm")
 
 class CardSettings(BaseModel):
     font: str = "geist"        # schibsted | inter | geist
     accent: str = "#f5f5f4"    # dot swatch colour in the settings popover
-    # Profile themes persist in the same JSON blob as font/accent. A Literal
-    # keeps the value whitelisted (an unknown theme is a 422, never junk in the
-    # DB); the default means payloads saved before themes existed still parse.
-    theme: Literal["default", "editorial", "midnight", "warm"] = "default"
+    theme: str = "classic"
+
+    @field_validator("theme")
+    @classmethod
+    def _check_theme(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if v in _TEMPLATE_IDS:
+            return v
+        if v in _LEGACY_TEMPLATE_IDS:
+            return "classic"
+        raise ValueError("theme must be one of: classic, folio")
 
 class SaveContentRequest(BaseModel):
     content: CardContent
@@ -102,23 +131,6 @@ class ShareStatusResponse(BaseModel):
     share_url: Optional[str] = None
     status: str  # "active", "expired", "revoked"
 
-class ScopeStat(BaseModel):
-    solved: int
-    total: int
-
-class DeliveryStats(BaseModel):
-    total_solved: int
-    total_target: int
-    completion_rate_pct: float
-    easy: ScopeStat
-    medium: ScopeStat
-    hard: ScopeStat
-
-class HeatmapCell(BaseModel):
-    date: str
-    count: int
-    level: int
-
 class ReportCardResponse(BaseModel):
     username: str
     full_name: str
@@ -126,14 +138,6 @@ class ReportCardResponse(BaseModel):
     content: CardContent
     settings: CardSettings
     share: ShareStatusResponse
-    views_count: int
-    # Live, DB-computed stats (never dummy data — reflects the owner's real
-    # projects / milestones / time entries in Neon)
-    current_streak: int
-    max_streak: int
-    active_days_count: int
-    delivery_stats: DeliveryStats
-    heatmap: List[HeatmapCell]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -191,111 +195,8 @@ async def _get_or_create_card(db: AsyncSession, current_user: Dict[str, Any]) ->
                 raise
     return card, user, workspace.id
 
-# ------------------------------------------------------------------------------
-# Live stats aggregated from the owner's real Neon data
-# ------------------------------------------------------------------------------
-async def _compute_live_stats(db: AsyncSession, workspace_id: Optional[str]) -> Dict[str, Any]:
-    empty = {
-        "current_streak": 0, "max_streak": 0, "active_days_count": 0,
-        "delivery_stats": DeliveryStats(
-            total_solved=0, total_target=0, completion_rate_pct=0.0,
-            easy=ScopeStat(solved=0, total=0),
-            medium=ScopeStat(solved=0, total=0),
-            hard=ScopeStat(solved=0, total=0),
-        ),
-        "heatmap": [],
-    }
-    if not workspace_id:
-        return empty
-    try:
-        res_projects = await db.execute(
-            select(Project)
-            .where(Project.workspace_id == workspace_id)
-            .options(selectinload(Project.milestones))
-            .order_by(Project.created_at.desc())
-        )
-        all_projects = res_projects.scalars().all()
-        res_time = await db.execute(
-            select(TimeEntry)
-            .where(TimeEntry.workspace_id == workspace_id)
-            .order_by(TimeEntry.start_time.asc())
-        )
-        all_time = res_time.scalars().all()
-    except Exception as e:
-        print(f"Notice aggregating live report card stats: {e}")
-        return empty
 
-    all_milestones: List[Any] = []
-    for p in all_projects:
-        if p.milestones:
-            all_milestones.extend(p.milestones)
-
-    easy_solved = easy_total = med_solved = med_total = hard_solved = hard_total = 0
-    for p in all_projects:
-        b = p.budget or 0.0
-        is_done = (p.status == "completed")
-        if b <= 1500:
-            easy_total += 1
-            if is_done: easy_solved += 1
-        elif b <= 5000:
-            med_total += 1
-            if is_done: med_solved += 1
-        else:
-            hard_total += 1
-            if is_done: hard_solved += 1
-
-    total_solved = easy_solved + med_solved + hard_solved
-    total_target = easy_total + med_total + hard_total
-    completion_rate = round((total_solved / total_target) * 100, 1) if total_target > 0 else 0.0
-
-    activity_by_date: Dict[str, int] = {}
-    for entry in all_time:
-        if entry.start_time:
-            d_str = entry.start_time.strftime("%Y-%m-%d")
-            hours = (entry.duration_seconds or 0) / 3600.0
-            activity_by_date[d_str] = activity_by_date.get(d_str, 0) + max(1, int(hours * 2))
-    for p in all_projects:
-        if p.created_at:
-            d_str = p.created_at.strftime("%Y-%m-%d")
-            activity_by_date[d_str] = activity_by_date.get(d_str, 0) + 2
-    for m in all_milestones:
-        if m.created_at:
-            d_str = m.created_at.strftime("%Y-%m-%d")
-            activity_by_date[d_str] = activity_by_date.get(d_str, 0) + 1
-
-    heatmap: List[HeatmapCell] = []
-    base_date = datetime.now() - timedelta(days=364)
-    active_days_count = 0
-    max_streak = 0
-    temp_streak = 0
-    for i in range(365):
-        date_str = (base_date + timedelta(days=i)).strftime("%Y-%m-%d")
-        count = activity_by_date.get(date_str, 0)
-        if count > 0:
-            active_days_count += 1
-            temp_streak += 1
-            max_streak = max(max_streak, temp_streak)
-        else:
-            temp_streak = 0
-        level = 4 if count >= 6 else 3 if count >= 4 else 2 if count >= 2 else 1 if count >= 1 else 0
-        heatmap.append(HeatmapCell(date=date_str, count=count, level=level))
-
-    return {
-        "current_streak": temp_streak,
-        "max_streak": max_streak,
-        "active_days_count": active_days_count,
-        "delivery_stats": DeliveryStats(
-            total_solved=total_solved,
-            total_target=total_target,
-            completion_rate_pct=completion_rate,
-            easy=ScopeStat(solved=easy_solved, total=easy_total),
-            medium=ScopeStat(solved=med_solved, total=med_total),
-            hard=ScopeStat(solved=hard_solved, total=hard_total),
-        ),
-        "heatmap": heatmap,
-    }
-
-def _card_payload(card: ReportCard, user: User, stats: Dict[str, Any]) -> Dict[str, Any]:
+def _card_payload(card: ReportCard, user: User) -> Dict[str, Any]:
     content = CardContent(**(card.content or {}))
     settings = CardSettings(**(card.settings or {}))
     return {
@@ -305,8 +206,6 @@ def _card_payload(card: ReportCard, user: User, stats: Dict[str, Any]) -> Dict[s
         "content": content,
         "settings": settings,
         "share": _share_response(card),
-        "views_count": card.views_count or 0,
-        **stats,
     }
 
 # ------------------------------------------------------------------------------
@@ -317,9 +216,8 @@ async def get_my_report_card(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, user, workspace_id = await _get_or_create_card(db, current_user)
-    stats = await _compute_live_stats(db, workspace_id)
-    return _card_payload(card, user, stats)
+    card, user, _workspace_id = await _get_or_create_card(db, current_user)
+    return _card_payload(card, user)
 
 
 @router.put("/me/content", response_model=ReportCardResponse)
@@ -329,20 +227,13 @@ async def save_my_content(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     card, user, workspace_id = await _get_or_create_card(db, current_user)
-    # The report card's project list IS the public portfolio, so its length is
-    # what the plan's portfolios dimension caps. Deleting entries is never
-    # blocked — only showing more than the plan allows.
-    await enforce_capacity(
-        db,
-        await plan_context(db, current_user),
-        "portfolios",
-        workspace_id=workspace_id,
-        used=len(req.content.projects),
-    )
+    # One portfolio per account on every plan: the report_cards row IS the
+    # portfolio and is created once by _get_or_create_card, so no second row
+    # can ever be written through this API — there is nothing to enforce here
+    # (passing used=1 against the limit of 1 would 402 every save).
     card.content = req.content.model_dump()
     await db.commit()
-    stats = await _compute_live_stats(db, workspace_id)
-    return _card_payload(card, user, stats)
+    return _card_payload(card, user)
 
 @router.put("/me/settings", response_model=ReportCardResponse)
 async def save_my_settings(
@@ -350,11 +241,10 @@ async def save_my_settings(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    card, user, workspace_id = await _get_or_create_card(db, current_user)
+    card, user, _workspace_id = await _get_or_create_card(db, current_user)
     card.settings = req.settings.model_dump()
     await db.commit()
-    stats = await _compute_live_stats(db, workspace_id)
-    return _card_payload(card, user, stats)
+    return _card_payload(card, user)
 
 # ------------------------------------------------------------------------------
 # Share endpoints — DB-backed so links survive restarts
@@ -439,15 +329,4 @@ async def get_public_report_card(username: str, token: Optional[str] = Query(Non
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owner of this report card was not found.")
 
-    # Real-time view counter for the shared card
-    card.views_count = (card.views_count or 0) + 1
-    await db.commit()
-
-    # Stats must reflect the card owner's workspace only (public endpoint has
-    # no authenticated user to resolve it from).
-    ws_res = await db.execute(
-        select(Membership.workspace_id).where(Membership.user_id == user.id).limit(1)
-    )
-    owner_workspace_id = ws_res.scalar_one_or_none()
-    stats = await _compute_live_stats(db, owner_workspace_id)
-    return _card_payload(card, user, stats)
+    return _card_payload(card, user)

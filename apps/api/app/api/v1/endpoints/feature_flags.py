@@ -36,9 +36,12 @@ router = APIRouter(prefix="/feature-flags", tags=["Feature Flags"])
 # Must mirror the frontend registry (apps/web/src/lib/features.ts): the web app
 # owns labels/icons/routes, the backend only needs the key set to validate
 # writes. `home` and `settings` are intentionally absent — always visible.
+# `task_management` gates the Planner → Task Management sub-item separately
+# from the `planner` flag (the frontend reads it via FeatureSubItem.flagKey).
 FEATURE_KEYS = frozenset({
     "booking", "clients", "proposals", "projects", "money", "time",
     "planner", "insights", "profile", "inbox", "calendar",
+    "task_management",
 })
 
 # Sidebar entries beyond the top-level groups (sub-items and command-menu

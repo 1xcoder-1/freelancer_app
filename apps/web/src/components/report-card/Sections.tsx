@@ -1,8 +1,31 @@
 "use client";
 
-import React, { createElement, useState, useMemo } from "react";
-import type { SectionItem, WritingItem, QuoteItem, FooterContent, ProjectItem } from "@/lib/api";
-import { ICON_KEYS, ITEM_COLORS, newItemId, resolveIcon, blankInspirationItem, blankProjectItem } from "./constants";
+import React, {
+  createContext,
+  createElement,
+  useContext,
+  useState,
+  useMemo,
+} from "react";
+import type {
+  SectionItem,
+  WritingItem,
+  QuoteItem,
+  FooterContent,
+  ProjectItem,
+  WorkExperienceItem,
+  WorkCertificateItem,
+} from "@/lib/api";
+import {
+  ICON_KEYS,
+  ITEM_COLORS,
+  newItemId,
+  resolveIcon,
+  blankInspirationItem,
+  blankProjectItem,
+  blankExperienceItem,
+  blankCertificateItem,
+} from "./constants";
 import { BRAND_SVGS, COMPANY_PRESETS, type CompanyPreset } from "./brand-logos";
 import {
   Plus,
@@ -21,12 +44,35 @@ import {
   Palette,
   Smartphone,
   Tag,
+  ArrowUp,
   ArrowUpRight,
 } from "@/components/animated-icons";
 
 // ----------------------------------------------------------------------------
 // Shared primitives
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Template chrome — lets the folio design restyle shared section primitives
+// (labels, dividers, cards) without duplicating every section component.
+// ----------------------------------------------------------------------------
+export type ChromeKind = "classic" | "folio";
+
+const ChromeContext = createContext<ChromeKind>("classic");
+
+export function ChromeProvider({
+  value,
+  children,
+}: {
+  value: ChromeKind;
+  children: React.ReactNode;
+}) {
+  return <ChromeContext.Provider value={value}>{children}</ChromeContext.Provider>;
+}
+
+export function useChrome(): ChromeKind {
+  return useContext(ChromeContext);
+}
+
 export function SectionShell({
   label,
   editing,
@@ -40,12 +86,20 @@ export function SectionShell({
   addLabel?: string;
   children: React.ReactNode;
 }) {
+  const chrome = useChrome();
   return (
     <section className="pt-10">
       <div className="flex items-center justify-between mb-5">
-        <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-faint">
-          {label}
-        </p>
+        {chrome === "folio" ? (
+          <p className="text-[13px] italic text-muted flex items-center gap-2.5">
+            <span aria-hidden className="inline-block h-px w-6 bg-line-strong/70" />
+            {label}
+          </p>
+        ) : (
+          <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-faint">
+            {label}
+          </p>
+        )}
         {editing && (
           <button
             type="button"
@@ -63,7 +117,16 @@ export function SectionShell({
 }
 
 export function DottedDivider() {
-  return <div className="border-t border-dotted border-line-strong mt-10" />;
+  const chrome = useChrome();
+  return (
+    <div
+      className={`mt-10 ${
+        chrome === "folio"
+          ? "border-t border-line/70"
+          : "border-t border-dotted border-line-strong"
+      }`}
+    />
+  );
 }
 
 /**
@@ -1661,6 +1724,368 @@ export function FooterSection({
           </div>
         </footer>
       )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Work page — Experience timeline + Certificate stamps on a single page.
+// Entries can arrive pre-filled from Settings (autofill) or be added by hand;
+// every one of them stays editable and reorderable either way.
+// ----------------------------------------------------------------------------
+function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  if (to < 0 || to >= arr.length || from === to) return arr;
+  const next = [...arr];
+  const [row] = next.splice(from, 1);
+  next.splice(to, 0, row);
+  return next;
+}
+
+function ReorderButtons({
+  index,
+  count,
+  onMove,
+}: {
+  index: number;
+  count: number;
+  onMove: (nextIndex: number) => void;
+}) {
+  return (
+    <div className="flex flex-col shrink-0 self-stretch justify-center">
+      <button
+        type="button"
+        title="Move up"
+        disabled={index === 0}
+        onClick={() => onMove(index - 1)}
+        className="p-1 text-faint hover:text-fg disabled:opacity-25 disabled:cursor-default transition-colors cursor-pointer"
+      >
+        <ArrowUp className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        title="Move down"
+        disabled={index === count - 1}
+        onClick={() => onMove(index + 1)}
+        className="p-1 text-faint hover:text-fg disabled:opacity-25 disabled:cursor-default transition-colors cursor-pointer"
+      >
+        <ArrowUp className="w-3.5 h-3.5 rotate-180" />
+      </button>
+    </div>
+  );
+}
+
+export function WorkSection({
+  experience,
+  certificates,
+  editing,
+  onExperienceChange,
+  onCertificatesChange,
+}: {
+  experience: WorkExperienceItem[];
+  certificates: WorkCertificateItem[];
+  editing?: boolean;
+  onExperienceChange: (next: WorkExperienceItem[]) => void;
+  onCertificatesChange: (next: WorkCertificateItem[]) => void;
+}) {
+  const chrome = useChrome();
+
+  return (
+    <div>
+      {/* ------------------------------------------------ Experience timeline */}
+      <SectionShell
+        label="Experience"
+        editing={editing}
+        addLabel="Add role"
+        onAdd={() => onExperienceChange([...experience, blankExperienceItem()])}
+      >
+        {!experience.length ? (
+          <p className="text-sm text-faint italic">
+            {editing
+              ? "Nothing yet — roles from Settings → Experience appear here automatically, or add one by hand."
+              : "No roles added yet."}
+          </p>
+        ) : editing ? (
+          <div className="space-y-4">
+            {experience.map((item, idx) => (
+              <div
+                key={item.id || idx}
+                className="rounded-2xl border border-dashed border-line p-4 bg-surface/30 space-y-2.5"
+              >
+                <div className="flex items-start gap-2">
+                  <input
+                    className="input-line flex-1 min-w-0 text-sm font-semibold"
+                    value={item.role}
+                    placeholder="Role (e.g. Senior Frontend Engineer)"
+                    onChange={(e) =>
+                      onExperienceChange(
+                        experience.map((row, i) =>
+                          i === idx ? { ...row, role: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className="input-line flex-1 min-w-0 text-sm"
+                    value={item.company}
+                    placeholder="Company / Client"
+                    onChange={(e) =>
+                      onExperienceChange(
+                        experience.map((row, i) =>
+                          i === idx ? { ...row, company: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <ReorderButtons
+                    index={idx}
+                    count={experience.length}
+                    onMove={(to) =>
+                      onExperienceChange(moveItem(experience, idx, to))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onExperienceChange(experience.filter((_, i) => i !== idx))
+                    }
+                    title="Remove role"
+                    className="p-1 self-center text-faint hover:text-danger transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <input
+                  className="input-line text-xs font-mono w-full"
+                  value={item.period}
+                  placeholder="Period (e.g. Jan 2022 — Present)"
+                  onChange={(e) =>
+                    onExperienceChange(
+                      experience.map((row, i) =>
+                        i === idx ? { ...row, period: e.target.value } : row,
+                      ),
+                    )
+                  }
+                />
+                <textarea
+                  rows={2}
+                  className="input-line text-[13.5px] leading-relaxed resize-y w-full"
+                  value={item.description}
+                  placeholder="What you built, owned or improved..."
+                  onChange={(e) =>
+                    onExperienceChange(
+                      experience.map((row, i) =>
+                        i === idx ? { ...row, description: e.target.value } : row,
+                      ),
+                    )
+                  }
+                />
+                <input
+                  className="input-line text-xs font-mono w-full"
+                  value={item.link || ""}
+                  placeholder="Optional link (company site, case study)"
+                  onChange={(e) =>
+                    onExperienceChange(
+                      experience.map((row, i) =>
+                        i === idx ? { ...row, link: e.target.value } : row,
+                      ),
+                    )
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ol className="space-y-0">
+            {experience.map((item, idx) => {
+              const last = idx === experience.length - 1;
+              return (
+                <li key={item.id || idx} className="flex gap-4 group/exp">
+                  <div className="flex flex-col items-center pt-[7px]">
+                    <span className="h-[11px] w-[11px] rounded-full border border-line-strong bg-bg shrink-0 transition-colors duration-200 group-hover/exp:border-accent group-hover/exp:bg-accent/40" />
+                    {!last && (
+                      <span
+                        aria-hidden
+                        className={`mt-1 w-px flex-1 min-h-[26px] ${
+                          chrome === "folio" ? "bg-line/70" : "bg-line"
+                        }`}
+                      />
+                    )}
+                  </div>
+                  <div className={`flex-1 min-w-0 ${last ? "pb-1" : "pb-8"}`}>
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                      {item.link ? (
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-[16px] text-fg hover:text-accent transition-colors inline-flex items-center gap-1.5"
+                        >
+                          <span>{item.role}</span>
+                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover/exp:opacity-100 transition-opacity text-accent shrink-0" />
+                        </a>
+                      ) : (
+                        <h3 className="font-semibold text-[16px] text-fg">
+                          {item.role}
+                        </h3>
+                      )}
+                      <span className="text-[11px] font-mono text-faint shrink-0">
+                        {item.period}
+                      </span>
+                    </div>
+                    {item.company && (
+                      <p className="mt-0.5 text-[13.5px] font-medium text-muted">
+                        {item.company}
+                      </p>
+                    )}
+                    {item.description && (
+                      <p className="mt-1.5 text-[14px] leading-relaxed text-muted">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </SectionShell>
+
+      <DottedDivider />
+
+      {/* ------------------------------------------------- Certificate stamps */}
+      <SectionShell
+        label="Certificates"
+        editing={editing}
+        addLabel="Add certificate"
+        onAdd={() => onCertificatesChange([...certificates, blankCertificateItem()])}
+      >
+        {!certificates.length ? (
+          <p className="text-sm text-faint italic">
+            {editing
+              ? "Nothing yet — certifications from Settings appear here automatically, or add one by hand."
+              : "No certificates added yet."}
+          </p>
+        ) : editing ? (
+          <div className="space-y-4">
+            {certificates.map((item, idx) => (
+              <div
+                key={item.id || idx}
+                className="rounded-2xl border border-dashed border-line p-4 bg-surface/30 space-y-2.5"
+              >
+                <div className="flex items-start gap-2">
+                  <input
+                    className="input-line flex-1 min-w-0 text-sm font-semibold"
+                    value={item.name}
+                    placeholder="Certificate name (e.g. AWS Solutions Architect)"
+                    onChange={(e) =>
+                      onCertificatesChange(
+                        certificates.map((row, i) =>
+                          i === idx ? { ...row, name: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className="input-line w-28 shrink-0 text-xs font-mono"
+                    value={item.year}
+                    placeholder="Year"
+                    onChange={(e) =>
+                      onCertificatesChange(
+                        certificates.map((row, i) =>
+                          i === idx ? { ...row, year: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <ReorderButtons
+                    index={idx}
+                    count={certificates.length}
+                    onMove={(to) =>
+                      onCertificatesChange(moveItem(certificates, idx, to))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCertificatesChange(certificates.filter((_, i) => i !== idx))
+                    }
+                    title="Remove certificate"
+                    className="p-1 self-center text-faint hover:text-danger transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input-line flex-1 min-w-0 text-sm"
+                    value={item.issuer}
+                    placeholder="Issuer (e.g. Amazon Web Services)"
+                    onChange={(e) =>
+                      onCertificatesChange(
+                        certificates.map((row, i) =>
+                          i === idx ? { ...row, issuer: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className="input-line flex-1 min-w-0 text-xs font-mono"
+                    value={item.link || ""}
+                    placeholder="Credential URL (optional)"
+                    onChange={(e) =>
+                      onCertificatesChange(
+                        certificates.map((row, i) =>
+                          i === idx ? { ...row, link: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {certificates.map((item, idx) => (
+              <div
+                key={item.id || idx}
+                className={`group/cert relative rounded-xl border border-line bg-card/60 p-4 transition-all duration-200 hover:border-line-strong hover:bg-surface/40 ${
+                  chrome === "folio"
+                    ? idx % 2 === 0
+                      ? "-rotate-[0.6deg]"
+                      : "rotate-[0.6deg]"
+                    : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-[14.5px] leading-snug text-fg group-hover/cert:text-accent transition-colors">
+                    {item.name}
+                  </p>
+                  {item.year && (
+                    <span className="shrink-0 px-1.5 py-0.5 rounded-md border border-line-strong/60 text-[10.5px] font-mono text-muted">
+                      {item.year}
+                    </span>
+                  )}
+                </div>
+                {item.issuer && (
+                  <p className="mt-1 text-[12.5px] text-muted">{item.issuer}</p>
+                )}
+                {item.link && (
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-mono text-accent hover:text-accent-hi transition-colors"
+                  >
+                    View credential
+                    <ArrowUpRight className="w-3 h-3 transition-transform group-hover/cert:translate-x-0.5 group-hover/cert:-translate-y-0.5" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionShell>
     </div>
   );
 }

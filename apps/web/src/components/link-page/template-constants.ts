@@ -6,6 +6,7 @@ export interface LinkPageRenderItem {
   icon?: string | null;
   description?: string | null;
   image_url?: string | null;
+  display?: string | null; // "icon" = round icon row, "card" = full-width card, null = auto
 }
 
 export interface LinkPageRenderData {
@@ -51,6 +52,10 @@ const SOCIAL_URL_HOSTS = [
 
 export function isSocialItem(item: LinkPageRenderItem): boolean {
   if (itemRole(item) !== "link") return false;
+  // Explicit owner choice wins over platform auto-detection.
+  const display = (item.display || "").trim().toLowerCase();
+  if (display === "icon") return true;
+  if (display === "card") return false;
   const icon = (item.icon || "").trim().toLowerCase();
   if (icon && SOCIAL_ICON_KEYS.has(icon)) return true;
   const url = (item.url || "").toLowerCase();
@@ -62,7 +67,7 @@ export const LINK_TEMPLATES = [
     key: "fresh-press",
     name: "Fresh Press",
     archetype: "Juice Bar Fresh",
-    blurb: "Sage green canvas with soft pill buttons and a laid-back market feel",
+    blurb: "Sage green canvas with big borderless cards and a laid-back market feel",
     palette: ["#5A6753", "#C9CDC4", "#FFFFFF"],
     fontFamily: "Inter / Modern Sans",
     category: "light",
@@ -81,10 +86,10 @@ export const LINK_TEMPLATES = [
   {
     key: "studio-cloud",
     name: "Studio Cloud",
-    archetype: "Doodle Sketchbook",
-    blurb: "Airy sketchbook page with hand-drawn clouds and outlined pill links",
+    archetype: "Handwritten Sketchbook",
+    blurb: "Airy sketchbook page with handwriting link notes, tilts and hand-drawn clouds",
     palette: ["#F3F2F8", "#4A5BD0", "#FFFFFF"],
-    fontFamily: "Inter / Geometric Sans",
+    fontFamily: "Caveat / Handwriting",
     category: "light",
     backdrop: "linear-gradient(180deg, #e4e3ef 0%, #d3d2e4 100%)",
   },
@@ -92,7 +97,7 @@ export const LINK_TEMPLATES = [
     key: "hardwave",
     name: "Hardwave",
     archetype: "Sunset Techno",
-    blurb: "Stage-light orange burning into charcoal, clean white bars over grain",
+    blurb: "Stage-light orange burning into charcoal, white bars with a zigzag top edge",
     palette: ["#D2702F", "#191715", "#FFFFFF"],
     fontFamily: "Inter / Grotesk",
     category: "dark",
@@ -102,7 +107,7 @@ export const LINK_TEMPLATES = [
     key: "prism",
     name: "Prism",
     archetype: "Holographic Pastel",
-    blurb: "Iridescent foil gradient with crisp white cards and airy type",
+    blurb: "Iridescent foil gradient with floating borderless cards and airy type",
     palette: ["#C9D2F0", "#F2C9DC", "#23222E"],
     fontFamily: "Inter / Soft Sans",
     category: "light",

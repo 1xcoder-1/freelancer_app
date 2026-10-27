@@ -14,6 +14,7 @@ interface ThemePreviewCardProps {
 
 const SERIF = "Georgia, 'Times New Roman', serif";
 const MONO = "ui-monospace, 'JetBrains Mono', 'SF Mono', 'Courier New', monospace";
+const HAND = "var(--font-signature), 'Segoe Script', 'Bradley Hand', cursive";
 
 function MiniAvatar({ bg, fg, label }: { bg: string; fg: string; label: string }) {
   return (
@@ -92,8 +93,8 @@ export function ThemePreviewCard({
           >
             <MiniAvatar bg="#2E3A28" fg="#E8A33D" label="H" />
             <div className="text-[8px] font-semibold text-white">Hydra Juice</div>
-            <MiniRow bg="#C9CDC4" fg="#33402C" label="Our drinks" />
-            <MiniRow bg="#C9CDC4" fg="#33402C" label="Find us" />
+            <MiniRow bg="#C9CDC4" fg="#33402C" radius={8} label="Our drinks" />
+            <MiniRow bg="#C9CDC4" fg="#33402C" radius={8} label="Find us" />
           </div>
         )}
 
@@ -117,9 +118,9 @@ export function ThemePreviewCard({
               <path d="M30 82 C12 82 6 68 14 58 C6 46 18 32 32 38 C36 20 58 12 72 24 C82 6 110 6 120 24 C136 12 160 20 162 38 C180 34 192 50 184 64 C192 74 184 86 170 84 Z" stroke="#4A5BD0" strokeWidth="1.6" />
             </svg>
             <MiniAvatar bg="#DDE2F5" fg="#3D4EC7" label="M" />
-            <div className="text-[8px] font-medium" style={{ color: "#3D4EC7" }}>Marjan</div>
-            <MiniRow bg="#FFFFFF" fg="#3D4EC7" border="#3D4EC7B3" label="Website" />
-            <MiniRow bg="#FFFFFF" fg="#3D4EC7" border="#3D4EC7B3" label="Interviews" />
+            <div className="text-[10px]" style={{ fontFamily: HAND, color: "#3D4EC7" }}>Marjan</div>
+            <MiniRow bg="#FFFFFF" fg="#3D4EC7" border="#3D4EC7B3" radius={4} label="Website" font={HAND} />
+            <MiniRow bg="#FFFFFF" fg="#3D4EC7" border="#3D4EC7B3" radius={4} label="Interviews" font={HAND} />
           </div>
         )}
 
@@ -130,7 +131,12 @@ export function ThemePreviewCard({
           >
             <MiniAvatar bg="#2A211A" fg="#D2702F" label="S" />
             <div className="text-[8px] font-semibold text-white">Shannon Cary</div>
-            <MiniRow bg="#FFFFFF" fg="#1A1815" radius={10} label="Boilerroom set" />
+            <div
+              className="w-32 flex items-center justify-center text-[8px] font-semibold bg-white text-[#1A1815] shadow-2xs"
+              style={{ height: 18, clipPath: "polygon(0% 3px, 7% 0px, 14% 3px, 21% 0px, 28% 3px, 35% 0px, 42% 3px, 49% 0px, 56% 3px, 63% 0px, 70% 3px, 77% 0px, 84% 3px, 91% 0px, 98% 3px, 100% 1px, 100% 100%, 0% 100%)" }}
+            >
+              Boilerroom set
+            </div>
             <MiniRow bg="#FFFFFF" fg="#1A1815" radius={10} label="Book a concert" />
           </div>
         )}
@@ -142,8 +148,8 @@ export function ThemePreviewCard({
           >
             <MiniAvatar bg="#DCCEF2" fg="#23222E" label="R" />
             <div className="text-[8px] font-semibold" style={{ color: "#23222E" }}>Rhagouel</div>
-            <MiniRow bg="rgba(255,255,255,0.92)" fg="#23222E" border="#9AA8E8" radius={10} label="Tour Dates" />
-            <MiniRow bg="rgba(255,255,255,0.92)" fg="#23222E" border="#9AA8E8" radius={10} label="Our Discord" />
+            <MiniRow bg="rgba(255,255,255,0.9)" fg="#23222E" radius={8} label="Tour Dates" />
+            <MiniRow bg="rgba(255,255,255,0.9)" fg="#23222E" radius={8} label="Our Discord" />
           </div>
         )}
 

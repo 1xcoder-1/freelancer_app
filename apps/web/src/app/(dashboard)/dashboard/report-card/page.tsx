@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { OwnerReportCardScreen } from "@/components/report-card/OwnerReportCardScreen";
+import { PortfolioOverview } from "@/components/report-card/PortfolioOverview";
 
-/** Dashboard view of the signed-in user's report card (Home page). */
+/** Portfolio landing: template picker for new accounts, roster afterwards. */
 export default function DashboardReportCardPage() {
-  return <OwnerReportCardScreen />;
+  return <PortfolioOverview />;
 }

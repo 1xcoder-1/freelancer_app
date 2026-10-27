@@ -232,6 +232,20 @@ export interface DashboardTimeEntry {
   date: string;
 }
 
+// Uncompleted Task Management cards due today or overdue, served inside the
+// overview payload so the dashboard Today tab needs no extra fetch.
+export interface TodayTaskItem {
+  id: string;
+  title: string;
+  completed: boolean;
+  priority?: TaskPriority | null;
+  due_date: string;
+  is_overdue: boolean;
+  board_id: string;
+  board_name: string;
+  list_name: string;
+}
+
 export interface DashboardOverview {
   summary: {
     monthly_revenue: number;
@@ -242,6 +256,7 @@ export interface DashboardOverview {
   recent_projects: DashboardProject[];
   recent_invoices: DashboardInvoice[];
   recent_time_entries: DashboardTimeEntry[];
+  today_tasks: TodayTaskItem[];
   active_focus_timer: {
     is_running: boolean;
     project_name: string;
@@ -1098,10 +1113,13 @@ export interface ProfileExperience {
   company: string;
   employment_type: string;
   location: string;
+  location_type?: string;
   start_date: string;
   end_date: string;
   current: boolean;
   description: string;
+  skills?: string[];
+  attachments?: string[];
 }
 
 export interface ProfileCertification {
@@ -1112,26 +1130,41 @@ export interface ProfileCertification {
   expiry_date: string;
   credential_id: string;
   credential_url: string;
+  does_not_expire?: boolean;
+  attachments?: string[];
 }
 
 export interface ProfileEducation {
   id: string;
   institution: string;
+  education_level?: string;
   degree: string;
   field_of_study: string;
-  start_year: string;
-  end_year: string;
+  grading_system?: string;
   grade: string;
+  current?: boolean;
+  start_year?: string;
+  end_year?: string;
+  start_date?: string;
+  end_date?: string;
   description: string;
+  attachments?: string[];
 }
 
 export interface ProfileProject {
   id: string;
   name: string;
+  project_type?: string;
   description: string;
   tech_stack: string[];
-  link: string;
-  year: string;
+  github_url?: string;
+  live_url?: string;
+  link?: string;
+  current?: boolean;
+  start_date?: string;
+  end_date?: string;
+  year?: string;
+  attachments?: string[];
 }
 
 export interface UserProfileContent {
@@ -1838,8 +1871,9 @@ export const deleteCalendarEvent = async (eventId: string, token?: string): Prom
 };
 
 export const getGoogleCalendarStatus = async (token?: string): Promise<GoogleConnectionStatus> => {
+  const scope = token ? token.slice(-16) : 'anon';
   return fetchWithDeduplication(
-    'calendar:google:status',
+    `calendar:google:status:${scope}`,
     async () => {
       const response = await apiClient.get<GoogleConnectionStatus>('/calendar/google/status', authHeaders(token));
       return response.data;
@@ -1939,6 +1973,23 @@ export interface FooterContent {
   inspired_by_link?: string;
 }
 
+export interface WorkExperienceItem {
+  id: string;
+  role: string;
+  company: string;
+  period: string;
+  description: string;
+  link?: string | null;
+}
+
+export interface WorkCertificateItem {
+  id: string;
+  name: string;
+  issuer: string;
+  year: string;
+  link?: string | null;
+}
+
 export interface CardContent {
   name_aka: string;
   bio_paragraphs: string[];
@@ -1950,6 +2001,10 @@ export interface CardContent {
   inspiration_intro?: string[];
   projects?: ProjectItem[];
   projects_intro?: string[];
+  experience?: WorkExperienceItem[];
+  certificates?: WorkCertificateItem[];
+  /** False until the owner picked a template on the New Portfolio screen. */
+  initialized?: boolean;
   quote?: QuoteItem | null;
   footer?: FooterContent | null;
 }
@@ -1957,27 +2012,7 @@ export interface CardContent {
 export interface CardSettings {
   font: string;    // schibsted | inter | geist
   accent: string;  // accent colour chosen in the settings popover
-  theme?: string;  // profile template: default | editorial | midnight | warm
-}
-
-export interface ScopeStat {
-  solved: number;
-  total: number;
-}
-
-export interface DeliveryStats {
-  total_solved: number;
-  total_target: number;
-  completion_rate_pct: number;
-  easy: ScopeStat;
-  medium: ScopeStat;
-  hard: ScopeStat;
-}
-
-export interface HeatmapCell {
-  date: string;
-  count: number;
-  level: number;
+  theme?: string;  // portfolio template: classic | folio
 }
 
 export interface ShareStatusResponse {
@@ -1998,12 +2033,6 @@ export interface ReportCardData {
   content: CardContent;
   settings: CardSettings;
   share: ShareStatusResponse;
-  views_count: number;
-  current_streak: number;
-  max_streak: number;
-  active_days_count: number;
-  delivery_stats: DeliveryStats;
-  heatmap: HeatmapCell[];
 }
 
 export const getMyReportCard = async (token?: string): Promise<ReportCardData> => {
@@ -2043,7 +2072,8 @@ export const getPublicReportCard = async (username: string, shareToken?: string 
 };
 
 // ------------------------------------------------------------------------------
-// Planner — todo list + Excalidraw sketch board, saved as "files" (boards).
+// Planner — Excalidraw sketch board, saved as "files" (boards). (The endpoints
+// still carry the legacy todo list server-side; the UI no longer renders it.)
 // Real-time: tabs poll getPlannerBoardHead (cheap: revision + todos only) and
 // only re-download the scene when the revision moved. savePlannerBoard sends
 // the last known revision so a stale whole-scene write is rejected (409) rather
@@ -2063,20 +2093,6 @@ export interface PlannerTodo {
   duration_minutes?: number | null;
   created_at: string;
   updated_at: string;
-}
-
-// Payload for creating/planning a todo (PL1/PL2/PL3). Every field except text
-// is optional so a bare to-do still works; the editor fills them in inline.
-export interface PlannerTodoPayload {
-  text?: string;
-  is_done?: boolean;
-  due_date?: string | null;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
-  project_id?: string | null;
-  recurrence?: 'daily' | 'weekly' | null;
-  date?: string | null;
-  start_minute?: number | null;
-  duration_minutes?: number | null;
 }
 
 export interface PlannerBoardSummary {
@@ -2102,6 +2118,9 @@ export interface PlannerBoardFull {
   elements: Record<string, unknown>[];
   files: Record<string, Record<string, unknown>>;
   todos: PlannerTodo[];
+  is_public: boolean;
+  share_token?: string | null;
+  expires_at?: string | null;
 }
 
 export interface PlannerBoardHead {
@@ -2121,6 +2140,13 @@ export interface PlannerSnapshotSummary {
   captured_on: string;
   revision: number;
   created_at: string;
+}
+
+export interface PlannerSnapshotDetail {
+  captured_on: string;
+  revision: number;
+  elements: Record<string, unknown>[];
+  files: Record<string, Record<string, unknown>>;
 }
 
 export interface PublicPlannerBoard {
@@ -2185,28 +2211,6 @@ export const deletePlannerBoard = async (boardId: string, token?: string): Promi
   await apiClient.delete(`/planner/boards/${boardId}`, authHeaders(token));
 };
 
-export const createPlannerTodo = async (
-  boardId: string,
-  payload: PlannerTodoPayload,
-  token?: string
-): Promise<PlannerTodo> => {
-  const response = await apiClient.post<PlannerTodo>(`/planner/boards/${boardId}/todos`, payload, authHeaders(token));
-  return response.data;
-};
-
-export const updatePlannerTodo = async (
-  todoId: string,
-  payload: PlannerTodoPayload,
-  token?: string
-): Promise<PlannerTodo> => {
-  const response = await apiClient.patch<PlannerTodo>(`/planner/todos/${todoId}`, payload, authHeaders(token));
-  return response.data;
-};
-
-export const deletePlannerTodo = async (todoId: string, token?: string): Promise<void> => {
-  await apiClient.delete(`/planner/todos/${todoId}`, authHeaders(token));
-};
-
 // PL5 — read-only share link. enable/disable/rotate are authenticated; the
 // anonymous viewer hits getPublicPlannerBoard (no token header).
 export const enablePlannerShare = async (
@@ -2242,12 +2246,291 @@ export const listPlannerSnapshots = async (
   return response.data;
 };
 
+export const getPlannerSnapshot = async (
+  boardId: string,
+  capturedOn: string,
+  token?: string
+): Promise<PlannerSnapshotDetail> => {
+  const response = await apiClient.get<PlannerSnapshotDetail>(
+    `/planner/boards/${boardId}/snapshots/${capturedOn}`,
+    authHeaders(token)
+  );
+  return response.data;
+};
+
 export const restorePlannerSnapshot = async (
   boardId: string,
   capturedOn: string,
   token?: string
 ): Promise<{ revision: number }> => {
   const response = await apiClient.post<{ revision: number }>(`/planner/boards/${boardId}/snapshots/${capturedOn}/restore`, {}, authHeaders(token));
+  return response.data;
+};
+
+// ------------------------------------------------------------------------------
+// Task Management — kanban boards (/tasks). Boards own ordered lists ("Pending"
+// / "In Progress" / "Done" are seeded on create), lists own ordered cards,
+// cards own subtasks + attachments. Real-time: tabs poll getTaskBoardHead
+// (cheap: {revision} only) and re-download the full board when the revision
+// moved. EVERY nested mutation bumps the board revision server-side, so a
+// mutation followed by a full re-pull is the sync contract (single-card
+// responses carry empty subtasks/attachments arrays by design).
+// ------------------------------------------------------------------------------
+export type TaskPriority = "low" | "medium" | "high" | "urgent";
+export type TaskAttachmentKind = "link" | "image" | "document";
+
+export interface TaskSubtask {
+  id: string;
+  card_id: string;
+  text: string;
+  is_done: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  card_id: string;
+  kind: TaskAttachmentKind;
+  url?: string | null;
+  file_key?: string | null;
+  file_name: string;
+  content_type?: string | null;
+  size_bytes?: number | null;
+  created_at: string;
+}
+
+export interface TaskCard {
+  id: string;
+  list_id: string;
+  board_id: string;
+  workspace_id: string;
+  title: string;
+  description: string;
+  completed: boolean;
+  priority?: TaskPriority | null;
+  due_date?: string | null;
+  position: number;
+  project_id?: string | null;
+  tags: string[];
+  // Populated on the nested payloads (/full, board create); empty on
+  // single-card mutation responses (the board revision tells tabs to re-pull).
+  subtasks: TaskSubtask[];
+  attachments: TaskAttachment[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskList {
+  id: string;
+  board_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+  cards: TaskCard[];
+}
+
+export interface TaskBoardFull {
+  id: string;
+  workspace_id: string;
+  name: string;
+  background_url?: string | null;
+  background_kind?: string | null;
+  revision: number;
+  lists: TaskList[];
+  created_at: string;
+  updated_at: string;
+}
+
+// List-row metadata: the board plus its one-query rollup counts.
+export interface TaskBoardSummary {
+  id: string;
+  workspace_id: string;
+  name: string;
+  background_url?: string | null;
+  background_kind?: string | null;
+  revision: number;
+  list_count: number;
+  card_count: number;
+  done_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Cheap poll target: a changed revision tells the tab to re-fetch /full.
+export interface TaskBoardHead {
+  revision: number;
+}
+
+// Card enriched for the project detail page (joined board/list names).
+export interface ProjectTaskCard extends TaskCard {
+  board_name: string;
+  list_name: string;
+}
+
+export const getTaskBoards = async (token?: string): Promise<TaskBoardSummary[]> => {
+  const response = await apiClient.get<TaskBoardSummary[]>('/tasks/boards', authHeaders(token));
+  return response.data;
+};
+
+// Creates the board AND its three default lists in one transaction; the
+// response is the full payload so the client can navigate straight in.
+export const createTaskBoard = async (
+  payload: { name: string; background_url?: string | null; background_kind?: string | null },
+  token?: string
+): Promise<TaskBoardFull> => {
+  const response = await apiClient.post<TaskBoardFull>('/tasks/boards', payload, authHeaders(token));
+  return response.data;
+};
+
+export const getTaskBoardFull = async (boardId: string, token?: string): Promise<TaskBoardFull> => {
+  const response = await apiClient.get<TaskBoardFull>(`/tasks/boards/${boardId}/full`, {
+    ...authHeaders(token),
+    timeout: 30000,
+  });
+  return response.data;
+};
+
+export const getTaskBoardHead = async (boardId: string, token?: string): Promise<TaskBoardHead> => {
+  const response = await apiClient.get<TaskBoardHead>(`/tasks/boards/${boardId}/head`, authHeaders(token));
+  return response.data;
+};
+
+// Rename a board and/or change its background (send null to clear).
+export const updateTaskBoard = async (
+  boardId: string,
+  patch: { name?: string; background_url?: string | null; background_kind?: string | null },
+  token?: string
+): Promise<TaskBoardSummary> => {
+  const response = await apiClient.patch<TaskBoardSummary>(`/tasks/boards/${boardId}`, patch, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTaskBoard = async (boardId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/tasks/boards/${boardId}`, authHeaders(token));
+};
+
+export const createTaskList = async (boardId: string, name: string, token?: string): Promise<TaskList> => {
+  const response = await apiClient.post<TaskList>(`/tasks/boards/${boardId}/lists`, { name }, authHeaders(token));
+  return response.data;
+};
+
+// Rename a list and/or move it to a new float position among its board's lists.
+export const updateTaskList = async (
+  listId: string,
+  patch: { name?: string; position?: number },
+  token?: string
+): Promise<TaskList> => {
+  const response = await apiClient.patch<TaskList>(`/tasks/lists/${listId}`, patch, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTaskList = async (listId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/tasks/lists/${listId}`, authHeaders(token));
+};
+
+export interface TaskCardCreatePayload {
+  title: string;
+  description?: string;
+  priority?: TaskPriority | null;
+  due_date?: string | null;
+  tags?: string[];
+  project_id?: string | null;
+}
+
+export interface TaskCardPatchPayload {
+  title?: string;
+  description?: string;
+  completed?: boolean;
+  priority?: TaskPriority | null;
+  due_date?: string | null;
+  tags?: string[];
+  project_id?: string | null;
+  // Kanban move contract: destination list plus the neighbour cards that must
+  // sit directly before/after the moved card at its new slot. Either anchor
+  // may be omitted (both omitted = append at the end of the destination list).
+  // The raw position value is never sent by the client.
+  list_id?: string;
+  before_card_id?: string | null;
+  after_card_id?: string | null;
+}
+
+export const createTaskCard = async (
+  listId: string,
+  payload: TaskCardCreatePayload,
+  token?: string
+): Promise<TaskCard> => {
+  const response = await apiClient.post<TaskCard>(`/tasks/lists/${listId}/cards`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const updateTaskCard = async (
+  cardId: string,
+  patch: TaskCardPatchPayload,
+  token?: string
+): Promise<TaskCard> => {
+  const response = await apiClient.patch<TaskCard>(`/tasks/cards/${cardId}`, patch, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTaskCard = async (cardId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/tasks/cards/${cardId}`, authHeaders(token));
+};
+
+export const createTaskSubtask = async (cardId: string, text: string, token?: string): Promise<TaskSubtask> => {
+  const response = await apiClient.post<TaskSubtask>(`/tasks/cards/${cardId}/subtasks`, { text }, authHeaders(token));
+  return response.data;
+};
+
+export const updateTaskSubtask = async (
+  subtaskId: string,
+  patch: { text?: string; is_done?: boolean },
+  token?: string
+): Promise<TaskSubtask> => {
+  const response = await apiClient.patch<TaskSubtask>(`/tasks/subtasks/${subtaskId}`, patch, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTaskSubtask = async (subtaskId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/tasks/subtasks/${subtaskId}`, authHeaders(token));
+};
+
+// Attachment METADATA only — binaries upload through the existing /storage
+// endpoints first and file_key is the returned public id.
+export const createTaskAttachment = async (
+  cardId: string,
+  payload: {
+    kind: TaskAttachmentKind;
+    url?: string | null;
+    file_key?: string | null;
+    file_name: string;
+    content_type?: string | null;
+    size_bytes?: number | null;
+  },
+  token?: string
+): Promise<TaskAttachment> => {
+  const response = await apiClient.post<TaskAttachment>(`/tasks/cards/${cardId}/attachments`, payload, authHeaders(token));
+  return response.data;
+};
+
+export const deleteTaskAttachment = async (attachmentId: string, token?: string): Promise<void> => {
+  await apiClient.delete(`/tasks/attachments/${attachmentId}`, authHeaders(token));
+};
+
+// Resolvable URLs for an attachment's file (images get CDN view + thumb).
+export const getTaskAttachmentFile = async (
+  attachmentId: string,
+  token?: string
+): Promise<{ url: string; thumb_url: string | null }> => {
+  const response = await apiClient.get<{ url: string; thumb_url: string | null }>(
+    `/tasks/attachments/${attachmentId}/file`,
+    authHeaders(token)
+  );
+  return response.data;
+};
+
+export const getProjectTaskCards = async (projectId: string, token?: string): Promise<ProjectTaskCard[]> => {
+  const response = await apiClient.get<ProjectTaskCard[]>(`/tasks/project/${projectId}/cards`, authHeaders(token));
   return response.data;
 };
 
@@ -2615,19 +2898,6 @@ export const getShareLinks = async (token?: string): Promise<ShareLink[]> => {
   return response.data;
 };
 
-// PL7 — one tap re-plans the incomplete tail of a board onto today.
-export const carryOverPlannerTodos = async (
-  boardId: string,
-  token?: string
-): Promise<{ moved: number; date: string }> => {
-  const response = await apiClient.post<{ moved: number; date: string }>(
-    `/planner/boards/${boardId}/carry-over`,
-    {},
-    authHeaders(token)
-  );
-  return response.data;
-};
-
 // ---------------------------------------------------------------------------
 // Link pages (Linktree-style public profile)
 // ---------------------------------------------------------------------------
@@ -2640,6 +2910,7 @@ export interface LinkPageItem {
   icon?: string | null;
   description?: string | null;
   image_url?: string | null;
+  display?: string | null;
   sort_order: number;
   active?: boolean;
   clicks_count?: number;
@@ -2689,6 +2960,7 @@ export interface LinkPageItemInput {
   icon?: string;
   description?: string;
   image_url?: string | null;
+  display?: string | null;
   sort_order?: number;
   active?: boolean;
 }
@@ -2711,7 +2983,7 @@ export interface PublicLinkPage {
   template: string;
   background_image_url?: string | null;
   background_overlay?: number | null;
-  items: { id: string; label: string; url: string; item_type?: string; icon?: string | null; description?: string | null; image_url?: string | null; sort_order: number }[];
+  items: { id: string; label: string; url: string; item_type?: string; icon?: string | null; description?: string | null; image_url?: string | null; display?: string | null; sort_order: number }[];
 }
 
 export const getMyLinkPages = async (token?: string): Promise<LinkPage[]> => {

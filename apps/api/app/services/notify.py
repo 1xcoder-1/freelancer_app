@@ -28,9 +28,16 @@ async def push_notification(
     body: Optional[str] = None,
     link: Optional[str] = None,
     occurred_at: Optional[datetime] = None,
+    dedupe_key: Optional[str] = None,
 ) -> None:
     """Append one inbox row inside a SAVEPOINT so a notification glitch rolls
-    back only itself — never the business write it rode along with."""
+    back only itself — never the business write it rode along with.
+
+    ``dedupe_key`` marks a row as idempotent for state-driven producers (the
+    hourly task scan): the unique partial index on it makes a concurrent or
+    repeated write for the same key a no-op instead of a duplicate alert.
+    Transition-driven producers (invoice paid/overdue, contract signed) leave
+    it NULL — their trigger only fires once by construction."""
     try:
         async with db.begin_nested():
             db.add(
@@ -40,6 +47,7 @@ async def push_notification(
                     title=title,
                     body=body,
                     link=link,
+                    dedupe_key=dedupe_key,
                     occurred_at=occurred_at or datetime.utcnow(),
                 )
             )

@@ -1,28 +1,309 @@
 "use client";
 
-import React, { useState } from "react";
-import { z } from "zod";
+import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useAuth } from "@clerk/nextjs";
 import { validateOrToast } from "@/lib/validation";
+import { z } from "zod";
 import { confirmDialog } from "@/components/common/ConfirmDialog";
 import {
   ProfileField,
   UnderlineInput,
+  UnderlineSelect,
   UnderlineTextarea,
 } from "./profile-fields";
-import { ListHeader, EmptyList, ItemCard, Chip, ListDialog } from "./profile-list";
-import { GraduationCap } from "lucide-react";
-import type { ProfileEducation } from "@/lib/api";
+import {
+  Pencil,
+  Trash2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Paperclip,
+  Calendar,
+  Loader2,
+  Plus,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { compressImage } from "@/lib/image-compressor";
+import { uploadFileToCloudinary, type ProfileEducation } from "@/lib/api";
+import { toast } from "sonner";
+import { logHandledError } from "@/lib/log-error";
+
+const EDUCATION_LEVELS = [
+  { value: "HIGH SCHOOL", label: "HIGH SCHOOL" },
+  { value: "DIPLOMA", label: "DIPLOMA" },
+  { value: "BACHELORS", label: "BACHELORS" },
+  { value: "MASTERS", label: "MASTERS" },
+  { value: "PHD", label: "PHD" },
+  { value: "OTHER", label: "OTHER" },
+];
+
+const GRADING_SYSTEMS = [
+  { value: "CGPA", label: "CGPA" },
+  { value: "PERCENTAGE", label: "PERCENTAGE" },
+  { value: "GRADE", label: "GRADE" },
+  { value: "NO GRADE", label: "NO GRADE" },
+];
 
 const EMPTY: ProfileEducation = {
   id: "",
   institution: "",
+  education_level: "BACHELORS",
   degree: "",
   field_of_study: "",
+  grading_system: "CGPA",
+  grade: "",
+  current: false,
   start_year: "",
   end_year: "",
-  grade: "",
+  start_date: "",
+  end_date: "",
   description: "",
+  attachments: [],
 };
+
+export function getOptimizedImageUrl(url?: string, width = 600): string {
+  if (!url) return "";
+  if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+    return url.replace("/upload/", `/upload/f_auto,q_auto,w_${width}/`);
+  }
+  return url;
+}
+
+function parseCustomDate(str: string): Date | null {
+  if (!str) return null;
+  const cleaned = str.replace(/\s+/g, "");
+  const match = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    const year = parseInt(match[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+  return null;
+}
+
+function formatToInputDate(d: Date): string {
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day} / ${month} / ${year}`;
+}
+
+function formatDisplayDateOrYear(str?: string): string {
+  if (!str) return "";
+  const d = parseCustomDate(str);
+  if (d) {
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  }
+  return str;
+}
+
+function formatEducationTimeline(
+  start?: string,
+  end?: string,
+  current?: boolean
+): string {
+  if (!start && !end) return "";
+  const startText = formatDisplayDateOrYear(start);
+  const endText = current ? "Present" : formatDisplayDateOrYear(end) || "Present";
+  if (startText && endText) return `${startText} - ${endText}`;
+  return startText || endText || "";
+}
+
+function DatePickerInput({
+  value,
+  onChange,
+  placeholder = "dd / mm / yyyy",
+  disabled = false,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const parsedDate = parseCustomDate(value);
+  const [viewDate, setViewDate] = useState<Date>(parsedDate || new Date());
+
+  useEffect(() => {
+    if (open) {
+      const p = parseCustomDate(value);
+      if (p) setViewDate(p);
+    }
+  }, [open, value]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
+
+  const prevMonth = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+  };
+
+  const nextMonth = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+  };
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDayOfMonth = new Date(year, month, 1);
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+
+  let firstDayIndex = firstDayOfMonth.getDay() - 1;
+  if (firstDayIndex === -1) firstDayIndex = 6;
+
+  const totalDaysCurrent = lastDayOfMonth.getDate();
+  const prevMonthLastDay = new Date(year, month, 0).getDate();
+
+  const days: Array<{
+    dayNumber: number;
+    isCurrentMonth: boolean;
+    date: Date;
+  }> = [];
+
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const d = prevMonthLastDay - i;
+    days.push({
+      dayNumber: d,
+      isCurrentMonth: false,
+      date: new Date(year, month - 1, d),
+    });
+  }
+
+  for (let i = 1; i <= totalDaysCurrent; i++) {
+    days.push({
+      dayNumber: i,
+      isCurrentMonth: true,
+      date: new Date(year, month, i),
+    });
+  }
+
+  const remaining = (7 - (days.length % 7)) % 7;
+  for (let i = 1; i <= remaining; i++) {
+    days.push({
+      dayNumber: i,
+      isCurrentMonth: false,
+      date: new Date(year, month + 1, i),
+    });
+  }
+
+  const monthName = viewDate.toLocaleDateString("en-US", { month: "long" });
+
+  const handleSelectDay = (date: Date) => {
+    onChange(formatToInputDate(date));
+    setOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        className="relative cursor-pointer"
+      >
+        <UnderlineInput
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="pr-7 cursor-pointer"
+        />
+        <Calendar className="w-4 h-4 text-neutral-400 absolute right-1 top-2.5 pointer-events-none" />
+      </div>
+
+      <AnimatePresence>
+        {open && !disabled && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 sm:right-0 sm:left-auto mt-2 z-[200] w-[290px] sm:w-[310px] rounded-2xl border border-neutral-800 bg-[#141416] p-4 shadow-2xl shadow-black/95 select-none"
+          >
+            <div className="flex items-center justify-between pb-3 mb-2 border-b border-neutral-800/60">
+              <button
+                type="button"
+                onClick={prevMonth}
+                className="w-7 h-7 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-neutral-800/80 cursor-pointer text-sm font-semibold text-neutral-100 transition-colors">
+                <span>{`${monthName} ${year}`}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+              </div>
+
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="w-7 h-7 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 mb-2 text-center">
+              {["M", "T", "W", "T", "F", "S", "S"].map((dayName, idx) => (
+                <span
+                  key={idx}
+                  className="text-xs font-medium text-neutral-400 py-1"
+                >
+                  {dayName}
+                </span>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-y-1 text-center">
+              {days.map((item, idx) => {
+                const isSelected =
+                  parsedDate &&
+                  parsedDate.getDate() === item.date.getDate() &&
+                  parsedDate.getMonth() === item.date.getMonth() &&
+                  parsedDate.getFullYear() === item.date.getFullYear();
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectDay(item.date)}
+                    className={`w-8 h-8 mx-auto flex items-center justify-center text-xs rounded-full transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-[#0070f3] text-white font-bold shadow-md shadow-blue-500/30"
+                        : item.isCurrentMonth
+                        ? "text-neutral-100 hover:bg-neutral-800 hover:text-white font-medium"
+                        : "text-neutral-600 hover:bg-neutral-800/50 hover:text-neutral-400"
+                    }`}
+                  >
+                    {item.dayNumber}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export function EducationTab({
   items,
@@ -33,32 +314,114 @@ export function EducationTab({
   onUpsert: (item: ProfileEducation) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
+  const { getToken } = useAuth();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState<ProfileEducation>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(items[0]?.id || null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const openNew = () => {
     setDraft({ ...EMPTY, id: crypto.randomUUID() });
-    setOpen(true);
+    setDrawerOpen(true);
   };
 
   const openEdit = (item: ProfileEducation) => {
-    setDraft({ ...item });
-    setOpen(true);
+    setDraft({
+      ...item,
+      education_level: item.education_level || "BACHELORS",
+      grading_system: item.grading_system || "CGPA",
+      start_date: item.start_date || item.start_year || "",
+      end_date: item.end_date || item.end_year || "",
+      current: item.current ?? false,
+      attachments: item.attachments || [],
+    });
+    setDrawerOpen(true);
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const currentAttachments = draft.attachments || [];
+    if (currentAttachments.length >= 2) {
+      toast.error("Maximum 2 attachments allowed.");
+      return;
+    }
+
+    const availableSlots = 2 - currentAttachments.length;
+    const filesToUpload = Array.from(files).slice(0, availableSlots);
+
+    setUploadingImage(true);
+    try {
+      const token = (await getToken()) || undefined;
+      const uploadedUrls: string[] = [];
+
+      for (const file of filesToUpload) {
+        if (!file.type.startsWith("image/")) {
+          toast.error(`${file.name} is not an image file.`);
+          continue;
+        }
+        const { blob, fileName } = await compressImage(file, 900, 0.82);
+        const res = await uploadFileToCloudinary(blob, "uploads", token, fileName);
+        if (res.url) {
+          uploadedUrls.push(res.url);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setDraft((prev) => ({
+          ...prev,
+          attachments: [...(prev.attachments || []), ...uploadedUrls],
+        }));
+        toast.success("Attachment uploaded successfully");
+      }
+    } catch (err) {
+      logHandledError("Attachment upload failed:", err);
+      toast.error("Failed to upload attachment. Please try again.");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = (indexToRemove: number) => {
+    setDraft((prev) => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, idx) => idx !== indexToRemove),
+    }));
   };
 
   const save = async () => {
-    if (!validateOrToast(
-      z.object({
-        institution: z.string().trim().min(1, "Institution is required"),
-        degree: z.string().trim().min(1, "Degree is required"),
-      }),
-      { institution: draft.institution, degree: draft.degree }
-    )) return;
+    if (
+      !validateOrToast(
+        z.object({
+          institution: z.string().trim().min(1, "Institution name is required"),
+          education_level: z.string().trim().min(1, "Education level is required"),
+        }),
+        {
+          institution: draft.institution,
+          education_level: draft.education_level || "BACHELORS",
+        }
+      )
+    )
+      return;
+
     setSaving(true);
     try {
-      await onUpsert(draft);
-      setOpen(false);
+      const payload: ProfileEducation = {
+        ...draft,
+        start_year: draft.start_date || draft.start_year,
+        end_year: draft.current ? "Present" : draft.end_date || draft.end_year,
+      };
+      await onUpsert(payload);
+      setDrawerOpen(false);
+      setExpandedId(draft.id);
     } finally {
       setSaving(false);
     }
@@ -67,7 +430,9 @@ export function EducationTab({
   const remove = async (item: ProfileEducation) => {
     const ok = await confirmDialog({
       title: "Delete education",
-      message: `Remove "${item.degree}" at ${item.institution}? This cannot be undone.`,
+      message: `Remove "${item.degree || item.education_level || "Education"}" at ${
+        item.institution
+      }? This cannot be undone.`,
       confirmLabel: "Delete",
       danger: true,
     });
@@ -75,101 +440,468 @@ export function EducationTab({
     await onDelete(item.id);
   };
 
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
   return (
-    <div>
-      <ListHeader count={items.length} addLabel="Add Education" onAdd={openNew} />
+    <div className="space-y-6">
+      {/* Top Header Row matching Experience & Certifications */}
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-neutral-400 font-normal">
+          Add your academic background and qualifications.
+        </p>
+        <button
+          type="button"
+          onClick={openNew}
+          className="h-8.5 px-4 rounded-full bg-[#1c1c1f] hover:bg-[#27272a] border border-neutral-800 text-neutral-200 hover:text-white text-xs sm:text-[13px] font-medium transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5 text-neutral-300" />
+          Add Education
+        </button>
+      </div>
 
-      <ListDialog
-        open={open}
-        title={draft.id && items.some((i) => i.id === draft.id) ? "Edit Education" : "Add Education"}
-        saving={saving}
-        onClose={() => setOpen(false)}
-        onSave={() => void save()}
-      >
-        <ProfileField label="Institution" required>
-          <UnderlineInput
-            value={draft.institution}
-            onChange={(e) => setDraft({ ...draft, institution: e.target.value })}
-            placeholder="e.g. IIT Delhi"
-          />
-        </ProfileField>
-
-        <ProfileField label="Degree" required>
-          <UnderlineInput
-            value={draft.degree}
-            onChange={(e) => setDraft({ ...draft, degree: e.target.value })}
-            placeholder="e.g. B.Tech"
-          />
-        </ProfileField>
-
-        <ProfileField label="Field of Study">
-          <UnderlineInput
-            value={draft.field_of_study}
-            onChange={(e) => setDraft({ ...draft, field_of_study: e.target.value })}
-            placeholder="e.g. Computer Science"
-          />
-        </ProfileField>
-
-        <ProfileField label="Grade">
-          <UnderlineInput
-            value={draft.grade}
-            onChange={(e) => setDraft({ ...draft, grade: e.target.value })}
-            placeholder="e.g. 8.7 CGPA"
-          />
-        </ProfileField>
-
-        <ProfileField label="Start Year">
-          <UnderlineInput
-            value={draft.start_year}
-            onChange={(e) => setDraft({ ...draft, start_year: e.target.value })}
-            placeholder="e.g. 2021"
-          />
-        </ProfileField>
-
-        <ProfileField label="End Year">
-          <UnderlineInput
-            value={draft.end_year}
-            onChange={(e) => setDraft({ ...draft, end_year: e.target.value })}
-            placeholder="e.g. 2025"
-          />
-        </ProfileField>
-
-        <ProfileField label="Description" className="sm:col-span-2">
-          <UnderlineTextarea
-            value={draft.description}
-            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            placeholder="Societies, coursework, achievements…"
-          />
-        </ProfileField>
-      </ListDialog>
-
+      {/* Education List Cards */}
       {items.length === 0 ? (
-        <EmptyList hint="Add your degrees, schools and study periods." />
+        <div className="rounded-2xl border border-dashed border-neutral-800/80 bg-[#121214]/40 px-6 py-12 text-center">
+          <p className="text-sm text-neutral-400 font-normal">No education added</p>
+        </div>
       ) : (
-        <div className="space-y-2.5">
-          {items.map((item) => (
-            <ItemCard
-              key={item.id || item.institution}
-              icon={
-                <div className="w-9 h-9 rounded-xl bg-surface-elevated/90 border border-line flex items-center justify-center text-muted group-hover:text-indigo-400 transition-colors shrink-0">
-                  <GraduationCap className="w-4 h-4" />
+        <div className="space-y-4">
+          {items.map((item) => {
+            const isExpanded = expandedId === item.id;
+            const instInitial = (item.institution || "E").charAt(0).toUpperCase();
+            const timelineText = formatEducationTimeline(
+              item.start_date || item.start_year,
+              item.end_date || item.end_year,
+              item.current
+            );
+            const degreeTitle =
+              item.degree ||
+              item.education_level ||
+              "Education";
+
+            return (
+              <div
+                key={item.id}
+                onClick={() => toggleExpand(item.id)}
+                className="rounded-2xl border border-dashed border-neutral-800 hover:border-neutral-700 bg-transparent p-5 sm:p-6 transition-colors cursor-pointer select-none"
+              >
+                {/* Header row */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-4 flex-1 min-w-0">
+                    {/* Badge */}
+                    <div className="w-12 h-12 rounded-xl bg-[#1c1c1f] border border-neutral-800 flex items-center justify-center font-bold text-lg text-white shrink-0 shadow-inner">
+                      {instInitial}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-base font-semibold text-white tracking-tight truncate">
+                        {degreeTitle}
+                        {item.field_of_study && ` in ${item.field_of_study}`}
+                      </h4>
+                      <p className="text-xs sm:text-[13px] text-neutral-300 font-medium mt-0.5 truncate">
+                        {item.institution}
+                        {item.education_level && ` · ${item.education_level}`}
+                      </p>
+                      {timelineText && (
+                        <p className="text-xs sm:text-[13px] text-neutral-400 font-normal mt-1">
+                          {timelineText}
+                        </p>
+                      )}
+                      {item.grade && item.grading_system !== "NO GRADE" && (
+                        <p className="text-xs sm:text-[13px] text-neutral-400 font-normal mt-0.5">
+                          Grade: {item.grading_system ? `${item.grading_system} ` : ""}{item.grade}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions on right */}
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(item);
+                      }}
+                      className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void remove(item);
+                      }}
+                      className="p-1.5 text-[#f43f5e] hover:text-[#fb7185] transition-colors cursor-pointer"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpand(item.id);
+                      }}
+                      className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                      title={isExpanded ? "Collapse" : "Expand"}
+                    >
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
-              }
-              title={item.degree + (item.field_of_study ? ` in ${item.field_of_study}` : "")}
-              subtitle={item.institution}
-              meta={[item.start_year, item.end_year].filter(Boolean).join(" — ")}
-              description={item.description}
-              badges={
-                item.grade ? (
-                  <Chip variant="success">Grade: {item.grade}</Chip>
-                ) : undefined
-              }
-              onEdit={() => openEdit(item)}
-              onDelete={() => void remove(item)}
-            />
-          ))}
+
+                {/* Expanded content */}
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-4 space-y-4">
+                        {item.description && (
+                          <p className="text-xs sm:text-[13px] text-neutral-300 font-normal leading-relaxed">
+                            {item.description}
+                          </p>
+                        )}
+
+                        {item.attachments && item.attachments.length > 0 && (
+                          <div className="pt-1">
+                            <div className="flex flex-wrap gap-3">
+                              {item.attachments.map((imgUrl, idx) => (
+                                <a
+                                  key={idx}
+                                  href={imgUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="group relative block rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900 shadow-md hover:border-neutral-600 transition-all"
+                                >
+                                  <img
+                                    src={getOptimizedImageUrl(imgUrl, 600)}
+                                    alt="Attachment"
+                                    loading="lazy"
+                                    decoding="async"
+                                    className="w-36 h-22 sm:w-40 sm:h-24 object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {/* Slide-Over Drawer matching Image 1 & 2 portaled to document.body */}
+      {mounted &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {drawerOpen && (
+              <div className="fixed inset-0 z-[999] overflow-hidden flex justify-end">
+                {/* Dark semi-transparent backdrop */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => !saving && setDrawerOpen(false)}
+                  className="fixed inset-0 bg-black/80 backdrop-blur-xs cursor-pointer"
+                />
+
+                {/* Slide-over panel container */}
+                <motion.div
+                  initial={{ x: "100%" }}
+                  animate={{ x: 0 }}
+                  exit={{ x: "100%" }}
+                  transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                  className="relative z-10 w-full sm:max-w-2xl bg-[#111113] border-l border-neutral-800/80 shadow-2xl flex flex-col justify-between h-full overflow-hidden"
+                >
+                  {/* Drawer Top Header */}
+                  <div className="flex items-center justify-between p-6 sm:p-7 border-b border-neutral-800/80 shrink-0">
+                    <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                      {draft.id && items.some((i) => i.id === draft.id)
+                        ? "Edit Education"
+                        : "Add Education"}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerOpen(false)}
+                      disabled={saving}
+                      className="w-8 h-8 rounded-full bg-neutral-800/80 hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Drawer Form Body */}
+                  <div className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-1 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {/* Row 1: Institution Name & Education Level */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                      <ProfileField label="Institution Name" required>
+                        <div className="relative">
+                          <UnderlineInput
+                            value={draft.institution}
+                            onChange={(e) =>
+                              setDraft({ ...draft, institution: e.target.value })
+                            }
+                            placeholder="Ex: Stanford University"
+                            className="pr-6"
+                          />
+                          <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-1 top-3 pointer-events-none" />
+                        </div>
+                      </ProfileField>
+
+                      <ProfileField label="Education Level" required>
+                        <UnderlineSelect
+                          options={EDUCATION_LEVELS}
+                          value={draft.education_level || "BACHELORS"}
+                          onChange={(e) =>
+                            setDraft({ ...draft, education_level: e.target.value })
+                          }
+                        />
+                      </ProfileField>
+                    </div>
+
+                    {/* Row 2: Degree & Field of Study */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                      <ProfileField label="Degree">
+                        <div className="relative">
+                          <UnderlineInput
+                            value={draft.degree}
+                            onChange={(e) => setDraft({ ...draft, degree: e.target.value })}
+                            placeholder="Ex: Bachelor of Science"
+                            className="pr-6"
+                          />
+                          <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-1 top-3 pointer-events-none" />
+                        </div>
+                      </ProfileField>
+
+                      <ProfileField label="Field of Study">
+                        <div className="relative">
+                          <UnderlineInput
+                            value={draft.field_of_study}
+                            onChange={(e) =>
+                              setDraft({ ...draft, field_of_study: e.target.value })
+                            }
+                            placeholder="Ex: Computer Science"
+                            className="pr-6"
+                          />
+                          <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-1 top-3 pointer-events-none" />
+                        </div>
+                      </ProfileField>
+                    </div>
+
+                    {/* Row 3: Grading System & Grade Value */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                      <ProfileField label="Grading System" required>
+                        <UnderlineSelect
+                          options={GRADING_SYSTEMS}
+                          value={draft.grading_system || "CGPA"}
+                          onChange={(e) =>
+                            setDraft({ ...draft, grading_system: e.target.value })
+                          }
+                        />
+                      </ProfileField>
+
+                      <ProfileField label="Grade Value">
+                        <UnderlineInput
+                          value={draft.grade}
+                          onChange={(e) => setDraft({ ...draft, grade: e.target.value })}
+                          disabled={draft.grading_system === "NO GRADE"}
+                          placeholder={
+                            draft.grading_system === "NO GRADE"
+                              ? "N/A"
+                              : "Ex: 8.5 or 92"
+                          }
+                        />
+                      </ProfileField>
+                    </div>
+
+                    {/* Row 4: Currently studying toggle */}
+                    <div className="pt-1">
+                      <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={draft.current}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              current: !draft.current,
+                              end_date: !draft.current ? "" : draft.end_date,
+                            })
+                          }
+                          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 cursor-pointer ${
+                            draft.current
+                              ? "bg-amber-600"
+                              : "bg-neutral-800 border border-neutral-700"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                              draft.current ? "translate-x-5" : ""
+                            }`}
+                          />
+                        </button>
+                        <span className="text-xs sm:text-sm font-normal text-neutral-200">
+                          I am currently studying here
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Row 5: Start Date & End Date with DatePickerInput */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                      <ProfileField label="Start Date" required>
+                        <DatePickerInput
+                          value={draft.start_date || ""}
+                          onChange={(val) => setDraft({ ...draft, start_date: val })}
+                          placeholder="dd / mm / yyyy"
+                        />
+                      </ProfileField>
+
+                      <ProfileField label="End Date" required={!draft.current}>
+                        <DatePickerInput
+                          value={draft.current ? "Present" : draft.end_date || ""}
+                          onChange={(val) => setDraft({ ...draft, end_date: val })}
+                          placeholder="dd / mm / yyyy"
+                          disabled={draft.current}
+                        />
+                      </ProfileField>
+                    </div>
+
+                    {/* Row 6: Description */}
+                    <ProfileField label="Description">
+                      <UnderlineTextarea
+                        rows={3}
+                        value={draft.description}
+                        onChange={(e) =>
+                          setDraft({ ...draft, description: e.target.value })
+                        }
+                        placeholder="Describe your studies, awards, or extracurriculars..."
+                      />
+                    </ProfileField>
+
+                    {/* Row 7: Attachments (Max 2) with Drag & Drop Upload */}
+                    <div className="space-y-3 pt-1">
+                      <label className="text-xs sm:text-[13px] font-medium text-neutral-200 block">
+                        Attachments (Max 2)
+                      </label>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* Drag & Drop Upload box */}
+                        {(draft.attachments || []).length < 2 && (
+                          <div
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              setIsDragging(true);
+                            }}
+                            onDragLeave={() => setIsDragging(false)}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setIsDragging(false);
+                              void handleFileUpload(e.dataTransfer.files);
+                            }}
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`w-36 h-22 sm:w-40 sm:h-24 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                              isDragging
+                                ? "border-amber-500 bg-amber-500/10 text-amber-300"
+                                : "border-neutral-700/80 hover:border-neutral-500 bg-neutral-900/40 hover:bg-neutral-900/70 text-neutral-400 hover:text-neutral-200"
+                            }`}
+                          >
+                            {uploadingImage ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                            ) : (
+                              <Paperclip className="w-4 h-4 text-neutral-400" />
+                            )}
+                            <span className="text-xs font-normal">
+                              {uploadingImage ? "Uploading…" : "Upload File"}
+                            </span>
+                          </div>
+                        )}
+
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => void handleFileUpload(e.target.files)}
+                        />
+
+                        {/* Uploaded thumbnails */}
+                        {(draft.attachments || []).map((imgUrl, idx) => (
+                          <div
+                            key={idx}
+                            className="relative w-36 h-22 sm:w-40 sm:h-24 rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900 group"
+                          >
+                            <img
+                              src={getOptimizedImageUrl(imgUrl, 400)}
+                              alt="Preview"
+                              loading="lazy"
+                              decoding="async"
+                              className="w-full h-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(idx)}
+                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 hover:bg-rose-950 text-white hover:text-rose-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Drawer Footer Actions */}
+                  <div className="p-6 sm:p-7 border-t border-neutral-800/80 flex items-center justify-end gap-3 bg-[#111113] shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setDrawerOpen(false)}
+                      disabled={saving}
+                      className="h-9 px-5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white text-xs sm:text-[13px] font-medium transition-all cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void save()}
+                      disabled={saving}
+                      className="h-9 px-6 rounded-full bg-[#0a381e] hover:bg-[#0f4e2b] border border-[#1b5232]/50 text-[#22c55e] hover:text-[#4ade80] text-xs sm:text-[13px] font-semibold tracking-wide transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {draft.id && items.some((i) => i.id === draft.id)
+                        ? "Save"
+                        : "Create"}
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </div>
   );
 }

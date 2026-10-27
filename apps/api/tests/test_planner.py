@@ -35,10 +35,17 @@ async def test_planner_requires_auth(client):
         assert res.status_code == 401
 
 
-async def test_planner_list_starts_empty(client):
+async def test_planner_list_starts_with_default_board(client):
+    """Workspace provisioning seeds one blank board, so a brand-new account
+    never opens an empty Planner."""
     res = await client.get("/api/v1/planner/boards")
     assert res.status_code == 200, res.text
-    assert res.json() == []
+    boards = res.json()
+    assert len(boards) == 1
+    assert boards[0]["name"] == "Untitled board"
+    full = await _full(client, boards[0]["id"])
+    assert full["elements"] == []
+    assert full["files"] == {}
 
 
 async def test_planner_create_then_open(client):
@@ -134,9 +141,10 @@ async def test_planner_rename_and_delete(client):
     await client.post(f"/api/v1/planner/boards/{bid}/todos", json={"text": "cascade me"})
     gone = await client.delete(f"/api/v1/planner/boards/{bid}")
     assert gone.status_code == 204
-    # Board and its todos vanish together
+    # Board and its todos vanish together; the provisioned default remains
     assert (await client.get(f"/api/v1/planner/boards/{bid}")).status_code == 404
-    assert (await client.get("/api/v1/planner/boards")).json() == []
+    remaining = (await client.get("/api/v1/planner/boards")).json()
+    assert all(b["id"] != bid for b in remaining)
 
 
 async def test_planner_is_workspace_isolated(client, client_b):
@@ -145,8 +153,9 @@ async def test_planner_is_workspace_isolated(client, client_b):
     todo_id = todo.json()["id"]
     await _save(client, bid, 0, elements=[{"id": "mine", "type": "text"}])
 
-    # Other tenant can't see the board at all
-    assert (await client_b.get("/api/v1/planner/boards")).json() == []
+    # Other tenant can't see the board at all (only their own default board)
+    other = (await client_b.get("/api/v1/planner/boards")).json()
+    assert all(b["id"] != bid for b in other)
     assert (await client_b.get(f"/api/v1/planner/boards/{bid}")).status_code == 404
 
     # Cross-tenant id mutation/deletion is a 404, never an edit

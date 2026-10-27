@@ -16,7 +16,7 @@ export { TechIcon };
  */
 
 const underline =
-  "w-full bg-transparent border-0 border-b border-line py-2 text-sm text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors disabled:opacity-50";
+  "w-full bg-transparent border-0 border-b border-neutral-800 focus:border-amber-500 py-2 sm:py-2.5 text-sm sm:text-[15px] text-neutral-100 placeholder:text-neutral-600 focus:outline-none transition-colors duration-150 disabled:opacity-50";
 
 export function ProfileField({
   label,
@@ -31,9 +31,9 @@ export function ProfileField({
 }) {
   return (
     <div className={className}>
-      <label className="text-xs font-semibold text-fg block mb-0.5">
+      <label className="text-xs sm:text-[13px] font-medium text-neutral-200 block mb-1 tracking-tight">
         {label}
-        {required && <span className="text-accent ml-0.5">*</span>}
+        {required && <span className="text-red-500 font-bold ml-1">*</span>}
       </label>
       {children}
     </div>
@@ -43,7 +43,7 @@ export function ProfileField({
 export function UnderlineInput(
   props: React.InputHTMLAttributes<HTMLInputElement>
 ) {
-  return <input {...props} className={`${underline} ${props.className ?? ""}`} />;
+  return <input {...props} className={cn(underline, props.className)} />;
 }
 
 export function UnderlineTextarea(
@@ -53,7 +53,7 @@ export function UnderlineTextarea(
     <textarea
       rows={2}
       {...props}
-      className={`${underline} resize-none ${props.className ?? ""}`}
+      className={cn(underline, "resize-none", props.className)}
     />
   );
 }
@@ -124,26 +124,6 @@ export function UnderlineSelect({
     }
   };
 
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    if (!isOpen) setSearch("");
-  }, [isOpen]);
-
-  const filteredOptions = useMemo(() => {
-    if (!search.trim()) return normalizedOptions;
-    const q = search.trim().toLowerCase();
-    return normalizedOptions.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q)
-    );
-  }, [normalizedOptions, search]);
-
-  const hasExactSearchMatch = normalizedOptions.some(
-    (o) =>
-      o.label.toLowerCase() === search.trim().toLowerCase() ||
-      o.value.toLowerCase() === search.trim().toLowerCase()
-  );
-
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
       <button
@@ -152,19 +132,19 @@ export function UnderlineSelect({
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         className={cn(
-          "w-full bg-transparent border-0 border-b border-line py-2 text-sm text-left transition-colors",
-          "flex items-center justify-between gap-2 cursor-pointer focus:outline-none focus:border-accent",
-          isOpen && "border-accent",
-          disabled ? "opacity-50 cursor-not-allowed pointer-events-none" : "hover:border-line-strong"
+          "w-full bg-transparent border-0 border-b border-neutral-800 py-2 sm:py-2.5 text-sm sm:text-[15px] text-left transition-colors",
+          "flex items-center justify-between gap-2 cursor-pointer focus:outline-none focus:border-amber-500",
+          isOpen && "border-amber-500",
+          disabled ? "opacity-50 cursor-not-allowed pointer-events-none" : "hover:border-neutral-700"
         )}
       >
-        <span className={cn("truncate", selectedOption ? "text-fg font-medium" : "text-muted/60")}>
+        <span className={cn("truncate", selectedOption ? "text-neutral-100 font-normal" : "text-neutral-600")}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <ChevronDown
           className={cn(
-            "w-3.5 h-3.5 text-muted shrink-0 transition-transform duration-200",
-            isOpen && "rotate-180 text-accent"
+            "w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200",
+            isOpen && "rotate-180 text-amber-500"
           )}
         />
       </button>
@@ -177,25 +157,12 @@ export function UnderlineSelect({
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
             className={cn(
-              "absolute top-full mt-1.5 z-50 min-w-full max-h-64 overflow-y-auto rounded-xl",
-              "border border-line bg-card/95 backdrop-blur-md p-1.5 shadow-2xl",
-              "scrollbar-thin scrollbar-thumb-line-strong scrollbar-track-transparent"
+              "absolute top-full mt-2 z-[100] min-w-full max-h-60 overflow-y-auto rounded-xl",
+              "border border-neutral-800 bg-[#141416] p-1.5 shadow-2xl shadow-black/90",
+              "scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             )}
           >
-            {normalizedOptions.length > 6 && (
-              <div className="p-1 mb-1 border-b border-line/40 sticky top-0 bg-card/95 backdrop-blur-md z-10">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter or type custom..."
-                  className="w-full bg-surface/60 border border-line rounded-lg px-2.5 py-1 text-xs text-fg placeholder:text-muted/60 focus:outline-none focus:border-accent"
-                  autoFocus
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            )}
-            {filteredOptions.map((option) => {
+            {normalizedOptions.map((option) => {
               const isSelected = option.value === stringValue;
               return (
                 <button
@@ -206,27 +173,17 @@ export function UnderlineSelect({
                     "w-full px-3 py-2 rounded-lg text-xs sm:text-sm font-medium text-left transition-all",
                     "flex items-center justify-between gap-2 cursor-pointer",
                     isSelected
-                      ? "bg-accent/10 text-accent font-semibold"
-                      : "text-fg hover:bg-surface/80 hover:text-fg"
+                      ? "bg-[#2d1b0e] text-amber-500 font-semibold"
+                      : "text-neutral-200 hover:bg-neutral-800/70 hover:text-white"
                   )}
                 >
                   <span className="truncate">{option.label}</span>
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   )}
                 </button>
               );
             })}
-            {search.trim() && !hasExactSearchMatch && (
-              <button
-                type="button"
-                onClick={() => handleSelect(search.trim())}
-                className="w-full px-3 py-2 rounded-lg text-xs font-medium text-accent hover:bg-accent/10 transition-all flex items-center justify-between gap-2 cursor-pointer text-left border-t border-line/40 mt-1"
-              >
-                <span className="truncate">Set as: "{search.trim()}"</span>
-                <Plus className="w-3.5 h-3.5 shrink-0" />
-              </button>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -236,7 +193,7 @@ export function UnderlineSelect({
 
 export function ProfileSectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="font-display text-base sm:text-lg font-medium tracking-wide text-fg pt-2">
+    <h3 className="text-base sm:text-lg font-semibold tracking-tight text-neutral-100 pt-3 pb-1">
       {children}
     </h3>
   );

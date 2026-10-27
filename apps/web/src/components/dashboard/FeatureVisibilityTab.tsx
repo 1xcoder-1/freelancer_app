@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { FEATURES } from "@/lib/features";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 
@@ -62,29 +63,68 @@ export function FeatureVisibilityTab() {
           {features.map((feature) => {
             const visible = isVisible(feature.key);
             const Icon = feature.icon;
+            // Sub-items with their own flagKey (Planner → Task Management)
+            // get their own row under the parent; the rest follow the
+            // feature's toggle and need no row of their own.
+            const gatedSubs = feature.subItems?.filter((s) => s.flagKey) ?? [];
             return (
-              <div key={feature.key} className="flex items-center gap-3 px-3.5 py-2.5">
-                <Icon
-                  className={`w-4 h-4 shrink-0 ${visible ? "text-accent" : "text-faint"}`}
-                />
-                <span
-                  className={`flex-1 min-w-0 truncate text-sm ${
-                    visible ? "text-fg" : "text-muted"
-                  }`}
-                >
-                  {labelFor(feature.key, feature.title)}
-                </span>
-                {!visible && (
-                  <span className="text-[10px] font-mono uppercase tracking-wide text-warn">
-                    Hidden
+              <Fragment key={feature.key}>
+                <div className="flex items-center gap-3 px-3.5 py-2.5">
+                  <Icon
+                    className={`w-4 h-4 shrink-0 ${visible ? "text-accent" : "text-faint"}`}
+                  />
+                  <span
+                    className={`flex-1 min-w-0 truncate text-sm ${
+                      visible ? "text-fg" : "text-muted"
+                    }`}
+                  >
+                    {labelFor(feature.key, feature.title)}
                   </span>
-                )}
-                <VisibilityToggle
-                  on={visible}
-                  title={feature.title}
-                  onChange={(next) => void setVisible(feature.key, next)}
-                />
-              </div>
+                  {!visible && (
+                    <span className="text-[10px] font-mono uppercase tracking-wide text-warn">
+                      Hidden
+                    </span>
+                  )}
+                  <VisibilityToggle
+                    on={visible}
+                    title={feature.title}
+                    onChange={(next) => void setVisible(feature.key, next)}
+                  />
+                </div>
+                {gatedSubs.map((sub) => {
+                  const subFlagKey = sub.flagKey;
+                  if (!subFlagKey) return null;
+                  const subVisible = isVisible(subFlagKey);
+                  const SubIcon = sub.icon;
+                  return (
+                    <div
+                      key={sub.id}
+                      className="flex items-center gap-3 py-2.5 pl-9 pr-3.5"
+                    >
+                      <SubIcon
+                        className={`w-4 h-4 shrink-0 ${subVisible ? "text-accent" : "text-faint"}`}
+                      />
+                      <span
+                        className={`flex-1 min-w-0 truncate text-sm ${
+                          subVisible ? "text-fg" : "text-muted"
+                        }`}
+                      >
+                        {labelFor(sub.id, sub.title)}
+                      </span>
+                      {!subVisible && (
+                        <span className="text-[10px] font-mono uppercase tracking-wide text-warn">
+                          Hidden
+                        </span>
+                      )}
+                      <VisibilityToggle
+                        on={subVisible}
+                        title={sub.title}
+                        onChange={(next) => void setVisible(subFlagKey, next)}
+                      />
+                    </div>
+                  );
+                })}
+              </Fragment>
             );
           })}
         </div>

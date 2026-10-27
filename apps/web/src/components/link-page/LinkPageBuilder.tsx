@@ -33,7 +33,7 @@ import {
 } from "@/lib/api";
 import { useLivePreviewPublisher, type PreviewPageState } from "@/hooks/use-live-preview";
 import { invalidateCache } from "@/hooks/use-api-data";
-import { LINK_TEMPLATES, DEFAULT_BACKGROUND_OVERLAY, itemRole } from "@/components/link-page/templates";
+import { LINK_TEMPLATES, DEFAULT_BACKGROUND_OVERLAY, itemRole, isSocialItem } from "@/components/link-page/templates";
 import { ThemePreviewCard } from "@/components/link-page/ThemePreviewCard";
 import { celebrate } from "@/components/common/Celebration";
 import { AvatarUploader } from "@/components/link-page/AvatarUploader";
@@ -58,6 +58,8 @@ interface DraftItem {
   active: boolean;
   showDetails?: boolean;
   isHeading?: boolean;
+  /** Owner's render choice for platform links: "icon" (round social row) or "card" (full bar). */
+  display?: "icon" | "card";
 }
 
 const EMPTY_LINK_ITEM: Omit<DraftItem, "key"> = {
@@ -135,6 +137,7 @@ export function LinkPageBuilder({ mode, page }: { mode: "new" | "edit"; page?: L
         active: i.active !== false,
         showDetails: Boolean(i.icon || i.description),
         isHeading: heading,
+        display: i.display === "icon" || i.display === "card" ? i.display : undefined,
       };
     }) ?? []
   );
@@ -255,6 +258,7 @@ export function LinkPageBuilder({ mode, page }: { mode: "new" | "edit"; page?: L
         item_type: it.isHeading ? "header" : "link",
         icon: it.isHeading ? undefined : it.icon.trim() || undefined,
         description: it.isHeading ? undefined : it.description.trim() || undefined,
+        display: it.isHeading ? undefined : it.display ?? undefined,
         active: it.active,
       }));
 
@@ -346,6 +350,7 @@ export function LinkPageBuilder({ mode, page }: { mode: "new" | "edit"; page?: L
         icon: it.isHeading ? null : it.icon.trim() || null,
         description: it.isHeading ? null : it.description.trim() || null,
         image_url: null,
+        display: it.isHeading ? null : it.display ?? null,
         active: it.active,
       })),
     }),
@@ -595,6 +600,13 @@ export function LinkPageBuilder({ mode, page }: { mode: "new" | "edit"; page?: L
 
                   /* Regular Link Card (Bento/Linktree Standard) */
                   const isPickingIcon = pickingIconKey === it.key;
+                  const autoRoutesToIcon = isSocialItem({
+                    id: it.key,
+                    label: it.label,
+                    url: it.url,
+                    icon: it.icon,
+                    item_type: "link",
+                  });
 
                   return (
                     <Card
@@ -703,8 +715,39 @@ export function LinkPageBuilder({ mode, page }: { mode: "new" | "edit"; page?: L
                           )}
                         </div>
 
-                        {/* Right Actions: Subtitle trigger, reorder, iOS switch, delete */}
+                        {/* Right Actions: display mode, Subtitle trigger, reorder, iOS switch, delete */}
                         <div className="flex items-center gap-2 shrink-0 pt-1">
+                          {/* Icon vs Card — how this platform link renders on the page */}
+                          {(autoRoutesToIcon || it.display) && (
+                            <div
+                              className="inline-flex items-center rounded-lg border border-line bg-surface/60 p-0.5"
+                              title="Show this link as a round icon in the social row, or as a full card"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => updateItem(it.key, { display: "icon" })}
+                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold transition-colors cursor-pointer ${
+                                  it.display !== "card"
+                                    ? "bg-card text-fg shadow-xs border border-line/60"
+                                    : "text-muted hover:text-fg"
+                                }`}
+                              >
+                                Icon
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateItem(it.key, { display: "card" })}
+                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold transition-colors cursor-pointer ${
+                                  it.display === "card"
+                                    ? "bg-card text-fg shadow-xs border border-line/60"
+                                    : "text-muted hover:text-fg"
+                                }`}
+                              >
+                                Card
+                              </button>
+                            </div>
+                          )}
+
                           {/* Subtitle toggle */}
                           <button
                             type="button"

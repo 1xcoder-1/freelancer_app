@@ -22,7 +22,9 @@ export function CommandMenu() {
   const searchableItems = useMemo(
     () =>
       COMMAND_ITEMS.filter(
-        (item) => LOCKED_FEATURES.has(item.feature) || (ready && canSee(item.feature))
+        (item) =>
+          LOCKED_FEATURES.has(item.feature) ||
+          (ready && canSee(item.flagKey ?? item.feature))
       ).map((item) => ({
         title: item.sub ? labelFor(item.sub, item.title) : labelFor(item.feature, item.title),
         href: item.href,

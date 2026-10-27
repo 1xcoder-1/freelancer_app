@@ -15,8 +15,11 @@ export function AppToaster() {
       closeButton
       toastOptions={{
         style: {
+          background: "#141416",
           borderRadius: "12px",
-          border: "1px solid var(--line, rgba(128,128,128,0.2))",
+          border: "1px solid var(--line, rgba(255, 255, 255, 0.08))",
+          boxShadow: "0 14px 36px -4px rgba(0, 0, 0, 0.85)",
+          color: "#f4f4f5",
         },
       }}
     />

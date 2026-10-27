@@ -153,10 +153,6 @@ export function ProfessionalTab({
         />
       </ProfileField>
 
-      <div className="sm:col-span-2">
-        <ProfileSectionTitle>Core Skills</ProfileSectionTitle>
-      </div>
-
       <ProfileField label="Technical Skills" className="sm:col-span-2">
         <TagInput
           withLogos
